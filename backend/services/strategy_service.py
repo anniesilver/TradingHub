@@ -25,14 +25,29 @@ else:
 algo_path = os.environ.get('ALGO_PATH', 'C:/ALGO/algo_trading/SPY_POWER_CASHFLOW')
 sys.path.append(algo_path)
 
-# Database connection parameters with known working defaults
+# Database connection parameters from environment variables
 DB_CONFIG = {
-    'dbname': os.environ.get('DB_NAME', 'tradinghub'),
-    'user': os.environ.get('DB_USER', 'postgres'),
-    'password': os.environ.get('DB_PASSWORD', 'algo33'),
-    'host': os.environ.get('DB_HOST', 'localhost'),
-    'port': os.environ.get('DB_PORT', '5432')
+    'dbname': os.environ.get('DB_NAME'),
+    'user': os.environ.get('DB_USER'),
+    'password': os.environ.get('DB_PASSWORD'),
+    'host': os.environ.get('DB_HOST'),
+    'port': os.environ.get('DB_PORT')
 }
+
+# Remove None values if they exist to let psycopg2 use its own defaults
+DB_CONFIG = {k: v for k, v in DB_CONFIG.items() if v is not None}
+
+# Check for required database configuration
+def validate_db_config():
+    """Validate that required database configuration is present"""
+    required_keys = ['dbname', 'user', 'password']
+    missing_keys = [key for key in required_keys if key not in DB_CONFIG or not DB_CONFIG[key]]
+    
+    if missing_keys:
+        print(f"ERROR: Missing required database configuration: {', '.join(missing_keys)}")
+        print("Please check your .env file or environment variables")
+        return False
+    return True
 
 # Place these imports in a try-except block
 try:
@@ -51,15 +66,18 @@ def get_db_connection():
     """
     Establish and return a connection to the PostgreSQL database.
     """
+    if not validate_db_config():
+        return None
+        
     try:
         print(f"Connecting to database with parameters:")
-        print(f"  dbname: {DB_CONFIG['dbname']}")
-        print(f"  user: {DB_CONFIG['user']}")
+        print(f"  dbname: {DB_CONFIG.get('dbname')}")
+        print(f"  user: {DB_CONFIG.get('user')}")
         # Only print host and port if they exist in the config
         if 'host' in DB_CONFIG:
-            print(f"  host: {DB_CONFIG['host']}")
+            print(f"  host: {DB_CONFIG.get('host')}")
         if 'port' in DB_CONFIG:
-            print(f"  port: {DB_CONFIG['port']}")
+            print(f"  port: {DB_CONFIG.get('port')}")
         connection = psycopg2.connect(**DB_CONFIG)
         return connection
     except Exception as e:
