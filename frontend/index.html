@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TradingHub</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1>TradingHub</h1>
+        
+        <div class="mb-4">
+            <button onclick="testApiConnection()" class="btn btn-primary">Test API Connection</button>
+        </div>
+        
+        <div class="card mb-4">
+            <div class="card-header">
+                Run Strategy Simulation
+            </div>
+            <div class="card-body">
+                <form id="simulationForm">
+                    <div class="mb-3">
+                        <label for="strategyType" class="form-label">Strategy Type</label>
+                        <select class="form-select" id="strategyType" required>
+                            <option value="SPY_POWER_CASHFLOW">SPY Power Cashflow</option>
+                        </select>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="startDate" class="form-label">Start Date</label>
+                                <input type="date" class="form-control" id="startDate" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="endDate" class="form-label">End Date</label>
+                                <input type="date" class="form-control" id="endDate" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="initialBalance" class="form-label">Initial Balance</label>
+                        <input type="number" class="form-control" id="initialBalance" value="10000">
+                    </div>
+                    
+                    <h5>Strategy Configuration</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="symbol" class="form-label">Symbol</label>
+                                <input type="text" class="form-control" id="symbol" value="SPY">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="optionType" class="form-label">Option Type</label>
+                                <select class="form-select" id="optionType">
+                                    <option value="call">Call</option>
+                                    <option value="put">Put</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Run Simulation</button>
+                </form>
+            </div>
+        </div>
+        
+        <div class="card mb-4 d-none" id="resultsCard">
+            <div class="card-header">
+                Simulation Results
+            </div>
+            <div class="card-body">
+                <canvas id="balanceChart"></canvas>
+                
+                <div class="mt-4">
+                    <h5>Performance Summary</h5>
+                    <div id="performanceSummary"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        async function testApiConnection() {
+            try {
+                console.log("Testing API connection...");
+                const response = await fetch('http://localhost:5000/api/test');
+                const data = await response.json();
+                console.log("API response:", data);
+                alert("API connection successful: " + data.message);
+            } catch (error) {
+                console.error("API connection error:", error);
+                alert("API connection failed: " + error.message);
+            }
+        }
+        
+        document.getElementById('simulationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const config = {
+                symbol: document.getElementById('symbol').value,
+                option_type: document.getElementById('optionType').value,
+                buy_time: '9:35',
+                sell_time: '15:45',
+                stop_loss_pct: 0.50,
+                take_profit_pct: 1.00,
+                dte_min: 1,
+                dte_max: 5,
+                delta_min: 0.40,
+                delta_max: 0.60
+            };
+            
+            const simulationData = {
+                strategy_type: document.getElementById('strategyType').value,
+                config: config,
+                start_date: document.getElementById('startDate').value,
+                end_date: document.getElementById('endDate').value,
+                initial_balance: parseFloat(document.getElementById('initialBalance').value)
+            };
+            
+            console.log("Sending simulation request:", simulationData);
+            
+            try {
+                const response = await fetch('http://localhost:5000/api/simulate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(simulationData)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+                
+                const results = await response.json();
+                console.log("Simulation results:", results);
+                displayResults(results);
+            } catch (error) {
+                console.error("Error running simulation:", error);
+                alert('Error running simulation: ' + error.message);
+            }
+        });
+        
+        function displayResults(results) {
+            const dates = Object.keys(results).sort();
+            const balances = dates.map(date => results[date].balance);
+            
+            // Display chart
+            const ctx = document.getElementById('balanceChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: 'Account Balance',
+                        data: balances,
+                        borderColor: 'rgb(75, 192, 192)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: false
+                        }
+                    }
+                }
+            });
+            
+            // Show results card
+            document.getElementById('resultsCard').classList.remove('d-none');
+            
+            // Calculate performance metrics
+            const initialBalance = balances[0];
+            const finalBalance = balances[balances.length - 1];
+            const totalReturn = finalBalance - initialBalance;
+            const percentReturn = (totalReturn / initialBalance) * 100;
+            
+            const summary = `
+                <table class="table">
+                    <tr>
+                        <td>Initial Balance</td>
+                        <td>$${initialBalance.toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                        <td>Final Balance</td>
+                        <td>$${finalBalance.toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                        <td>Total Return</td>
+                        <td>$${totalReturn.toFixed(2)} (${percentReturn.toFixed(2)}%)</td>
+                    </tr>
+                </table>
+            `;
+            
+            document.getElementById('performanceSummary').innerHTML = summary;
+        }
+    </script>
+</body>
+</html> 
