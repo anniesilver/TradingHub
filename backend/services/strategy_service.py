@@ -369,6 +369,7 @@ def save_simulation_results(strategy_type, config, start_date, end_date, initial
 def run_strategy_simulation(strategy_type, config, start_date, end_date, initial_balance, save_to_db=True):
     """
     Run a strategy simulation for the given date range and configuration.
+    Currently returns mock data for demonstration.
     
     Args:
         strategy_type (str): Type of strategy (e.g., 'SPY_POWER_CASHFLOW', 'CCSPY')
@@ -382,48 +383,23 @@ def run_strategy_simulation(strategy_type, config, start_date, end_date, initial
         dict: Daily performance data
     """
     try:
-        # Try to run the actual strategy
-        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+        # For now, always generate mock data
+        from services.mock_strategy import generate_mock_data
+        results = generate_mock_data(start_date, end_date, initial_balance)
         
-        if strategy_type in STRATEGY_PATHS:
-            try:
-                # Import the required strategy modules
-                TradingSimulator, OptionStrategy, success = import_strategy(strategy_type)
-                
-                if not success:
-                    raise ImportError(f"Failed to import strategy modules for {strategy_type}")
-                
-                # Run the appropriate strategy
-                if strategy_type == 'SPY_POWER_CASHFLOW':
-                    results = run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, end_dt, initial_balance)
-                elif strategy_type == 'CCSPY':
-                    results = run_ccspy_strategy(TradingSimulator, OptionStrategy, config, start_dt, end_dt, initial_balance)
-                else:
-                    raise ValueError(f"Strategy type '{strategy_type}' is recognized but not implemented")
-            except Exception as strategy_error:
-                # If strategy fails, generate mock data for demonstration
-                print(f"Strategy execution failed, using mock data: {str(strategy_error)}")
-                results = generate_mock_data(start_date, end_date, initial_balance)
-            
-            # Save results to database if requested
-            if save_to_db and results:
-                simulation_id = save_simulation_results(
-                    strategy_type, config, start_date, end_date, initial_balance, results
-                )
-                if simulation_id:
-                    print(f"Simulation results saved with ID: {simulation_id}")
-            
-            return results
-        else:
-            raise ValueError(f"Unsupported strategy type: {strategy_type}")
+        # Save results to database if requested
+        if save_to_db and results:
+            simulation_id = save_simulation_results(
+                strategy_type, config, start_date, end_date, initial_balance, results
+            )
+            if simulation_id:
+                print(f"Simulation results saved with ID: {simulation_id}")
+        
+        return results
             
     except Exception as e:
         print(f"Error running strategy simulation: {str(e)}")
-        
-        # Generate mock data as fallback for demonstration
-        print("Generating mock data as fallback")
-        return generate_mock_data(start_date, end_date, initial_balance)
+        return None
 
 def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, end_dt, initial_balance):
     """Run the SPY_POWER_CASHFLOW strategy simulation."""
@@ -529,12 +505,25 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
             if results_df.index.freq != 'D':
                 results_df = results_df.resample('D').last().fillna(method='ffill')
             
+            # Calculate SPY buy & hold value
+            spy_prices = market_data.get_spy_prices(start_dt, end_dt)
+            initial_spy_shares = initial_balance / spy_prices.iloc[0]['Close']
+            spy_values = spy_prices['Close'] * initial_spy_shares
+            
             for idx, row in results_df.iterrows():
                 date_str = idx.strftime('%Y-%m-%d')
                 daily_results[date_str] = {
-                    'balance': float(row.get('Portfolio_Value', 0)),
+                    'portfolio_value': float(row.get('Portfolio_Value', 0)),
+                    'spy_value': float(spy_values.get(idx, 0)),
+                    'cash': float(row.get('Cash', 0)),
                     'trades_count': int(row.get('Trades', 0) if 'Trades' in row else 0),
-                    'profit_loss': float(row.get('Daily_PnL', 0) if 'Daily_PnL' in row else 0)
+                    'profit_loss': float(row.get('Daily_PnL', 0) if 'Daily_PnL' in row else 0),
+                    'interest_paid': float(row.get('Interest_Paid', 0) if 'Interest_Paid' in row else 0),
+                    'premiums_received': float(row.get('Premiums_Received', 0) if 'Premiums_Received' in row else 0),
+                    'commissions_paid': float(row.get('Commissions_Paid', 0) if 'Commissions_Paid' in row else 0),
+                    'open_positions': int(row.get('Open_Positions', 0) if 'Open_Positions' in row else 0),
+                    'closed_positions': int(row.get('Closed_Positions', 0) if 'Closed_Positions' in row else 0),
+                    'spy_price': float(spy_prices.loc[idx, 'Close'] if idx in spy_prices.index else 0)
                 }
         
         return daily_results

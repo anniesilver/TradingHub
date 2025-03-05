@@ -1,10 +1,10 @@
 from flask import Flask
-from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from flask_bcrypt import Bcrypt
 import os
 from flask_migrate import Migrate
+from flask_cors import CORS
 
 # Create extensions first (but don't initialize them)
 db = SQLAlchemy()
@@ -28,8 +28,15 @@ def create_app():
     db.init_app(app)
     jwt.init_app(app)
     bcrypt.init_app(app)
-    CORS(app)
     migrate.init_app(app, db)
+    
+    # Enable CORS
+    CORS(app, 
+         origins=["http://localhost:3000"],
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         allow_headers=["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
+         supports_credentials=True,
+         max_age=3600)
     
     with app.app_context():
         # Import models (must be after db definition)
