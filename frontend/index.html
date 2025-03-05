@@ -153,8 +153,15 @@
             const dates = Object.keys(results).sort();
             const balances = dates.map(date => results[date].balance);
             
-            // Display chart
-            const ctx = document.getElementById('balanceChart').getContext('2d');
+            // Destroy existing chart if it exists
+            const chartCanvas = document.getElementById('balanceChart');
+            const existingChart = Chart.getChart(chartCanvas);
+            if (existingChart) {
+                existingChart.destroy();
+            }
+            
+            // Create new chart
+            const ctx = chartCanvas.getContext('2d');
             new Chart(ctx, {
                 type: 'line',
                 data: {

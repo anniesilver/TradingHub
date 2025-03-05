@@ -1,3 +1,4 @@
+# pylint: disable=import-error
 import os
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
@@ -7,6 +8,13 @@ import json
 import psycopg2
 from psycopg2.extras import Json, DictCursor
 from services.mock_strategy import generate_mock_data
+import importlib.util
+
+# CRITICAL FIX: Create absolute paths to the strategy modules
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR))  # Get two directories up
+os.environ['PYTHONPATH'] = f"{os.environ.get('PYTHONPATH', '')}:{BASE_DIR}"
+print(f"Set PYTHONPATH to include: {BASE_DIR}")
 
 # Load environment variables from .env file (with graceful fallback)
 env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -21,9 +29,20 @@ elif os.path.exists(root_env_path):
 else:
     print("No .env file found, using default configuration")
 
-# Comment out the strategy imports to temporarily bypass them for DB setup
-algo_path = os.environ.get('ALGO_PATH', 'C:/ALGO/algo_trading/SPY_POWER_CASHFLOW')
-sys.path.append(algo_path)
+# Base path for all strategies
+ALGO_BASE_PATH = os.environ.get('ALGO_BASE_PATH', 'C:/ALGO/algo_trading')
+
+# Dictionary of available strategies
+STRATEGY_PATHS = {
+    'SPY_POWER_CASHFLOW': os.path.join(ALGO_BASE_PATH, 'SPY_POWER_CASHFLOW'),
+    'CCSPY': os.path.join(ALGO_BASE_PATH, 'CCSPY')
+}
+
+# Add all strategy paths to sys.path for importing
+for path in STRATEGY_PATHS.values():
+    if path not in sys.path and os.path.exists(path):
+        sys.path.append(path)
+        print(f"Added strategy path: {path}")
 
 # Database connection parameters from environment variables
 DB_CONFIG = {
@@ -49,18 +68,176 @@ def validate_db_config():
         return False
     return True
 
-# Place these imports in a try-except block
-try:
-    # Import the strategy components
-    from trading_simulator import TradingSimulator
-    from option_strategy import OptionStrategy 
-    from position import Position
-except ImportError:
-    # Create placeholder classes for database setup
-    class TradingSimulator: pass
-    class OptionStrategy: pass
-    class Position: pass
-    print("Warning: Trading strategy modules not loaded - only database setup will work")
+# Dictionary to hold imported strategy modules
+strategy_modules = {}
+
+# Create stub classes for IDE to stop complaining
+class StubMarketData:
+    """Stub class to help with IDE imports"""
+    pass
+    
+class StubPositionTracker:
+    """Stub class to help with IDE imports"""
+    pass
+    
+class StubConfig:
+    """Stub class to help with IDE imports"""
+    pass
+
+# Add all possible strategy directories to sys.path at startup
+def ensure_strategy_paths():
+    """Make sure all strategy paths are in sys.path"""
+    for path in STRATEGY_PATHS.values():
+        if os.path.exists(path) and path not in sys.path:
+            sys.path.insert(0, path)
+            print(f"Added strategy path to sys.path: {path}")
+            
+    # Also add the strategy parent directory
+    parent_dir = os.path.dirname(ALGO_BASE_PATH)
+    if os.path.exists(parent_dir) and parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+        print(f"Added strategy parent directory to sys.path: {parent_dir}")
+    
+    # Add the current directory too
+    current_dir = os.getcwd()
+    if current_dir not in sys.path:
+        sys.path.insert(0, current_dir)
+        print(f"Added current directory to sys.path: {current_dir}")
+        
+    print(f"sys.path now contains: {sys.path}")
+    return True
+
+# Call this at import time to ensure paths are set up
+ensure_strategy_paths()
+
+def ensure_strategy_dependencies():
+    """
+    Check for required dependencies and install them if necessary.
+    """
+    required_packages = ["pandas"]
+    missing_packages = []
+    
+    for package in required_packages:
+        try:
+            __import__(package)
+        except ImportError:
+            missing_packages.append(package)
+    
+    if missing_packages:
+        print(f"Missing required packages: {', '.join(missing_packages)}")
+        print("Please install them using: pip install " + " ".join(missing_packages))
+        return False
+    return True
+
+def import_strategy(strategy_type):
+    """
+    Dynamically import strategy modules from the configured paths.
+    
+    Args:
+        strategy_type (str): Name of the strategy to import
+        
+    Returns:
+        tuple: (TradingSimulator, OptionStrategy, bool) or (None, None, False) if import fails
+    """
+    # First check dependencies
+    if not ensure_strategy_dependencies():
+        return None, None, False
+        
+    if strategy_type in strategy_modules:
+        return strategy_modules[strategy_type]
+    
+    if strategy_type not in STRATEGY_PATHS:
+        print(f"Unknown strategy type: {strategy_type}")
+        return None, None, False
+    
+    path = STRATEGY_PATHS[strategy_type]
+    if not os.path.exists(path):
+        print(f"Strategy path does not exist: {path}")
+        return None, None, False
+    
+    # Important: Clear sys.modules of any previous imports that might conflict
+    for key in list(sys.modules.keys()):
+        if key in ['trading_simulator', 'option_strategy', 'market_data', 'position', 'config']:
+            del sys.modules[key]
+            print(f"Removed previous import of {key} from sys.modules")
+        
+    # Add strategy path to system path if not already added
+    if path not in sys.path:
+        sys.path.insert(0, path)
+        print(f"Added strategy path to sys.path: {path}")
+    
+    try:
+        # Attempt to import the required modules
+        # Log more detailed import attempts
+        print(f"Attempting to import strategy modules from {path}")
+        print(f"Current sys.path: {sys.path}")
+        
+        if strategy_type == "SPY_POWER_CASHFLOW":
+            try:
+                # Try explicit imports with full path
+                print(f"Importing from {path}")
+                sys.path.insert(0, path)
+                
+                # Look for the module files explicitly
+                module_files = os.listdir(path)
+                print(f"Files in strategy directory: {module_files}")
+                
+                # Import with more verbose error handling
+                try:
+                    from trading_simulator import TradingSimulator
+                    print("Successfully imported TradingSimulator")
+                except ImportError as e:
+                    print(f"Failed to import TradingSimulator: {str(e)}")
+                    raise
+                    
+                try:
+                    from option_strategy import OptionStrategy
+                    print("Successfully imported OptionStrategy")
+                except ImportError as e:
+                    print(f"Failed to import OptionStrategy: {str(e)}")
+                    raise
+                
+                strategy_modules[strategy_type] = (TradingSimulator, OptionStrategy, True)
+                return TradingSimulator, OptionStrategy, True
+            except Exception as e:
+                print(f"Detailed import error: {str(e)}")
+                raise
+        elif strategy_type == "CCSPY":
+            try:
+                # Try explicit imports with full path
+                print(f"Importing from {path}")
+                sys.path.insert(0, path)
+                
+                # Look for the module files explicitly
+                module_files = os.listdir(path)
+                print(f"Files in strategy directory: {module_files}")
+                
+                # Import with more verbose error handling
+                try:
+                    from trading_simulator import TradingSimulator
+                    print("Successfully imported TradingSimulator for CCSPY")
+                except ImportError as e:
+                    print(f"Failed to import TradingSimulator for CCSPY: {str(e)}")
+                    raise
+                    
+                try:
+                    from option_strategy import OptionStrategy
+                    print("Successfully imported OptionStrategy for CCSPY")
+                except ImportError as e:
+                    print(f"Failed to import OptionStrategy for CCSPY: {str(e)}")
+                    raise
+                
+                strategy_modules[strategy_type] = (TradingSimulator, OptionStrategy, True)
+                return TradingSimulator, OptionStrategy, True
+            except Exception as e:
+                print(f"Detailed import error for CCSPY: {str(e)}")
+                raise
+        
+        print(f"Could not import strategy modules for {strategy_type}")
+        return None, None, False
+    except ImportError as e:
+        print(f"Error importing strategy {strategy_type}: {str(e)}")
+        return None, None, False
 
 def get_db_connection():
     """
@@ -189,12 +366,12 @@ def save_simulation_results(strategy_type, config, start_date, end_date, initial
     finally:
         conn.close()
 
-def run_strategy_simulation(strategy_type, config, start_date, end_date, initial_balance=10000.0, save_to_db=True):
+def run_strategy_simulation(strategy_type, config, start_date, end_date, initial_balance, save_to_db=True):
     """
     Run a strategy simulation for the given date range and configuration.
     
     Args:
-        strategy_type (str): Type of strategy (e.g., 'SPY_POWER_CASHFLOW')
+        strategy_type (str): Type of strategy (e.g., 'SPY_POWER_CASHFLOW', 'CCSPY')
         config (dict): Strategy configuration parameters
         start_date (str): Start date in 'YYYY-MM-DD' format
         end_date (str): End date in 'YYYY-MM-DD' format
@@ -209,9 +386,21 @@ def run_strategy_simulation(strategy_type, config, start_date, end_date, initial
         start_dt = datetime.strptime(start_date, '%Y-%m-%d')
         end_dt = datetime.strptime(end_date, '%Y-%m-%d')
         
-        if strategy_type == 'SPY_POWER_CASHFLOW':
+        if strategy_type in STRATEGY_PATHS:
             try:
-                results = run_spy_power_cashflow(config, start_dt, end_dt, initial_balance)
+                # Import the required strategy modules
+                TradingSimulator, OptionStrategy, success = import_strategy(strategy_type)
+                
+                if not success:
+                    raise ImportError(f"Failed to import strategy modules for {strategy_type}")
+                
+                # Run the appropriate strategy
+                if strategy_type == 'SPY_POWER_CASHFLOW':
+                    results = run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, end_dt, initial_balance)
+                elif strategy_type == 'CCSPY':
+                    results = run_ccspy_strategy(TradingSimulator, OptionStrategy, config, start_dt, end_dt, initial_balance)
+                else:
+                    raise ValueError(f"Strategy type '{strategy_type}' is recognized but not implemented")
             except Exception as strategy_error:
                 # If strategy fails, generate mock data for demonstration
                 print(f"Strategy execution failed, using mock data: {str(strategy_error)}")
@@ -236,62 +425,231 @@ def run_strategy_simulation(strategy_type, config, start_date, end_date, initial
         print("Generating mock data as fallback")
         return generate_mock_data(start_date, end_date, initial_balance)
 
-def run_spy_power_cashflow(config, start_dt, end_dt, initial_balance):
-    """
-    Run the SPY_POWER_CASHFLOW strategy simulation.
+def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, end_dt, initial_balance):
+    """Run the SPY_POWER_CASHFLOW strategy simulation."""
+    strategy_path = STRATEGY_PATHS['SPY_POWER_CASHFLOW']
+    original_path = sys.path.copy()
     
-    Args:
-        config (dict): Strategy configuration
-        start_dt (datetime): Start date
-        end_dt (datetime): End date
-        initial_balance (float): Starting account balance
+    try:
+        if strategy_path not in sys.path:
+            sys.path.insert(0, strategy_path)
+            print(f"Temporarily added {strategy_path} to sys.path")
         
-    Returns:
-        dict: Daily performance data
-    """
-    # Initialize the strategy with configuration
-    strategy = OptionStrategy(
-        symbol=config.get('symbol', 'SPY'),
-        buy_time=config.get('buy_time', '9:35'),
-        sell_time=config.get('sell_time', '15:45'),
-        stop_loss_pct=config.get('stop_loss_pct', 0.50),
-        take_profit_pct=config.get('take_profit_pct', 1.00),
-        strategy_type=config.get('strategy_type', 'power_cashflow'),
-        option_type=config.get('option_type', 'call'),
-        dte_min=config.get('dte_min', 1),
-        dte_max=config.get('dte_max', 5),
-        delta_min=config.get('delta_min', 0.40),
-        delta_max=config.get('delta_max', 0.60)
-    )
-    
-    # Initialize the trading simulator
-    simulator = TradingSimulator(
-        strategy=strategy,
-        initial_balance=initial_balance,
-        commission=config.get('commission', 0.65),
-        start_date=start_dt,
-        end_date=end_dt
-    )
-    
-    # Run the simulation
-    simulator.run()
-    
-    # Extract the daily performance data
-    daily_results = {}
-    
-    for day, trades in simulator.trades_by_day.items():
-        day_str = day.strftime('%Y-%m-%d')
+        # Import required modules using importlib
+        spec = importlib.util.spec_from_file_location("market_data", os.path.join(strategy_path, "market_data.py"))
+        market_data_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(market_data_module)
+        MarketData = market_data_module.MarketData
         
-        daily_pl = sum(trade.profit_loss for trade in trades)
-        daily_balance = simulator.get_balance_at_date(day)
+        spec = importlib.util.spec_from_file_location("position", os.path.join(strategy_path, "position.py"))
+        position_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(position_module)
+        PositionTracker = position_module.PositionTracker
         
-        daily_results[day_str] = {
-            'balance': daily_balance,
-            'trades_count': len(trades),
-            'profit_loss': daily_pl
+        spec = importlib.util.spec_from_file_location("config", os.path.join(strategy_path, "config.py"))
+        config_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(config_module)
+        Config = config_module.Config
+        
+        # Create a Config object
+        strategy_config = Config()
+        print("\n=== Initial Config from module ===")
+        for attr in dir(strategy_config):
+            if not attr.startswith('__'):  # Skip private attributes
+                print(f"{attr}: {getattr(strategy_config, attr)}")
+        
+        # Set all required configuration attributes with default values first
+        default_config = {
+            'SYMBOL': 'SPY',
+            'BUY_TIME': '9:35',
+            'SELL_TIME': '15:45',
+            'STOP_LOSS_PCT': 0.50,
+            'TAKE_PROFIT_PCT': 1.00,
+            'STRATEGY_TYPE': 'power_cashflow',
+            'OPTION_TYPE': 'call',
+            'DTE_MIN': 1,
+            'DTE_MAX': 5,
+            'DELTA_MIN': 0.40,
+            'DELTA_MAX': 0.60,
+            'COMMISSION': 0.65,
+            'INITIAL_CASH': initial_balance,
+            'START_DATE': start_dt.strftime('%Y-%m-%d'),  # Convert to string format
+            'END_DATE': end_dt.strftime('%Y-%m-%d'),  # Convert to string format
+            'FREQUENCY': 'D'  # Set to daily frequency
         }
+        
+        # Set default values
+        for key, value in default_config.items():
+            setattr(strategy_config, key, value)
+            print(f"Set default config {key} = {value}")       
+
+        # Override with user-provided config
+        for key, value in config.items():
+            key_upper = key.upper()
+            if key_upper == 'FREQUENCY' and value == 'ME':  # Fix invalid frequency
+                value = 'M'  # Convert 'ME' to 'M' for monthly frequency
+            setattr(strategy_config, key_upper, value)
+            print(f"Override config {key_upper} = {value}")
+        
+        print("\n=== Final Config before component initialization ===")
+        for attr in dir(strategy_config):
+            if not attr.startswith('__'):  # Skip private attributes
+                print(f"{attr}: {getattr(strategy_config, attr)}")
+        
+        # Initialize components with debug prints
+        print("\n=== Initializing MarketData ===")
+        market_data = MarketData(symbol=strategy_config.SYMBOL)
+        print(f"MarketData symbol: {market_data.symbol}")
+        
+        print("\n=== Initializing PositionTracker ===")
+        position = PositionTracker(strategy_config.INITIAL_CASH, strategy_config)
+        print(f"PositionTracker initial balance: {position.cash}")
+        
+        print("\n=== Initializing OptionStrategy ===")
+        strategy = OptionStrategy(strategy_config)
+        print(f"OptionStrategy type: {strategy_config.STRATEGY_TYPE}")
+        
+        print("\n=== Creating TradingSimulator ===")
+        simulator = TradingSimulator(market_data, position, strategy, strategy_config)
+        print("TradingSimulator created with all components")
+        
+        print("\n=== Running Simulation ===")
+        results_df = simulator.run()
+        
+        # Process results
+        daily_results = {}
+        if results_df is not None and not results_df.empty:
+            print(f"Results DataFrame columns: {results_df.columns.tolist()}")
+            
+            # Ensure the index is datetime
+            if not isinstance(results_df.index, pd.DatetimeIndex):
+                results_df.index = pd.to_datetime(results_df.index)
+            
+            # Resample to daily frequency if needed
+            if results_df.index.freq != 'D':
+                results_df = results_df.resample('D').last().fillna(method='ffill')
+            
+            for idx, row in results_df.iterrows():
+                date_str = idx.strftime('%Y-%m-%d')
+                daily_results[date_str] = {
+                    'balance': float(row.get('Portfolio_Value', 0)),
+                    'trades_count': int(row.get('Trades', 0) if 'Trades' in row else 0),
+                    'profit_loss': float(row.get('Daily_PnL', 0) if 'Daily_PnL' in row else 0)
+                }
+        
+        return daily_results
+        
+    except Exception as e:
+        print(f"Error in run_spy_power_cashflow: {str(e)}")
+        raise
+    finally:
+        sys.path = original_path
+
+def run_ccspy_strategy(TradingSimulator, OptionStrategy, config, start_dt, end_dt, initial_balance):
+    """Run the CCSPY strategy simulation."""
+    strategy_path = STRATEGY_PATHS['CCSPY']
+    original_path = sys.path.copy()
     
-    return daily_results 
+    try:
+        if strategy_path not in sys.path:
+            sys.path.insert(0, strategy_path)
+            print(f"Temporarily added {strategy_path} to sys.path")
+        
+        # Import required modules using importlib
+        spec = importlib.util.spec_from_file_location("market_data", os.path.join(strategy_path, "market_data.py"))
+        market_data_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(market_data_module)
+        MarketData = market_data_module.MarketData
+        
+        spec = importlib.util.spec_from_file_location("position", os.path.join(strategy_path, "position.py"))
+        position_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(position_module)
+        PositionTracker = position_module.PositionTracker
+        
+        spec = importlib.util.spec_from_file_location("config", os.path.join(strategy_path, "config.py"))
+        config_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(config_module)
+        Config = config_module.Config
+        
+        # Create a Config object
+        strategy_config = Config()
+        
+        # Set all required configuration attributes with default values first
+        default_config = {
+            'SYMBOL': 'SPY',
+            'BUY_TIME': '9:35',
+            'SELL_TIME': '15:45',
+            'STOP_LOSS_PCT': 0.50,
+            'TAKE_PROFIT_PCT': 1.00,
+            'STRATEGY_TYPE': 'ccspy',
+            'OPTION_TYPE': 'call',
+            'DTE_MIN': 1,
+            'DTE_MAX': 5,
+            'DELTA_MIN': 0.40,
+            'DELTA_MAX': 0.60,
+            'COMMISSION': 0.65,
+            'INITIAL_CASH': initial_balance,
+            'START_DATE': start_dt.strftime('%Y-%m-%d'),  # Convert to string format
+            'END_DATE': end_dt.strftime('%Y-%m-%d'),  # Convert to string format
+            'FREQUENCY': 'D'  # Set to daily frequency
+        }
+        
+        # Set default values
+        for key, value in default_config.items():
+            setattr(strategy_config, key, value)
+            print(f"Set default config {key} = {value}")
+        
+        # Override with user-provided config
+        for key, value in config.items():
+            key_upper = key.upper()
+            if key_upper == 'FREQUENCY' and value == 'ME':  # Fix invalid frequency
+                value = 'M'  # Convert 'ME' to 'M' for monthly frequency
+            setattr(strategy_config, key_upper, value)
+            print(f"Override config {key_upper} = {value}")
+        
+        # Print final configuration for debugging
+        print("Final strategy configuration:")
+        for key in default_config.keys():
+            print(f"{key}: {getattr(strategy_config, key)}")
+        
+        # Initialize components
+        market_data = MarketData(symbol=strategy_config.SYMBOL)
+        position = PositionTracker(initial_balance, strategy_config)
+        strategy = OptionStrategy(strategy_config)
+        
+        # Create and run simulator
+        simulator = TradingSimulator(market_data, position, strategy, strategy_config)
+        results_df = simulator.run()
+        
+        # Process results
+        daily_results = {}
+        if results_df is not None and not results_df.empty:
+            print(f"Results DataFrame columns: {results_df.columns.tolist()}")
+            
+            # Ensure the index is datetime
+            if not isinstance(results_df.index, pd.DatetimeIndex):
+                results_df.index = pd.to_datetime(results_df.index)
+            
+            # Resample to daily frequency if needed
+            if results_df.index.freq != 'D':
+                results_df = results_df.resample('D').last().fillna(method='ffill')
+            
+            for idx, row in results_df.iterrows():
+                date_str = idx.strftime('%Y-%m-%d')
+                daily_results[date_str] = {
+                    'balance': float(row.get('balance', row.get('portfolio_value', 0))),
+                    'trades_count': int(row.get('trades_count', 0)),
+                    'profit_loss': float(row.get('profit_loss', row.get('daily_pnl', 0)))
+                }
+        else:
+            print("Warning: No results data returned from strategy simulation")
+        
+        return daily_results
+    except Exception as e:
+        print(f"Error in run_ccspy_strategy: {str(e)}")
+        raise
+    finally:
+        sys.path = original_path
 
 def get_simulations(limit=10, offset=0):
     """
@@ -380,4 +738,82 @@ def get_simulation_results(simulation_id):
         print(f"Error retrieving simulation results: {str(e)}")
         return None
     finally:
-        conn.close() 
+        conn.close()
+
+def get_available_strategies():
+    """
+    Get a list of available strategy types and their configuration options.
+    
+    Returns:
+        list: List of strategy information dictionaries
+    """
+    strategies = []
+    
+    for strategy_name, path in STRATEGY_PATHS.items():
+        if os.path.exists(path):
+            # For now, just return the strategy name and path
+            # In a real implementation, you might want to read additional metadata
+            strategy_info = {
+                'name': strategy_name,
+                'path': path,
+                'config_options': get_strategy_config_options(strategy_name)
+            }
+            strategies.append(strategy_info)
+    
+    return strategies
+
+def get_strategy_config_options(strategy_name):
+    """
+    Get the configuration options for a specific strategy.
+    This could be expanded to read from a configuration file or the strategy itself.
+    
+    Args:
+        strategy_name (str): Name of the strategy
+        
+    Returns:
+        dict: Dictionary of configuration options and their default values
+    """
+    if strategy_name == 'SPY_POWER_CASHFLOW':
+        return {
+            'symbol': 'SPY',
+            'buy_time': '9:35',
+            'sell_time': '15:45',
+            'stop_loss_pct': 0.50,
+            'take_profit_pct': 1.00,
+            'strategy_type': 'power_cashflow',
+            'option_type': 'call',
+            'dte_min': 1,
+            'dte_max': 5,
+            'delta_min': 0.40,
+            'delta_max': 0.60,
+            'commission': 0.65
+        }
+    elif strategy_name == 'CCSPY':
+        return {
+            'symbol': 'SPY',
+            'buy_time': '9:35',
+            'sell_time': '15:45',
+            'stop_loss_pct': 0.50,
+            'take_profit_pct': 1.00,
+            'strategy_type': 'ccspy',
+            'option_type': 'call',
+            'dte_min': 1,
+            'dte_max': 5,
+            'delta_min': 0.40,
+            'delta_max': 0.60,
+            'commission': 0.65
+        }
+    else:
+        return {}
+
+def test_imports():
+    """Test function to verify imports work correctly"""
+    try:
+        print("Importing MarketData...")
+        from market_data import MarketData
+        print("Successfully imported MarketData")
+        return True
+    except ImportError as e:
+        print(f"Failed to import MarketData: {str(e)}")
+        return False
+
