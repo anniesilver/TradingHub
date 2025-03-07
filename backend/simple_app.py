@@ -86,7 +86,9 @@ def run_simulation():
             return jsonify({"error": "Start date must be before end date"}), 400
             
         # Get initial balance from request or use default
-        initial_balance = float(data.get('initial_balance', 10000.0))
+        initial_balance = 500000.0
+
+        #initial_balance = float(data.get('initial_balance', 200000.0))
         
         # Import strategy modules
         TradingSimulator, OptionStrategy, success = import_strategy(data['strategy_type'])
@@ -96,6 +98,7 @@ def run_simulation():
         # Run the actual strategy simulation
         try:
             if data['strategy_type'] == 'SPY_POWER_CASHFLOW':
+                logger.info("Running SPY Power Cashflow simulation with real simulator...")
                 results = run_spy_power_cashflow(
                     TradingSimulator, 
                     OptionStrategy, 
@@ -106,6 +109,9 @@ def run_simulation():
                 )
                 if results:
                     logger.info(f"Generated results for date range {start_date} to {end_date}")
+                    # Log the first data point to verify structure
+                    first_date = list(results.keys())[0]
+                    logger.info(f"First data point structure: {results[first_date]}")
                     return jsonify(results)
                 else:
                     return jsonify({"error": "Strategy simulation failed"}), 500

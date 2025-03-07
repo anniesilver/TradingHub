@@ -34,6 +34,12 @@ axios.interceptors.response.use(
   }
 );
 
+/**
+ * Fetches available trading strategies from the backend
+ * @param {number} limit - Maximum number of strategies to return
+ * @param {number} offset - Offset for pagination
+ * @returns {Promise<Array>} List of available strategies
+ */
 export const getSimulations = async (limit = 10, offset = 0) => {
   try {
     const response = await axios.get(`${API_BASE_URL}/strategies`);
@@ -45,47 +51,25 @@ export const getSimulations = async (limit = 10, offset = 0) => {
   }
 };
 
-export const getSimulationResults = async (strategyId) => {
-  try {
-    // Get current date and 30 days ago for a reasonable default range
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
-
-    const payload = {
-      strategy_type: strategyId,
-      config: {
-        SYMBOL: 'SPY',
-        BUY_TIME: '9:35',
-        SELL_TIME: '15:45',
-        STOP_LOSS_PCT: 0.50,
-        TAKE_PROFIT_PCT: 1.00,
-        OPTION_TYPE: 'call',
-        DTE_MIN: 1,
-        DTE_MAX: 5,
-        DELTA_MIN: 0.40,
-        DELTA_MAX: 0.60,
-      },
-      start_date: startDate.toISOString().split('T')[0],
-      end_date: endDate.toISOString().split('T')[0],
-      initial_balance: 10000.0
-    };
-
-    console.log('Sending simulation request:', payload);
-    const response = await axios.post(`${API_BASE_URL}/simulate`, payload);
-    
-    if (!response.data) {
-      throw new Error('No data received from simulation');
-    }
-    
-    console.log('Simulation response:', response.data);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching simulation results:', error.response || error);
-    throw error;
-  }
-};
-
+/**
+ * Runs a trading strategy simulation with custom parameters
+ * @param {Object} config - Simulation configuration
+ * @param {string} config.strategyId - Strategy type (default: 'SPY_POWER_CASHFLOW')
+ * @param {string} config.symbol - Trading symbol (default: 'SPY')
+ * @param {string} config.buyTime - Time to buy (default: '9:35')
+ * @param {string} config.sellTime - Time to sell (default: '15:45')
+ * @param {number} config.stopLoss - Stop loss percentage (default: 0.50)
+ * @param {number} config.takeProfit - Take profit percentage (default: 1.00)
+ * @param {string} config.optionType - Option type (default: 'call')
+ * @param {number} config.dteMin - Minimum days to expiration (default: 1)
+ * @param {number} config.dteMax - Maximum days to expiration (default: 5)
+ * @param {number} config.deltaMin - Minimum delta (default: 0.40)
+ * @param {number} config.deltaMax - Maximum delta (default: 0.60)
+ * @param {string} config.startDate - Start date for simulation
+ * @param {string} config.endDate - End date for simulation
+ * @param {number} config.initialBalance - Initial balance (default: 10000.0)
+ * @returns {Promise<Object>} Simulation results
+ */
 export const runSimulation = async (config) => {
   try {
     if (!config) {
@@ -108,7 +92,7 @@ export const runSimulation = async (config) => {
       },
       start_date: config.startDate,
       end_date: config.endDate,
-      initial_balance: config.initialBalance || 10000.0
+      initial_balance: config.INITIAL_CASH || 10000.0
     };
 
     console.log('Sending simulation request:', payload);

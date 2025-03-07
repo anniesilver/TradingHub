@@ -25,7 +25,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { getSimulationResults, getSimulations, runSimulation } from '../services/simulationService';
+import { runSimulation } from '../services/simulationService';
 
 const Root = styled('div')(({ theme }) => ({
   flexGrow: 1,
@@ -47,59 +47,102 @@ const StyledCard = styled(Card)(({ theme }) => ({
   height: '100%',
   display: 'flex',
   flexDirection: 'column',
+  margin: theme.spacing(1),
+}));
+
+const LogContainer = styled(Box)(({ theme }) => ({
+  maxHeight: '300px',
+  overflowY: 'auto',
+  padding: theme.spacing(2),
+  backgroundColor: theme.palette.grey[100],
+  borderRadius: theme.shape.borderRadius,
 }));
 
 function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [data, setData] = useState({
-    strategy: null,
-    results: null,
+    chartData: [],
+    marginData: [],
+    tradingLogs: []
   });
   const [config, setConfig] = useState({
     symbol: 'SPY',
     optionType: 'call',
-    buyTime: '9:35',
-    sellTime: '15:45',
-    stopLoss: 0.50,
-    takeProfit: 1.00,
-    dteMin: 1,
-    dteMax: 5,
-    deltaMin: 0.40,
-    deltaMax: 0.60,
-    initialBalance: 10000.0,
+    initialBalance: 10000,
     startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
   });
 
   const handleConfigChange = (event) => {
-    event.preventDefault(); // Prevent form submission
     const { name, value } = event.target;
+    let processedValue = value;
+    
+    if (['initialBalance'].includes(name)) {
+      processedValue = parseFloat(value) || 0;
+    }
+    
     setConfig(prev => ({
       ...prev,
-      [name]: value
+      [name]: processedValue
     }));
+  };
+
+  const processSimulationData = (results) => {
+    try {
+      // Parse the results if it's a string
+      const parsedData = typeof results === 'string' ? JSON.parse(results) : results;
+      
+      // Convert the data into arrays for charts
+      const processedData = Object.entries(parsedData).map(([date, values]) => {
+        const tradingLog = values.Trading_Log || '';
+        const hasBuy = tradingLog.toLowerCase().includes('buy');
+        const hasSell = tradingLog.toLowerCase().includes('sell');
+        
+        return {
+          date,
+          Portfolio_Value: Number(values.Portfolio_Value) || 0,
+          spy_value: Number(values.spy_value) || 0,
+          Margin_Ratio: Number(values.Margin_Ratio) || 0,
+          hasBuy,
+          hasSell
+        };
+      }).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      // Extract trading logs where actual trading happened
+      const tradingLogs = Object.entries(parsedData)
+        .filter(([_, values]) => values.Trading_Log && values.Trading_Log.includes('Executed'))
+        .map(([date, values]) => ({
+          date,
+          log: values.Trading_Log
+        }))
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      setData({
+        chartData: processedData,
+        marginData: processedData,
+        tradingLogs
+      });
+    } catch (error) {
+      console.error('Error processing simulation data:', error);
+      setError('Failed to process simulation data');
+    }
   };
 
   const handleRunSimulation = async (event) => {
     if (event) {
-      event.preventDefault(); // Prevent form submission
+      event.preventDefault();
     }
     try {
       setLoading(true);
       setError(null);
-      console.log("Running simulation with config:", config);
       
       const results = await runSimulation({
         ...config,
-        strategyId: data.strategy?.id || 'SPY_POWER_CASHFLOW'
+        strategyId: 'SPY_POWER_CASHFLOW'
       });
-      console.log("Received simulation results:", results);
       
-      setData(prev => ({
-        ...prev,
-        results
-      }));
+      processSimulationData(results);
     } catch (err) {
       console.error('Error in handleRunSimulation:', err);
       setError(err.response?.data?.error || err.message || 'Failed to run simulation');
@@ -109,63 +152,8 @@ function Dashboard() {
   };
 
   useEffect(() => {
-    const fetchInitialData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        console.log("Fetching initial data...");
-        
-        // Get the default strategy
-        const defaultStrategy = {
-          id: 'SPY_POWER_CASHFLOW',
-          name: 'SPY Power Cashflow'
-        };
-        
-        console.log("Using default strategy:", defaultStrategy);
-        
-        // Run initial simulation with default config
-        const results = await runSimulation({
-          ...config,
-          strategyId: defaultStrategy.id
-        });
-        
-        if (!results) {
-          throw new Error('No simulation results received');
-        }
-        
-        console.log("Received simulation results:", results);
-        
-        setData({
-          strategy: defaultStrategy,
-          results: results
-        });
-      } catch (err) {
-        console.error('Error in fetchInitialData:', err);
-        const errorMessage = err.response?.data?.error || err.message || 'Failed to fetch data';
-        console.error('Detailed error:', errorMessage);
-        setError(errorMessage);
-        // Set empty results to prevent infinite loading
-        setData({
-          strategy: null,
-          results: {}
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchInitialData();
-  }, []); // Only run once on component mount
-
-  const prepareChartData = () => {
-    if (!data.results) return [];
-    return Object.entries(data.results).map(([date, dayData]) => ({
-      date,
-      balance: dayData.balance,
-      profitLoss: dayData.profit_loss,
-      trades: dayData.trades_count,
-    }));
-  };
+    handleRunSimulation();
+  }, []);
 
   if (loading) {
     return (
@@ -183,12 +171,6 @@ function Dashboard() {
     );
   }
 
-  const chartData = prepareChartData();
-  const lastData = chartData[chartData.length - 1] || {};
-  const firstData = chartData[0] || {};
-  const totalReturn = lastData.balance - firstData.balance;
-  const percentReturn = ((totalReturn / firstData.balance) * 100).toFixed(2);
-
   return (
     <Root>
       <Box mb={4}>
@@ -196,215 +178,197 @@ function Dashboard() {
           Trading Strategy Performance
         </Typography>
         <Typography variant="subtitle1" color="textSecondary">
-          Strategy: {data.strategy?.name || 'Unknown'}
+          Strategy: SPY Power Cashflow
         </Typography>
       </Box>
 
       {/* Configuration Form */}
-      <form onSubmit={handleRunSimulation}>
-        <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Box component="form" mb={4}>
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField
+              fullWidth
+              label="Symbol"
+              name="symbol"
+              value={config.symbol}
+              onChange={handleConfigChange}
+              disabled
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <FormControl fullWidth>
+              <InputLabel>Option Type</InputLabel>
+              <Select
+                name="optionType"
+                value={config.optionType}
+                onChange={handleConfigChange}
+                label="Option Type"
+              >
+                <MenuItem value="call">Call</MenuItem>
+                <MenuItem value="put">Put</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField
+              fullWidth
+              type="number"
+              label="Initial Balance"
+              name="initialBalance"
+              value={config.initialBalance}
+              onChange={handleConfigChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField
+              fullWidth
+              type="date"
+              label="Start Date"
+              name="startDate"
+              value={config.startDate}
+              onChange={handleConfigChange}
+              InputLabelProps={{ shrink: true }}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField
+              fullWidth
+              type="date"
+              label="End Date"
+              name="endDate"
+              value={config.endDate}
+              onChange={handleConfigChange}
+              InputLabelProps={{ shrink: true }}
+            />
+          </Grid>
           <Grid item xs={12}>
-            <StyledCard>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Strategy Configuration
-                </Typography>
-                <Grid container spacing={2}>
-                  <Grid item xs={12} md={3}>
-                    <TextField
-                      fullWidth
-                      label="Symbol"
-                      name="symbol"
-                      value={config.symbol}
-                      onChange={handleConfigChange}
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <FormControl fullWidth>
-                      <InputLabel>Option Type</InputLabel>
-                      <Select
-                        name="optionType"
-                        value={config.optionType}
-                        onChange={handleConfigChange}
-                        label="Option Type"
-                      >
-                        <MenuItem value="call">Call</MenuItem>
-                        <MenuItem value="put">Put</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <TextField
-                      fullWidth
-                      type="number"
-                      label="Initial Balance"
-                      name="initialBalance"
-                      value={config.initialBalance}
-                      onChange={handleConfigChange}
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <TextField
-                      fullWidth
-                      type="date"
-                      label="Start Date"
-                      name="startDate"
-                      value={config.startDate}
-                      onChange={handleConfigChange}
-                      InputLabelProps={{ shrink: true }}
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <TextField
-                      fullWidth
-                      type="date"
-                      label="End Date"
-                      name="endDate"
-                      value={config.endDate}
-                      onChange={handleConfigChange}
-                      InputLabelProps={{ shrink: true }}
-                    />
-                  </Grid>
-                </Grid>
-                <Box mt={2} display="flex" justifyContent="flex-end">
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    type="submit"
-                    disabled={loading}
-                  >
-                    {loading ? 'Running...' : 'Run Simulation'}
-                  </Button>
-                </Box>
-              </CardContent>
-            </StyledCard>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleRunSimulation}
+            >
+              RUN SIMULATION
+            </Button>
           </Grid>
         </Grid>
-      </form>
+      </Box>
 
-      {/* Results Section */}
-      <Grid container spacing={3}>
-        {/* Summary Cards */}
-        <Grid item xs={12} md={4}>
-          <StyledCard>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Current Balance
-              </Typography>
-              <Typography variant="h4">
-                ${lastData.balance?.toFixed(2) || '0.00'}
-              </Typography>
-            </CardContent>
-          </StyledCard>
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <StyledCard>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Total Return
-              </Typography>
-              <Typography variant="h4" color={totalReturn >= 0 ? 'success.main' : 'error.main'}>
-                ${totalReturn?.toFixed(2) || '0.00'} ({percentReturn}%)
-              </Typography>
-            </CardContent>
-          </StyledCard>
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <StyledCard>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Total Trades
-              </Typography>
-              <Typography variant="h4">
-                {chartData.reduce((sum, day) => sum + day.trades, 0)}
-              </Typography>
-            </CardContent>
-          </StyledCard>
-        </Grid>
-
-        {/* Balance Chart */}
+      {/* Performance Charts */}
+      <Grid container spacing={2}>
+        {/* Strategy vs SPY Performance Chart */}
         <Grid item xs={12}>
           <StyledCard>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Account Balance History
+                Strategy vs SPY Performance
               </Typography>
-              <Box height={400}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="balance"
-                      stroke="#2196f3"
-                      name="Balance"
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </Box>
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart
+                  data={data.chartData}
+                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="date"
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis 
+                    domain={['auto', 'auto']}
+                    tickFormatter={(value) => `$${value.toLocaleString()}`}
+                  />
+                  <Tooltip 
+                    formatter={(value) => [`$${value.toLocaleString()}`, value === data.chartData[0]?.Portfolio_Value ? 'Strategy' : 'SPY']}
+                  />
+                  <Legend />
+                  <Line 
+                    type="monotone" 
+                    dataKey="Portfolio_Value" 
+                    name="Strategy" 
+                    stroke="#8884d8" 
+                    dot={false}
+                    strokeWidth={2}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="spy_value" 
+                    name="SPY Buy & Hold" 
+                    stroke="#82ca9d" 
+                    dot={false}
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
             </CardContent>
           </StyledCard>
         </Grid>
 
-        {/* Profit/Loss Chart */}
-        <Grid item xs={12} md={6}>
+        {/* Margin Ratio Chart */}
+        <Grid item xs={12}>
           <StyledCard>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Daily Profit/Loss
+                Margin Ratio
               </Typography>
-              <Box height={300}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="profitLoss"
-                      stroke="#4caf50"
-                      name="Profit/Loss"
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </Box>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart
+                  data={data.marginData}
+                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="date"
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis 
+                    domain={[0, 1]}
+                    tickFormatter={(value) => `${(value * 100).toFixed(0)}%`}
+                  />
+                  <Tooltip 
+                    formatter={(value) => [`${(value * 100).toFixed(2)}%`, 'Margin Ratio']}
+                  />
+                  <Legend />
+                  <Line 
+                    type="monotone" 
+                    dataKey="Margin_Ratio" 
+                    name="Margin Ratio" 
+                    stroke="#ff7300" 
+                    dot={false}
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
             </CardContent>
           </StyledCard>
         </Grid>
 
-        {/* Trades Chart */}
-        <Grid item xs={12} md={6}>
+        {/* Trading Logs */}
+        <Grid item xs={12}>
           <StyledCard>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Daily Trading Activity
+                Trading Activity Log
               </Typography>
-              <Box height={300}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="trades"
-                      stroke="#ff9800"
-                      name="Number of Trades"
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </Box>
+              <LogContainer>
+                {data.tradingLogs.map(({ date, log }) => (
+                  <Box key={date} mb={1}>
+                    <Typography variant="subtitle2" color="primary">
+                      {date}
+                    </Typography>
+                    <Typography variant="body2">
+                      {log}
+                    </Typography>
+                  </Box>
+                ))}
+                {data.tradingLogs.length === 0 && (
+                  <Typography variant="body2" color="textSecondary">
+                    No trading activity in this period
+                  </Typography>
+                )}
+              </LogContainer>
             </CardContent>
           </StyledCard>
         </Grid>

@@ -505,25 +505,31 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
             if results_df.index.freq != 'D':
                 results_df = results_df.resample('D').last().fillna(method='ffill')
             
-            # Calculate SPY buy & hold value
-            spy_prices = market_data.get_spy_prices(start_dt, end_dt)
-            initial_spy_shares = initial_balance / spy_prices.iloc[0]['Close']
-            spy_values = spy_prices['Close'] * initial_spy_shares
+            # Calculate SPY buy & hold value using Close prices from results_df
+            initial_spy_shares = initial_balance / results_df['Close'].iloc[0]
+            spy_values = results_df['Close'] * initial_spy_shares
             
             for idx, row in results_df.iterrows():
                 date_str = idx.strftime('%Y-%m-%d')
+                # Map simulator output fields to frontend expected fields
                 daily_results[date_str] = {
-                    'portfolio_value': float(row.get('Portfolio_Value', 0)),
+                    'Portfolio_Value': float(row.get('Portfolio_Value', row.get('portfolio_value', row.get('balance', 0)))),
+                    'Cash_Balance': float(row.get('Cash_Balance', row.get('cash_balance', row.get('Cash', row.get('cash', 0))))),
+                    'Close': float(row.get('Close', row.get('close', 0))),
+                    'Margin_Ratio': float(row.get('Margin_Ratio', row.get('margin_ratio', row.get('margin', 0)))),
                     'spy_value': float(spy_values.get(idx, 0)),
-                    'cash': float(row.get('Cash', 0)),
-                    'trades_count': int(row.get('Trades', 0) if 'Trades' in row else 0),
-                    'profit_loss': float(row.get('Daily_PnL', 0) if 'Daily_PnL' in row else 0),
-                    'interest_paid': float(row.get('Interest_Paid', 0) if 'Interest_Paid' in row else 0),
-                    'premiums_received': float(row.get('Premiums_Received', 0) if 'Premiums_Received' in row else 0),
-                    'commissions_paid': float(row.get('Commissions_Paid', 0) if 'Commissions_Paid' in row else 0),
-                    'open_positions': int(row.get('Open_Positions', 0) if 'Open_Positions' in row else 0),
-                    'closed_positions': int(row.get('Closed_Positions', 0) if 'Closed_Positions' in row else 0),
-                    'spy_price': float(spy_prices.loc[idx, 'Close'] if idx in spy_prices.index else 0)
+                    'Trades': int(row.get('Trades', row.get('trades', 0))),
+                    'Daily_PnL': float(row.get('Daily_PnL', row.get('daily_pnl', 0))),
+                    'Interest_Paid': float(row.get('Interest_Paid', row.get('interest_paid', 0))),
+                    'Premiums_Received': float(row.get('Premiums_Received', row.get('premiums_received', 0))),
+                    'Commissions_Paid': float(row.get('Commissions_Paid', row.get('commissions_paid', 0))),
+                    'Open_Positions': int(row.get('Open_Positions', row.get('open_positions', 0))),
+                    'Closed_Positions': int(row.get('Closed_Positions', row.get('closed_positions', 0))),
+                    'Open': float(row.get('Open', row.get('open', 0))),
+                    'High': float(row.get('High', row.get('high', 0))),
+                    'Low': float(row.get('Low', row.get('low', 0))),
+                    'VIX': float(row.get('VIX', row.get('vix', 0))),
+                    'Trading_Log': str(row.get('Trading_Log', row.get('trading_log', '')))
                 }
         
         return daily_results
