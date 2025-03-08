@@ -37,7 +37,7 @@ TradingHub is a web-based platform for running trading strategy simulations, vis
 
 2. **Install Python dependencies**
    ```bash
-   pip install flask flask-cors psycopg2-binary python-dotenv
+   make venv
    ```
 
 3. **Set up the database**
@@ -60,12 +60,12 @@ TradingHub is a web-based platform for running trading strategy simulations, vis
 
 1. **Start the API server**
    ```bash
-   python backend/simple_app.py
+   ./.venv/bin/python backend/simple_app.py
    ```
 
 2. **Start the frontend server**
    ```bash
-   python backend/serve_static.py
+   ./.venv/bin/python backend/serve_static.py
    ```
 
 3. **Access the application**
