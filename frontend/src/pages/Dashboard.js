@@ -103,7 +103,7 @@ function Dashboard() {
   const [config, setConfig] = useState({
     symbol: 'SPY',
     optionType: 'call',
-    initialBalance: 10000,
+    initialBalance: 200000,
     startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
   });
@@ -119,7 +119,13 @@ function Dashboard() {
     let processedValue = value;
     
     if (['initialBalance'].includes(name)) {
-      processedValue = parseFloat(value) || 0;
+      // Ensure initialBalance is always a valid number
+      processedValue = parseFloat(value);
+      if (isNaN(processedValue) || processedValue <= 0) {
+        // Default to 200000 if value is invalid
+        processedValue = 200000;
+      }
+      console.log(`Setting initialBalance to: ${processedValue}`);
     }
     
     setConfig(prev => ({

@@ -9,7 +9,7 @@ import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
 from psycopg2.extras import DictCursor, Json
-from services.mock_strategy import generate_mock_data
+
 
 # CRITICAL FIX: Create absolute paths to the strategy modules
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -478,7 +478,7 @@ def run_strategy_simulation(
 
 
 def run_spy_power_cashflow(
-    TradingSimulator, OptionStrategy, config, start_dt, end_dt, initial_balance
+    TradingSimulator, OptionStrategy, config, start_dt, end_dt, initial_balance=None
 ):
     """Run the SPY_POWER_CASHFLOW strategy simulation."""
     strategy_path = STRATEGY_PATHS['SPY_POWER_CASHFLOW']
@@ -513,51 +513,57 @@ def run_spy_power_cashflow(
 
         # Create a Config object
         strategy_config = Config()
-        print("\n=== Initial Config from module ===")
-        for attr in dir(strategy_config):
-            if not attr.startswith('__'):  # Skip private attributes
-                print(f"{attr}: {getattr(strategy_config, attr)}")
+        
+        # Apply config values from frontend rather than hardcoding
+        # Transfer any config parameters from the frontend to the strategy_config
+        if 'SYMBOL' in config:
+            strategy_config.SYMBOL = config['SYMBOL']
+        else:
+            # Fallback to default value for backwards compatibility
+            strategy_config.SYMBOL = 'SPY'
+        
+        # Set strategy type from the request data
+        strategy_config.STRATEGY_TYPE = 'SPY_POWER_CASHFLOW'
+        
+        # Get initial balance from request
+        try:
+            # Define possible parameter locations and names
+            balance_sources = [
+                ('parameter', initial_balance),
+                ('config', 'initial_balance'),
+                ('config', 'initialBalance')
+            ]
+            
+            # Check each possible source
+            balance_set = False
+            for source_type, source in balance_sources:
+                if source_type == 'parameter' and source is not None:
+                    strategy_config.INITIAL_CASH = float(source)
+                    print(f"Using initial balance from parameter: {source}")
+                    balance_set = True
+                    break
+                elif source_type == 'config' and source in config:
+                    strategy_config.INITIAL_CASH = float(config[source])
+                    print(f"Using {source} from config: {config[source]}")
+                    balance_set = True
+                    break
+            
+            # If balance not set from any source, use default
+            if not balance_set:
+                print("No initial balance provided, using default")
+                strategy_config.INITIAL_CASH = 500000.0
+                
+        except (ValueError, TypeError) as e:
+            print(f"Error parsing initial balance: {e}, using default")
+            strategy_config.INITIAL_CASH = 500000.0
 
-        # Set all required configuration attributes with default values first
-        default_config = {
-            'SYMBOL': 'SPY',
-            'BUY_TIME': '9:35',
-            'SELL_TIME': '15:45',
-            'STOP_LOSS_PCT': 0.50,
-            'TAKE_PROFIT_PCT': 1.00,
-            'STRATEGY_TYPE': 'power_cashflow',
-            'OPTION_TYPE': 'call',
-            'DTE_MIN': 1,
-            'DTE_MAX': 5,
-            'DELTA_MIN': 0.40,
-            'DELTA_MAX': 0.60,
-            'COMMISSION': 0.65,
-            'INITIAL_CASH': initial_balance,
-            'START_DATE': start_dt.strftime(
-                '%Y-%m-%d'
-            ),  # Convert to string format
-            'END_DATE': end_dt.strftime(
-                '%Y-%m-%d'
-            ),  # Convert to string format
-            'FREQUENCY': 'D',  # Set to daily frequency
-        }
 
-        # Set default values
-        for key, value in default_config.items():
-            setattr(strategy_config, key, value)
-            print(f"Set default config {key} = {value}")
-
-        # Override with user-provided config
+        # Apply any other config parameters from the frontend
+        print("\n=== Config from frontend ===")
         for key, value in config.items():
-            key_upper = key.upper()
-            if (
-                key_upper == 'FREQUENCY' and value == 'ME'
-            ):  # Fix invalid frequency
-                value = 'M'  # Convert 'ME' to 'M' for monthly frequency
-            setattr(strategy_config, key_upper, value)
-            print(f"Override config {key_upper} = {value}")
+            print(key, value)
 
-        print("\n=== Final Config before component initialization ===")
+        print("\n=== Initial Config from module ===")
         for attr in dir(strategy_config):
             if not attr.startswith('__'):  # Skip private attributes
                 print(f"{attr}: {getattr(strategy_config, attr)}")
@@ -711,51 +717,28 @@ def run_ccspy_strategy(
         Config = config_module.Config
 
         # Create a Config object
-        strategy_config = Config()
+        strategy_config = Config()        
+        
+        # Apply config values from frontend rather than hardcoding
+        # Transfer any config parameters from the frontend to the strategy_config
+        if 'SYMBOL' in config:
+            strategy_config.SYMBOL = config['SYMBOL']
+        else:
+            # Fallback to default value for backwards compatibility
+            strategy_config.SYMBOL = 'SPY'
+        
+        # Set strategy type from the request data
+        strategy_config.STRATEGY_TYPE = 'CCSPY'
 
-        # Set all required configuration attributes with default values first
-        default_config = {
-            'SYMBOL': 'SPY',
-            'BUY_TIME': '9:35',
-            'SELL_TIME': '15:45',
-            'STOP_LOSS_PCT': 0.50,
-            'TAKE_PROFIT_PCT': 1.00,
-            'STRATEGY_TYPE': 'ccspy',
-            'OPTION_TYPE': 'call',
-            'DTE_MIN': 1,
-            'DTE_MAX': 5,
-            'DELTA_MIN': 0.40,
-            'DELTA_MAX': 0.60,
-            'COMMISSION': 0.65,
-            'INITIAL_CASH': initial_balance,
-            'START_DATE': start_dt.strftime(
-                '%Y-%m-%d'
-            ),  # Convert to string format
-            'END_DATE': end_dt.strftime(
-                '%Y-%m-%d'
-            ),  # Convert to string format
-            'FREQUENCY': 'D',  # Set to daily frequency
-        }
-
-        # Set default values
-        for key, value in default_config.items():
-            setattr(strategy_config, key, value)
-            print(f"Set default config {key} = {value}")
-
-        # Override with user-provided config
+        # Apply any other config parameters from the frontend
         for key, value in config.items():
-            key_upper = key.upper()
-            if (
-                key_upper == 'FREQUENCY' and value == 'ME'
-            ):  # Fix invalid frequency
-                value = 'M'  # Convert 'ME' to 'M' for monthly frequency
-            setattr(strategy_config, key_upper, value)
-            print(f"Override config {key_upper} = {value}")
+            if key != 'SYMBOL':  # Already handled above
+                setattr(strategy_config, key, value)
 
-        # Print final configuration for debugging
-        print("Final strategy configuration:")
-        for key in default_config.keys():
-            print(f"{key}: {getattr(strategy_config, key)}")
+        print("\n=== Initial Config from module ===")
+        for attr in dir(strategy_config):
+            if not attr.startswith('__'):  # Skip private attributes
+                print(f"{attr}: {getattr(strategy_config, attr)}")
 
         # Initialize components
         market_data = MarketData(symbol=strategy_config.SYMBOL)

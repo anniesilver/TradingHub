@@ -45,7 +45,7 @@
                     
                     <div class="mb-3">
                         <label for="initialBalance" class="form-label">Initial Balance</label>
-                        <input type="number" class="form-control" id="initialBalance" value="10000">
+                        <input type="number" class="form-control" id="initialBalance" value="200000">
                     </div>
                     
                     <h5>Strategy Configuration</h5>
@@ -91,7 +91,7 @@
         async function testApiConnection() {
             try {
                 console.log("Testing API connection...");
-                const response = await fetch('http://localhost:5000/api/test');
+                const response = await fetch('http://localhost:8080/api/test');
                 const data = await response.json();
                 console.log("API response:", data);
                 alert("API connection successful: " + data.message);
@@ -128,7 +128,7 @@
             console.log("Sending simulation request:", simulationData);
             
             try {
-                const response = await fetch('http://localhost:5000/api/simulate', {
+                const response = await fetch('http://localhost:8080/api/simulate', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'

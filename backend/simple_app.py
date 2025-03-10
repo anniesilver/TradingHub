@@ -74,6 +74,10 @@ def run_simulation():
             return jsonify({"error": "No JSON data received"}), 400
 
         logger.info(f"Received simulation request: {data}")
+        logger.info(f"Request keys: {list(data.keys())}")
+        logger.info(f"Config: {data.get('config')}")
+        logger.info(f"initialBalance: {data.get('initialBalance')}")
+        logger.info(f"initial_balance: {data.get('initial_balance')}")
 
         # Validate required fields
         required_fields = ['strategy_type', 'config', 'start_date', 'end_date']
@@ -100,9 +104,36 @@ def run_simulation():
             )
 
         # Get initial balance from request or use default
-        initial_balance = 500000.0
-
-        # initial_balance = float(data.get('initial_balance', 200000.0))
+        try:
+            # Define possible parameter locations and names
+            initial_balance = None
+            param_locations = [
+                ('root', 'initial_balance'),
+                ('root', 'initialBalance'),
+                ('config', 'initial_balance'),
+                ('config', 'initialBalance')
+            ]
+            
+            # Check each possible location
+            for location, param_name in param_locations:
+                if location == 'root' and param_name in data and data[param_name] is not None:
+                    initial_balance = float(data[param_name])
+                    logger.info(f"Using {param_name} from request: {initial_balance}")
+                    break
+                elif location == 'config' and 'config' in data and isinstance(data['config'], dict) and param_name in data['config'] and data['config'][param_name] is not None:
+                    initial_balance = float(data['config'][param_name])
+                    logger.info(f"Using {param_name} from config: {initial_balance}")
+                    break
+            
+            # If still None, use default
+            if initial_balance is None:
+                initial_balance = 500000.0
+                logger.info(f"Using default initial balance: {initial_balance}")
+                
+        except (ValueError, TypeError) as e:
+            logger.error(f"Error parsing initial balance: {e}")
+            initial_balance = 500000.0  # Fallback to default
+            logger.info(f"Using fallback initial balance: {initial_balance}")
 
         # Import strategy modules
         TradingSimulator, OptionStrategy, success = import_strategy(

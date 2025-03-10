@@ -16,7 +16,7 @@ TradingHub is a web-based platform for running trading strategy simulations, vis
 
 - **Backend**: Flask (Python)
 - **Database**: PostgreSQL
-- **Frontend**: HTML, JavaScript, Bootstrap, Chart.js
+- **Frontend**: React.js, Bootstrap, Chart.js
 - **API**: RESTful JSON API
 
 ## Installation
@@ -26,6 +26,7 @@ TradingHub is a web-based platform for running trading strategy simulations, vis
 - Python 3.8+
 - PostgreSQL
 - pip (Python package manager)
+- Node.js and npm (for frontend)
 
 ### Setup Instructions
 
@@ -39,14 +40,30 @@ TradingHub is a web-based platform for running trading strategy simulations, vis
    ```bash
    make venv
    ```
+   
+   Alternatively, you can set up the virtual environment manually:
+   ```bash
+   python -m venv .venv
+   # On Windows:
+   .\.venv\Scripts\pip install -r requirements.txt
+   # On Linux/Mac:
+   ./.venv/bin/pip install -r requirements.txt
+   ```
 
-3. **Set up the database**
+3. **Install frontend dependencies**
+   ```bash
+   cd frontend
+   npm install
+   cd ..
+   ```
+
+4. **Set up the database**
    ```bash
    # Create a PostgreSQL database
    createdb tradinghub
    ```
 
-4. **Configure environment variables**
+5. **Configure environment variables**
    ```bash
    # Create .env file in backend/services directory
    echo "DB_NAME=tradinghub" > backend/services/.env
@@ -58,18 +75,46 @@ TradingHub is a web-based platform for running trading strategy simulations, vis
 
 ## Running the Application
 
+### Starting the Backend Server
+
 1. **Start the API server**
    ```bash
+   # On Windows:
+   .\.venv\Scripts\python backend\simple_app.py
+   
+   # On Linux/Mac:
    ./.venv/bin/python backend/simple_app.py
    ```
+   
+   The backend server will run on http://127.0.0.1:8080
 
-2. **Start the frontend server**
+### Starting the Frontend Server
+
+2. **Start the React frontend**
    ```bash
-   ./.venv/bin/python backend/serve_static.py
+   cd frontend
+   npm start
    ```
+   
+   The frontend will be available at http://localhost:3000 or http://localhost:3001
 
-3. **Access the application**
-   - Frontend: http://localhost:8080
-   - API: http://localhost:5000
+### Accessing the Application
+
+- **Frontend:** http://localhost:3000 (or http://localhost:3001)
+- **API Endpoints:**
+  - API Test: http://localhost:8080/api/test
+  - Strategies List: http://localhost:8080/api/strategies
+  - Simulation Endpoint: http://localhost:8080/api/simulate (POST)
+
+## Troubleshooting
+
+- **Dependency Issues:** If you encounter the scipy/numpy version mismatch error, try upgrading scipy to match your numpy version:
+  ```bash
+  ./.venv/Scripts/pip install scipy==1.15.2
+  ```
+
+- **'Config' object has no attribute 'SYMBOL' Error:** This error occurs when the strategy configuration does not have the required SYMBOL attribute. The backend code automatically applies the SYMBOL attribute from the frontend configuration, or falls back to 'SPY' as a default value if not provided.
+
+- **Port Conflicts:** If port 8080 or 3000 is already in use, check running processes and terminate any conflicting services.
 
 ## Project Structure 

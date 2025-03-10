@@ -79,21 +79,28 @@ export const runSimulation = async (config) => {
     const payload = {
       strategy_type: config.strategyId || 'SPY_POWER_CASHFLOW',
       config: {
-        SYMBOL: config.symbol || 'SPY',
-        BUY_TIME: config.buyTime || '9:35',
-        SELL_TIME: config.sellTime || '15:45',
-        STOP_LOSS_PCT: config.stopLoss || 0.50,
-        TAKE_PROFIT_PCT: config.takeProfit || 1.00,
-        OPTION_TYPE: config.optionType || 'call',
-        DTE_MIN: config.dteMin || 1,
-        DTE_MAX: config.dteMax || 5,
-        DELTA_MIN: config.deltaMin || 0.40,
-        DELTA_MAX: config.deltaMax || 0.60,
+        SYMBOL: config.symbol || 'SPY',       
+        OPTION_TYPE: config.optionType || 'call',        
       },
       start_date: config.startDate,
-      end_date: config.endDate,
-      initial_balance: config.INITIAL_CASH || 10000.0
+      end_date: config.endDate
     };
+    
+    // Add initial balance with consistent naming
+    if (config.initialBalance !== undefined && config.initialBalance !== null) {
+      // Parse to ensure it's a proper number
+      const balanceValue = parseFloat(config.initialBalance);
+      if (!isNaN(balanceValue) && balanceValue > 0) {
+        payload.initial_balance = balanceValue;
+        console.log(`Setting initial_balance: ${balanceValue}`);
+      } else {
+        payload.initial_balance = 500000.0;
+        console.log(`Invalid initialBalance, using default: 500000.0`);
+      }
+    } else {
+      payload.initial_balance = 500000.0;
+      console.log(`No initialBalance provided, using default: 500000.0`);
+    }
 
     console.log('Sending simulation request:', payload);
     const response = await axios.post(`${API_BASE_URL}/simulate`, payload);
