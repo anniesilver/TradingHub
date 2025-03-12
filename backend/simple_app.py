@@ -165,6 +165,23 @@ def run_simulation():
                     logger.info(
                         f"First data point structure: {results[first_date]}"
                     )
+                    
+                    # Log all dates before returning
+                    result_dates = sorted(list(results.keys()))
+                    logger.info(f"Result contains {len(result_dates)} dates")
+                    logger.info(f"First 5 dates: {result_dates[:5]}")
+                    logger.info(f"Last 5 dates: {result_dates[-5:]}")
+                    
+                    # Check for weekend dates
+                    weekend_dates = []
+                    for date_str in result_dates:
+                        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                        if date_obj.weekday() >= 5:  # 5=Saturday, 6=Sunday
+                            weekend_dates.append(date_str)
+                    
+                    logger.info(f"Weekend dates found: {weekend_dates}")
+                    logger.info(f"Weekend count: {len(weekend_dates)}")
+                    
                     return jsonify(results)
                 else:
                     return (

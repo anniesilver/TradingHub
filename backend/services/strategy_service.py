@@ -548,14 +548,10 @@ def run_spy_power_cashflow(
                     balance_set = True
                     break
             
-            # If balance not set from any source, use default
-            if not balance_set:
-                print("No initial balance provided, using default")
-                strategy_config.INITIAL_CASH = 500000.0
+
                 
         except (ValueError, TypeError) as e:
             print(f"Error parsing initial balance: {e}, using default")
-            strategy_config.INITIAL_CASH = 500000.0
 
 
         # Apply any other config parameters from the frontend
@@ -591,7 +587,9 @@ def run_spy_power_cashflow(
 
         print("\n=== Running Simulation ===")
         results_df = simulator.run()
-
+        print(results_df.head(30))
+        print(results_df.tail(30))
+        print(results_df.info())
         # Process results
         daily_results = {}
         if results_df is not None and not results_df.empty:
@@ -601,17 +599,22 @@ def run_spy_power_cashflow(
             if not isinstance(results_df.index, pd.DatetimeIndex):
                 results_df.index = pd.to_datetime(results_df.index)
 
-            # Resample to daily frequency if needed
-            if results_df.index.freq != 'D':
-                results_df = (
-                    results_df.resample('D').last().fillna(method='ffill')
-                )
-
-            # Calculate SPY buy & hold value using Close prices from results_df
-            initial_spy_shares = initial_balance / results_df['Close'].iloc[0]
-            spy_values = results_df['Close'] * initial_spy_shares
+            # Calculate SPY buy & hold value using Close prices from results_df   
+            spy_values = results_df['Close'] * results_df['Total_Shares']
+            
+            # Only include actual trading days - exclude weekends and holidays
+            trading_days = results_df.index.tolist()
+            
+            # Print the first and last few dates for debugging
+            print(f"First 5 dates in results_df: {[d.strftime('%Y-%m-%d') for d in trading_days[:5]]}")
+            print(f"Last 5 dates in results_df: {[d.strftime('%Y-%m-%d') for d in trading_days[-5:]]}")
+            print(f"Total number of trading days: {len(trading_days)}")
 
             for idx, row in results_df.iterrows():
+                # Skip dates that aren't in the original DataFrame
+                if idx not in trading_days:
+                    continue
+                    
                 date_str = idx.strftime('%Y-%m-%d')
                 # Map simulator output fields to frontend expected fields
                 daily_results[date_str] = {
@@ -760,13 +763,18 @@ def run_ccspy_strategy(
             if not isinstance(results_df.index, pd.DatetimeIndex):
                 results_df.index = pd.to_datetime(results_df.index)
 
-            # Resample to daily frequency if needed
-            if results_df.index.freq != 'D':
-                results_df = (
-                    results_df.resample('D').last().fillna(method='ffill')
-                )
+            # Calculate SPY buy & hold value using Close prices from results_df   
+            spy_values = results_df['Close'] * results_df['Total_Shares']
+            
+            # Only include actual trading days - exclude weekends and holidays
+        
+
 
             for idx, row in results_df.iterrows():
+                # Skip dates that aren't in the original DataFrame
+                if idx not in trading_days:
+                    continue
+                    
                 date_str = idx.strftime('%Y-%m-%d')
                 daily_results[date_str] = {
                     'balance': float(

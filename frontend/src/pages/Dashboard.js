@@ -206,10 +206,13 @@ function Dashboard() {
         };
       });
       
-      // Sort by date
-      premiumData.sort((a, b) => new Date(a.date) - new Date(b.date));
+      // Filter out entries where Premiums_Received is zero
+      const filteredPremiumData = premiumData.filter(item => item.Premiums_Received !== 0);
       
-      console.log('Final premium data with proper scaling:', premiumData);
+      // Sort by date
+      filteredPremiumData.sort((a, b) => new Date(a.date) - new Date(b.date));
+      
+      console.log('Final premium data with proper scaling (non-zero only):', filteredPremiumData);
       
       // Convert the data into arrays for the main charts
       const processedData = Object.entries(parsedData).map(([date, values]) => {
@@ -238,19 +241,17 @@ function Dashboard() {
         .sort((a, b) => new Date(b.date) - new Date(a.date));
       
       // If we still have no premium data, create test data
-      if (premiumData.length === 0) {
+      if (filteredPremiumData.length === 0) {
         console.log('No premium data found, creating varied test data');
       }
       
-      premiumData.sort((a, b) => new Date(a.date) - new Date(b.date));
-      
-      console.log('Final premium data for chart:', premiumData);
-      console.log('Total premium data points:', premiumData.length);
+      console.log('Final premium data for chart:', filteredPremiumData);
+      console.log('Total premium data points:', filteredPremiumData.length);
 
       setData({
         chartData: processedData,
         marginData: processedData,
-        premiumData: premiumData,
+        premiumData: filteredPremiumData,
         tradingLogs
       });
     } catch (error) {
