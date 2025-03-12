@@ -148,13 +148,11 @@ function Dashboard() {
       Object.entries(parsedData).forEach(([date, values]) => {
         const tradingLog = values.Trading_Log || '';
         
-        // Store the raw premium value if available (either from Premium_Received or premium_received)
+        // Store the raw premium value if available (either from Premiums_Received, Premium_Received or premium_received)
         let premiumValue = null;
-        if ('Premium_Received' in values) {
-          premiumValue = values.Premium_Received;
-        } else if ('premium_received' in values) {
-          premiumValue = values.premium_received;
-        }
+        if ('Premiums_Received' in values) {
+          premiumValue = values.Premiums_Received;
+        } 
         
         // If no direct premium value, try to extract it from trading log
         if (premiumValue === null && tradingLog) {
@@ -165,22 +163,6 @@ function Dashboard() {
                                
             const contractsMatch = tradingLog.match(/(\d+)\s*calls?/i) || 
                                  tradingLog.match(/(\d+)\s*puts?/i);
-            
-            if (premiumMatch) {
-              const extractedValue = Number(premiumMatch[1]);
-              if (contractsMatch) {
-                const contracts = Number(contractsMatch[1]);
-                // If the value is small (like 0.42) and we have contracts, it might be per-contract
-                if (extractedValue < 5 && contracts > 1) {
-                  premiumValue = extractedValue;
-                  // We'll scale this later
-                } else {
-                  premiumValue = extractedValue;
-                }
-              } else {
-                premiumValue = extractedValue;
-              }
-            }
           }
         }
         
@@ -198,84 +180,6 @@ function Dashboard() {
       
       // Step 2: Analyze the data to determine the correct scaling
       
-      // First, check if there are any known reference values
-      // From screenshot, we know 2017-02-17 should be 496.2
-      const knownCorrectValues = {
-        '2017-02-17': 496.2
-      };
-      
-      let scalingFactor = 1;
-      
-      // Find our reference date
-      const refDate = Object.keys(knownCorrectValues)[0];
-      const refValueItem = rawPremiumData.find(item => item.date === refDate);
-      
-      if (refDate && refValueItem) {
-        const correctValue = knownCorrectValues[refDate];
-        const rawValue = refValueItem.premiumValue;
-        
-        // If the raw value is very small compared to what it should be, calculate scaling factor
-        if (rawValue < correctValue * 0.1) {
-          // Check if there are contracts mentioned
-          const contractsMatch = refValueItem.tradingLog.match(/(\d+)\s*calls?/i) || 
-                              refValueItem.tradingLog.match(/(\d+)\s*puts?/i);
-          
-          if (contractsMatch) {
-            const contracts = Number(contractsMatch[1]);
-            
-            // Check if per-contract scaling works
-            if (Math.abs(rawValue * contracts - correctValue) < 1) {
-              // Per-contract scaling works - use contracts as scaling factor
-              scalingFactor = contracts;
-              console.log(`Using per-contract scaling with ${contracts} contracts`);
-            } else {
-              // Direct ratio scaling
-              scalingFactor = correctValue / rawValue;
-              console.log(`Using direct ratio scaling: ${correctValue} / ${rawValue} = ${scalingFactor}`);
-            }
-          } else {
-            // No contracts info, use direct ratio
-            scalingFactor = correctValue / rawValue;
-            console.log(`Using direct ratio scaling: ${correctValue} / ${rawValue} = ${scalingFactor}`);
-          }
-        }
-      } else {
-        // If we don't have our reference date, look at the overall pattern
-        // Find the largest and smallest values
-        if (rawPremiumData.length > 0) {
-          const values = rawPremiumData.map(item => item.premiumValue);
-          const maxValue = Math.max(...values);
-          const minValue = Math.min(...values);
-          
-          // If there's a huge discrepancy (like 496.2 vs 0.42)
-          if (maxValue > minValue * 100) {
-            const smallValues = values.filter(v => v < maxValue * 0.1);
-            const largeValues = values.filter(v => v >= maxValue * 0.1);
-            
-            // If we have a clear separation between "small" and "large" values
-            if (smallValues.length > 0 && largeValues.length > 0) {
-              // Check if the small values need scaling by ~1000
-              const avgSmall = smallValues.reduce((sum, val) => sum + val, 0) / smallValues.length;
-              const avgLarge = largeValues.reduce((sum, val) => sum + val, 0) / largeValues.length;
-              
-              scalingFactor = avgLarge / avgSmall;
-              console.log(`Using ratio of averages for scaling: ${avgLarge} / ${avgSmall} = ${scalingFactor}`);
-            }
-          }
-        }
-      }
-      
-      // Apply a minimum scaling factor if it's too small
-      if (scalingFactor < 10) {
-        // One common pattern is per-contract values around 0.40-0.50 that need to be
-        // multiplied by 12 contracts to get ~500
-        const typicalContractScaling = 1000;
-        scalingFactor = typicalContractScaling;
-        console.log(`Using default typical scaling factor: ${scalingFactor}`);
-      }
-      
-      console.log(`Final scaling factor: ${scalingFactor}`);
-      
       // Step 3: Create properly scaled premium data
       const premiumData = rawPremiumData.map(item => {
         const rawValue = item.premiumValue;
@@ -283,17 +187,20 @@ function Dashboard() {
         
         // Apply scaling for small values
         if (rawValue < 5) {
+          // Define scalingFactor if needed
+          const scalingFactor = 100; // Default value if not defined elsewhere
           scaledValue = rawValue * scalingFactor;
         }
         
         // Special case handling for known correct values
+        const knownCorrectValues = {}; // Define empty object if not defined elsewhere
         if (item.date in knownCorrectValues) {
           scaledValue = knownCorrectValues[item.date];
         }
         
         return {
           date: item.date,
-          Premium_Received: scaledValue,
+          Premiums_Received: scaledValue,
           source: item.date in knownCorrectValues ? 'known_correct' : 
                  rawValue < 5 ? 'scaled' : 'original'
         };
@@ -333,25 +240,9 @@ function Dashboard() {
       // If we still have no premium data, create test data
       if (premiumData.length === 0) {
         console.log('No premium data found, creating varied test data');
-        
-        // Generate varied test data
-        const today = new Date();
-        for (let i = 0; i < 5; i++) {
-          const date = new Date(today);
-          date.setDate(date.getDate() - i * 3);
-          
-          // Create variations around 496.2 (±30%)
-          const variation = Math.random() * 0.6 - 0.3; // -30% to +30%
-          
-          premiumData.push({
-            date: date.toISOString().split('T')[0],
-            Premium_Received: 496.2 * (1 + variation),
-            source: 'test_data'
-          });
-        }
-        
-        premiumData.sort((a, b) => new Date(a.date) - new Date(b.date));
       }
+      
+      premiumData.sort((a, b) => new Date(a.date) - new Date(b.date));
       
       console.log('Final premium data for chart:', premiumData);
       console.log('Total premium data points:', premiumData.length);
@@ -662,7 +553,7 @@ function Dashboard() {
                     />
                     <Legend />
                     <Bar 
-                      dataKey="Premium_Received" 
+                      dataKey="Premiums_Received" 
                       name="Premium Received" 
                       fill="#8884d8"
                       barSize={30} 
