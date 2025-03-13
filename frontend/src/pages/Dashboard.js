@@ -91,6 +91,40 @@ function a11yProps(index) {
   };
 }
 
+const CustomTooltip = ({ active, payload, label }) => {
+  if (!active || !payload || !payload.length) return null;
+  
+  return (
+    <div style={{ 
+      backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+      padding: '8px 12px', 
+      border: '1px solid #ccc',
+      borderRadius: '4px',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+    }}>
+      <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>{label}</p>
+      {payload.map((entry, index) => {
+        // Determine the label based on the dataKey
+        const seriesName = entry.dataKey === "Portfolio_Value" ? "Strategy" : 
+                         entry.dataKey === "spy_value" ? "SPY Buy & Hold" :
+                         entry.dataKey === "Margin_Ratio" ? "Margin Ratio" :
+                         entry.dataKey === "Cash_Balance" ? "Cash Balance" :
+                         entry.dataKey === "Premiums_Received" ? "Premium Received" :
+                         entry.name;
+                         
+        return (
+          <p key={index} style={{ margin: '5px 0', color: entry.color }}>
+            {seriesName}: ${Number(entry.value).toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            })}
+          </p>
+        );
+      })}
+    </div>
+  );
+};
+
 function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -233,7 +267,7 @@ function Dashboard() {
       
       // Extract trading logs where actual trading happened
       const tradingLogs = Object.entries(parsedData)
-        .filter(([_, values]) => values.Trading_Log && values.Trading_Log.includes('Executed'))
+        .filter(([_, values]) => values.Trading_Log && values.Trading_Log.trim() !== '')
         .map(([date, values]) => ({
           date,
           log: values.Trading_Log
@@ -412,10 +446,10 @@ function Dashboard() {
               <Typography variant="h6" gutterBottom>
                 Strategy vs SPY Performance
               </Typography>
-              <ResponsiveContainer width="100%" height={400}>
+              <ResponsiveContainer width="100%" height={600}>
                 <LineChart
                   data={data.chartData}
-                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
@@ -428,15 +462,17 @@ function Dashboard() {
                     domain={['auto', 'auto']}
                     tickFormatter={(value) => `$${value.toLocaleString()}`}
                   />
-                  <Tooltip 
-                    formatter={(value) => [`$${value.toLocaleString()}`, value === data.chartData[0]?.Portfolio_Value ? 'Strategy' : 'SPY']}
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend 
+                    verticalAlign="top"
+                    height={36}
+                    wrapperStyle={{paddingBottom: '10px'}}
                   />
-                  <Legend />
                   <Line 
                     type="monotone" 
                     dataKey="Portfolio_Value" 
                     name="Strategy" 
-                    stroke="#8884d8" 
+                    stroke="#82ca9d" 
                     dot={false}
                     strokeWidth={2}
                   />
@@ -444,7 +480,7 @@ function Dashboard() {
                     type="monotone" 
                     dataKey="spy_value" 
                     name="SPY Buy & Hold" 
-                    stroke="#82ca9d" 
+                    stroke="#8884d8" 
                     dot={false}
                     strokeWidth={2}
                   />
@@ -457,10 +493,10 @@ function Dashboard() {
               <Typography variant="h6" gutterBottom>
                 Margin Ratio
               </Typography>
-              <ResponsiveContainer width="100%" height={400}>
+              <ResponsiveContainer width="100%" height={600}>
                 <LineChart
                   data={data.marginData}
-                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
@@ -473,10 +509,12 @@ function Dashboard() {
                     domain={[0, 1]}
                     tickFormatter={(value) => `${(value * 100).toFixed(0)}%`}
                   />
-                  <Tooltip 
-                    formatter={(value) => [`${(value * 100).toFixed(2)}%`, 'Margin Ratio']}
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend 
+                    verticalAlign="top"
+                    height={36}
+                    wrapperStyle={{paddingBottom: '10px'}}
                   />
-                  <Legend />
                   <Line 
                     type="monotone" 
                     dataKey="Margin_Ratio" 
@@ -494,10 +532,10 @@ function Dashboard() {
               <Typography variant="h6" gutterBottom>
                 Cash Balance
               </Typography>
-              <ResponsiveContainer width="100%" height={400}>
+              <ResponsiveContainer width="100%" height={600}>
                 <LineChart
                   data={data.chartData}
-                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
@@ -510,10 +548,12 @@ function Dashboard() {
                     domain={['auto', 'auto']}
                     tickFormatter={(value) => `$${value.toLocaleString()}`}
                   />
-                  <Tooltip 
-                    formatter={(value) => [`$${value.toLocaleString()}`, 'Cash Balance']}
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend 
+                    verticalAlign="top"
+                    height={36}
+                    wrapperStyle={{paddingBottom: '10px'}}
                   />
-                  <Legend />
                   <Line 
                     type="monotone" 
                     dataKey="Cash_Balance" 
@@ -532,10 +572,10 @@ function Dashboard() {
                 Premium Received
               </Typography>
               {data.premiumData && data.premiumData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={400}>
+                <ResponsiveContainer width="100%" height={600}>
                   <BarChart
                     data={data.premiumData}
-                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis 
@@ -548,11 +588,12 @@ function Dashboard() {
                       domain={[0, 'auto']}
                       tickFormatter={(value) => `$${value.toLocaleString()}`}
                     />
-                    <Tooltip 
-                      formatter={(value) => [`$${value.toFixed(2)}`, 'Premium Received']}
-                      labelFormatter={(label) => `Date: ${label}`}
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend 
+                      verticalAlign="top"
+                      height={36}
+                      wrapperStyle={{paddingBottom: '10px'}}
                     />
-                    <Legend />
                     <Bar 
                       dataKey="Premiums_Received" 
                       name="Premium Received" 
@@ -562,7 +603,7 @@ function Dashboard() {
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <Box mt={2} textAlign="center" height={400} display="flex" alignItems="center" justifyContent="center">
+                <Box mt={2} textAlign="center" height={600} display="flex" alignItems="center" justifyContent="center">
                   <Typography variant="body1" color="textSecondary">
                     No premium data available for the selected period
                   </Typography>

@@ -619,60 +619,37 @@ def run_spy_power_cashflow(
                 # Map simulator output fields to frontend expected fields
                 daily_results[date_str] = {
                     'Portfolio_Value': float(
-                        row.get(
-                            'Portfolio_Value',
-                            row.get('portfolio_value', row.get('balance', 0)),
-                        )
+                        row.get('Portfolio_Value', 0)
                     ),
                     'Cash_Balance': float(
-                        row.get(
-                            'Cash_Balance',
-                            row.get(
-                                'cash_balance',
-                                row.get('Cash', row.get('cash', 0)),
-                            ),
-                        )
+                        row.get('Cash_Balance', 0)
                     ),
-                    'Close': float(row.get('Close', row.get('close', 0))),
+                    'Close': float(row.get('Close', 0)),
                     'Margin_Ratio': float(
-                        row.get(
-                            'Margin_Ratio',
-                            row.get('margin_ratio', row.get('margin', 0)),
-                        )
+                        row.get('Margin_Ratio', 0)
                     ),
-                    'spy_value': float(spy_values.get(idx, 0)),
-                    'Trades': int(row.get('Trades', row.get('trades', 0))),
-                    'Daily_PnL': float(
-                        row.get('Daily_PnL', row.get('daily_pnl', 0))
-                    ),
+                    'spy_value': float(spy_values.get(idx, 0)),                    
                     'Interest_Paid': float(
-                        row.get('Interest_Paid', row.get('interest_paid', 0))
+                        row.get('Interest_Paid', 0)
                     ),
                     'Premiums_Received': float(
-                        row.get(
-                            'Premiums_Received',
-                            row.get('premiums_received', 0),
-                        )
+                        row.get('Premiums_Received', 0)
                     ),
                     'Commissions_Paid': float(
-                        row.get(
-                            'Commissions_Paid', row.get('commissions_paid', 0)
-                        )
+                        row.get('Commissions_Paid', 0)
                     ),
                     'Open_Positions': int(
-                        row.get('Open_Positions', row.get('open_positions', 0))
+                        row.get('Open_Positions', 0)
                     ),
                     'Closed_Positions': int(
-                        row.get(
-                            'Closed_Positions', row.get('closed_positions', 0)
-                        )
+                        row.get('Closed_Positions', 0)
                     ),
-                    'Open': float(row.get('Open', row.get('open', 0))),
-                    'High': float(row.get('High', row.get('high', 0))),
-                    'Low': float(row.get('Low', row.get('low', 0))),
-                    'VIX': float(row.get('VIX', row.get('vix', 0))),
+                    'Open': float(row.get('Open', 0)),
+                    'High': float(row.get('High', 0)),
+                    'Low': float(row.get('Low', 0)),
+                    'VIX': float(row.get('VIX', 0)),
                     'Trading_Log': str(
-                        row.get('Trading_Log', row.get('trading_log', ''))
+                        row.get('Trading_Log', '')
                     ),
                 }
 
