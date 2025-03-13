@@ -132,7 +132,8 @@ function Dashboard() {
     chartData: [],
     marginData: [],
     premiumData: [],
-    tradingLogs: []
+    tradingLogs: [],
+    firstMonthRawData: {}
   });
   const [config, setConfig] = useState({
     symbol: 'SPY',
@@ -174,6 +175,31 @@ function Dashboard() {
       const parsedData = typeof results === 'string' ? JSON.parse(results) : results;
       
       console.log('Raw API data:', parsedData);
+      
+      // Extract raw data for February 2017 (the first month)
+      const feb2017Data = {};
+      Object.entries(parsedData)
+        .filter(([date, _]) => date.startsWith('2017-02'))
+        .forEach(([date, values]) => {
+          feb2017Data[date] = {
+            Trading_Log: values.Trading_Log || '',
+            Portfolio_Value: values.Portfolio_Value,
+            Cash_Balance: values.Cash_Balance,
+            Margin_Ratio: values.Margin_Ratio,
+            Premiums_Received: values.Premiums_Received || 0,
+            spy_value: values.spy_value
+          };
+        });
+      
+      console.log('February 2017 data:', feb2017Data);
+      
+      // Specifically log Feb 17 and Feb 28 trading logs
+      console.log('2017-02-17 trading log:', feb2017Data['2017-02-17'] ? feb2017Data['2017-02-17'].Trading_Log : 'Not found');
+      console.log('2017-02-28 trading log:', feb2017Data['2017-02-28'] ? feb2017Data['2017-02-28'].Trading_Log : 'Not found');
+      
+      // Extract the first month data with non-empty Trading_Log
+      const firstMonthWithTrading = extractFirstMonthWithTrading(parsedData);
+      console.log('First month data with non-empty logs:', firstMonthWithTrading);
       
       // Step 1: Extract ALL available premium values directly from API
       const rawPremiumData = [];
@@ -267,11 +293,174 @@ function Dashboard() {
       
       // Extract trading logs where actual trading happened
       const tradingLogs = Object.entries(parsedData)
-        .filter(([_, values]) => values.Trading_Log && values.Trading_Log.trim() !== '')
-        .map(([date, values]) => ({
-          date,
-          log: values.Trading_Log
-        }))
+        .filter(([date, values]) => {
+          // First, check if there's any log content
+          if (!values.Trading_Log || values.Trading_Log.trim() === '') {
+            return false;
+          }
+          
+          // Log data from 2017-02-17 and 2017-02-28 should be included
+          // Those are the first and last days of February 2017
+          if (date === '2017-02-17' || date === '2017-02-28') {
+            console.log(`Including special trading log for date ${date}:`, values.Trading_Log);
+            return true;
+          }
+          
+          const log = values.Trading_Log.toLowerCase();
+          
+          // Less restrictive filter that allows different phrase patterns
+          const isActualTradeActivity = (
+            // Options activity keywords - more flexible patterns
+            log.includes('sell') || 
+            log.includes('buy') ||
+            log.includes('write') ||
+            log.includes('close') ||
+            log.includes('call') || 
+            log.includes('put') ||
+            log.includes('option') ||
+            log.includes('contract') ||
+            // Share activity keywords
+            log.includes('share') ||
+            // Premium/credit received indicators
+            log.includes('premium') ||
+            log.includes('credit') ||
+            // Explicit execution indicators
+            log.includes('executed') ||
+            log.includes('transaction') ||
+            // Look for dollar amounts which often indicate trades
+            log.includes('$') ||
+            // Look for dates, which often appear in trade logs with expiration dates
+            log.match(/\d{4}-\d{2}/) ||
+            log.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}/i)
+          );
+          
+          return isActualTradeActivity;
+        })
+        .map(([date, values]) => {
+          const log = values.Trading_Log;
+          
+          // Parse the trading log to determine trade type and extract key information
+          let tradeType = "UNKNOWN";
+          let expiryDate = null;
+          let action = null;
+          let contracts = null;
+          let premium = null;
+          let tradeDetails = null;
+          
+          // Identify trade type and action
+          if (log.toLowerCase().includes('sell') || log.toLowerCase().includes('write')) {
+            if (log.toLowerCase().includes('call') || log.toLowerCase().includes('put')) {
+              action = "SELL/WRITE";
+              tradeType = "OPTION_WRITE";
+            } else if (log.toLowerCase().includes('share')) {
+              action = "SELL";
+              tradeType = "SHARE_SELL";
+            }
+          } else if (log.toLowerCase().includes('buy') || log.toLowerCase().includes('close')) {
+            if (log.toLowerCase().includes('call') || log.toLowerCase().includes('put')) {
+              action = "BUY/CLOSE";
+              tradeType = "OPTION_CLOSE";
+            } else if (log.toLowerCase().includes('share')) {
+              action = "BUY";
+              tradeType = "SHARE_BUY";
+              // Special case for 2018 dip buying
+              if (date.startsWith('2018-02')) {
+                tradeDetails = "Market Dip Purchase";
+              }
+            }
+          }
+          
+          // Extract option type (call/put)
+          let optionType = null;
+          if (log.toLowerCase().includes('call')) {
+            optionType = 'CALL';
+          } else if (log.toLowerCase().includes('put')) {
+            optionType = 'PUT';
+          }
+          
+          // Extract expiry date with more patterns
+          // Look for YYYY-MM patterns (like 2023-01)
+          const yearMonthPattern = /\b(20\d{2})[/-](\d{2})\b/;
+          // Look for month names with year (like Jan 2023)
+          const monthNamePattern = /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(20\d{2})\b/i;
+          
+          let expiryMatch = log.match(yearMonthPattern);
+          if (expiryMatch) {
+            expiryDate = `${expiryMatch[1]}-${expiryMatch[2]}`;
+          } else {
+            expiryMatch = log.match(monthNamePattern);
+            if (expiryMatch) {
+              // Convert month name to number
+              const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+              const monthIndex = monthNames.findIndex(m => expiryMatch[1].toLowerCase().startsWith(m)) + 1;
+              expiryDate = `${expiryMatch[2]}-${monthIndex.toString().padStart(2, '0')}`;
+            }
+          }
+          
+          // Extract number of contracts or shares with improved patterns
+          const quantityPatterns = [
+            /\b(\d+)\s*(?:call|put|contract|option)/i,    // For options
+            /\b(\d+)\s*(?:share)/i,                       // For shares
+            /(?:sell|buy|write|close)\s+(\d+)/i           // Generic sell/buy count
+          ];
+          
+          for (const pattern of quantityPatterns) {
+            const match = log.match(pattern);
+            if (match) {
+              contracts = match[1];
+              break;
+            }
+          }
+          
+          // Extract premium amount with improved patterns
+          const premiumPatterns = [
+            /premium:?\s*\$?(\d+(?:\.\d+)?)/i,
+            /credit:?\s*\$?(\d+(?:\.\d+)?)/i,
+            /\$(\d+(?:\.\d+)?)\s*(?:premium|credit)/i,
+            /(?:receive|collect|for)\s*\$(\d+(?:\.\d+)?)/i
+          ];
+          
+          for (const pattern of premiumPatterns) {
+            const match = log.match(pattern);
+            if (match) {
+              premium = match[1];
+              break;
+            }
+          }
+          
+          // Determine if date is likely first or last business day of month
+          const logDate = new Date(date);
+          const dayOfMonth = logDate.getDate();
+          const lastDayOfMonth = new Date(logDate.getFullYear(), logDate.getMonth() + 1, 0).getDate();
+          
+          let datePosition = "MID_MONTH";
+          let dateDescription = "";
+          
+          if (dayOfMonth <= 3) {
+            datePosition = "FIRST_DAYS";
+            dateDescription = "First trading days of month";
+          } else if (dayOfMonth >= lastDayOfMonth - 2) {
+            datePosition = "LAST_DAYS";
+            dateDescription = "Last trading days of month";
+          } else if (date.startsWith('2018-02')) {
+            // Special case for 2018-02 market dip
+            dateDescription = "Market dip opportunity";
+          }
+          
+          return {
+            date,
+            log,
+            tradeType,
+            optionType,
+            expiryDate,
+            action,
+            contracts,
+            premium,
+            datePosition,
+            dateDescription,
+            tradeDetails
+          };
+        })
         .sort((a, b) => new Date(b.date) - new Date(a.date));
       
       // If we still have no premium data, create test data
@@ -286,7 +475,8 @@ function Dashboard() {
         chartData: processedData,
         marginData: processedData,
         premiumData: filteredPremiumData,
-        tradingLogs
+        tradingLogs,
+        firstMonthRawData: feb2017Data
       });
     } catch (error) {
       console.error('Error processing simulation data:', error);
@@ -323,6 +513,37 @@ function Dashboard() {
     handleRunSimulation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Helper function to extract first month with trading activity
+  const extractFirstMonthWithTrading = (data) => {
+    // Convert data to array of [date, values] pairs and sort by date
+    const sortedEntries = Object.entries(data)
+      .sort((a, b) => new Date(a[0]) - new Date(b[0]));
+    
+    // Find entries with non-empty Trading_Log
+    const entriesWithLogs = sortedEntries.filter(
+      ([_, values]) => values.Trading_Log && values.Trading_Log.trim() !== ''
+    );
+    
+    if (entriesWithLogs.length === 0) {
+      return [];
+    }
+    
+    // Get the first entry with a log
+    const firstEntry = entriesWithLogs[0];
+    const firstDate = new Date(firstEntry[0]);
+    const firstMonth = firstDate.getMonth();
+    const firstYear = firstDate.getFullYear();
+    
+    // Find all entries from the same month as the first entry
+    const firstMonthEntries = sortedEntries.filter(([date, _]) => {
+      const entryDate = new Date(date);
+      return entryDate.getMonth() === firstMonth && 
+             entryDate.getFullYear() === firstYear;
+    });
+    
+    return firstMonthEntries;
+  };
 
   if (loading) {
     return (
@@ -626,13 +847,65 @@ function Dashboard() {
               <Typography variant="h6" gutterBottom>
                 Trading Activity Log
               </Typography>
+              <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+                Options are typically written on the first business day of each month and closed on the last business day.
+                {data.tradingLogs.some(log => log.date.startsWith('2018-02') && log.tradeType === "SHARE_BUY") && 
+                  " Market dip buying occurred in February 2018."}
+              </Typography>
               <LogContainer>
-                {data.tradingLogs.map(({ date, log }) => (
-                  <Box key={date} mb={1}>
-                    <Typography variant="subtitle2" color="primary">
-                      {date}
+                {data.tradingLogs.map(({ date, log, tradeType, optionType, expiryDate, action, contracts, premium, datePosition, dateDescription, tradeDetails }) => (
+                  <Box 
+                    key={date} 
+                    mb={2} 
+                    p={1.5} 
+                    border={1} 
+                    borderRadius={1} 
+                    borderColor={
+                      tradeType === "OPTION_WRITE" ? "success.light" : 
+                      tradeType === "OPTION_CLOSE" ? "error.light" :
+                      tradeType === "SHARE_BUY" ? "info.light" :
+                      tradeType === "SHARE_SELL" ? "warning.light" :
+                      "grey.300"
+                    }
+                    sx={{
+                      background: datePosition === "FIRST_DAYS" ? "rgba(232, 245, 233, 0.2)" :
+                                datePosition === "LAST_DAYS" ? "rgba(255, 235, 238, 0.2)" :
+                                date.startsWith('2018-02') ? "rgba(227, 242, 253, 0.2)" :
+                                "transparent"
+                    }}
+                  >
+                    <Typography variant="subtitle2" color="primary" fontWeight="bold">
+                      Transaction Date: {date} {dateDescription && `(${dateDescription})`}
                     </Typography>
-                    <Typography variant="body2">
+                    
+                    {expiryDate && (
+                      <Typography variant="body2" color="error" sx={{ mt: 0.5 }}>
+                        Option Expiry: {expiryDate} {optionType && `(${optionType})`}
+                      </Typography>
+                    )}
+                    
+                    {action && (
+                      <Typography variant="body2" sx={{ mt: 0.5 }}>
+                        <strong>Action:</strong> {action}
+                        {tradeType === "OPTION_WRITE" && datePosition === "FIRST_DAYS" && " (Monthly option writing)"}
+                        {tradeType === "OPTION_CLOSE" && datePosition === "LAST_DAYS" && " (Monthly option closing)"}
+                        {tradeDetails && ` - ${tradeDetails}`}
+                      </Typography>
+                    )}
+                    
+                    {contracts && (
+                      <Typography variant="body2">
+                        <strong>{tradeType.includes("SHARE") ? "Shares:" : "Contracts:"}</strong> {contracts}
+                      </Typography>
+                    )}
+                    
+                    {premium && (
+                      <Typography variant="body2">
+                        <strong>{tradeType === "OPTION_WRITE" ? "Premium Received:" : "Cost:"}</strong> ${premium}
+                      </Typography>
+                    )}
+                    
+                    <Typography variant="body2" color="textSecondary" sx={{ mt: 1, fontSize: '0.875rem' }}>
                       {log}
                     </Typography>
                   </Box>

@@ -599,16 +599,18 @@ def run_spy_power_cashflow(
             if not isinstance(results_df.index, pd.DatetimeIndex):
                 results_df.index = pd.to_datetime(results_df.index)
 
-            # Calculate SPY buy & hold value using Close prices from results_df   
-            spy_values = results_df['Close'] * results_df['Total_Shares']
+            # Calculate SPY buy & hold value using Close prices from results_df
+            # New approach: Calculate shares purchased on first day, then keep that constant
+            first_day_close = results_df['Close'].iloc[0]
+            initial_cash = strategy_config.INITIAL_CASH
+            spy_shares_bought = initial_cash / first_day_close
+            print(f"SPY Buy & Hold: Initial cash ${initial_cash}, first day close ${first_day_close}, shares bought {spy_shares_bought}")
+            
+            # Calculate daily value based on fixed shares
+            spy_values = results_df['Close'] * spy_shares_bought
             
             # Only include actual trading days - exclude weekends and holidays
             trading_days = results_df.index.tolist()
-            
-            # Print the first and last few dates for debugging
-            print(f"First 5 dates in results_df: {[d.strftime('%Y-%m-%d') for d in trading_days[:5]]}")
-            print(f"Last 5 dates in results_df: {[d.strftime('%Y-%m-%d') for d in trading_days[-5:]]}")
-            print(f"Total number of trading days: {len(trading_days)}")
 
             for idx, row in results_df.iterrows():
                 # Skip dates that aren't in the original DataFrame
@@ -741,11 +743,16 @@ def run_ccspy_strategy(
                 results_df.index = pd.to_datetime(results_df.index)
 
             # Calculate SPY buy & hold value using Close prices from results_df   
-            spy_values = results_df['Close'] * results_df['Total_Shares']
+            # New approach: Calculate shares purchased on first day, then keep that constant
+            first_day_close = results_df['Close'].iloc[0]
+            spy_shares_bought = initial_balance / first_day_close
+            print(f"CCSPY - SPY Buy & Hold: Initial cash ${initial_balance}, first day close ${first_day_close}, shares bought {spy_shares_bought}")
+            
+            # Calculate daily value based on fixed shares
+            spy_values = results_df['Close'] * spy_shares_bought
             
             # Only include actual trading days - exclude weekends and holidays
-        
-
+            trading_days = results_df.index.tolist()
 
             for idx, row in results_df.iterrows():
                 # Skip dates that aren't in the original DataFrame
