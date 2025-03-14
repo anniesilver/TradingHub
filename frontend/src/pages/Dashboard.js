@@ -63,6 +63,34 @@ const LogContainer = styled(Box)(({ theme }) => ({
   borderRadius: theme.shape.borderRadius,
 }));
 
+// Add this near the top of the file, after other styled components
+const CompactTextField = styled(TextField)(({ theme }) => ({
+  '& .MuiInputBase-input': {
+    padding: '8px 10px',
+  },
+  '& .MuiInputLabel-root': {
+    transform: 'translate(10px, 9px) scale(1)',
+    '&.MuiInputLabel-shrink': {
+      transform: 'translate(10px, -6px) scale(0.75)',
+    },
+  },
+}));
+
+const CompactSelect = styled(Select)(({ theme }) => ({
+  '& .MuiSelect-select': {
+    padding: '8px 10px',
+  },
+}));
+
+const CompactFormControl = styled(FormControl)(({ theme }) => ({
+  '& .MuiInputLabel-root': {
+    transform: 'translate(10px, 9px) scale(1)',
+    '&.MuiInputLabel-shrink': {
+      transform: 'translate(10px, -6px) scale(0.75)',
+    },
+  },
+}));
+
 // Tab Panel component
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -133,12 +161,31 @@ function Dashboard() {
     marginData: [],
     premiumData: [],
     tradingLogs: [],
-    firstMonthRawData: {}
+    firstMonthRawData: {},
+    totalAssignedCost: 0,
+    totalPremiumsReceived: 0
   });
   const [config, setConfig] = useState({
     symbol: 'SPY',
     optionType: 'call',
     initialBalance: 200000,
+    callCostBuffer: 0.05,
+    contractSize: 100,
+    coveredCallRatio: 1.0,
+    dipBuyPercent: 0.4,
+    dipTrigger: 0.92,
+    initialPositionPercent: 0.6,
+    marginInterestRate: 0.06,
+    maxMarginRatio: 2,
+    maxPositionSize: 10000,
+    minCommission: 1.0,
+    minStrikeDistance: 0.015,
+    minTradeSize: 1000,
+    monthlyWithdrawal: 5000.0,
+    optionCommission: 0.65,
+    riskFreeRate: 0.05,
+    stockCommission: 0.01,
+    volatilityScalingFactor: 0.15,
     startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
   });
@@ -153,14 +200,23 @@ function Dashboard() {
     const { name, value } = event.target;
     let processedValue = value;
     
-    if (['initialBalance'].includes(name)) {
-      // Ensure initialBalance is always a valid number
+    // Convert numeric fields to appropriate type
+    const numericFields = [
+      'initialBalance', 'callCostBuffer', 'contractSize', 'coveredCallRatio', 
+      'dipBuyPercent', 'dipTrigger', 'initialPositionPercent', 'marginInterestRate', 
+      'maxMarginRatio', 'maxPositionSize', 'minCommission', 'minStrikeDistance', 
+      'minTradeSize', 'monthlyWithdrawal', 'optionCommission', 'riskFreeRate', 
+      'stockCommission', 'volatilityScalingFactor'
+    ];
+    
+    if (numericFields.includes(name)) {
+      // Ensure value is always a valid number
       processedValue = parseFloat(value);
-      if (isNaN(processedValue) || processedValue <= 0) {
-        // Default to 200000 if value is invalid
-        processedValue = 200000;
+      if (isNaN(processedValue)) {
+        // Default to original value if invalid
+        processedValue = config[name];
       }
-      console.log(`Setting initialBalance to: ${processedValue}`);
+      console.log(`Setting ${name} to: ${processedValue}`);
     }
     
     setConfig(prev => ({
@@ -191,16 +247,7 @@ function Dashboard() {
           };
         });
       
-      console.log('February 2017 data:', feb2017Data);
-      
-      // Specifically log Feb 17 and Feb 28 trading logs
-      console.log('2017-02-17 trading log:', feb2017Data['2017-02-17'] ? feb2017Data['2017-02-17'].Trading_Log : 'Not found');
-      console.log('2017-02-28 trading log:', feb2017Data['2017-02-28'] ? feb2017Data['2017-02-28'].Trading_Log : 'Not found');
-      
-      // Extract the first month data with non-empty Trading_Log
-      const firstMonthWithTrading = extractFirstMonthWithTrading(parsedData);
-      console.log('First month data with non-empty logs:', firstMonthWithTrading);
-      
+     
       // Step 1: Extract ALL available premium values directly from API
       const rawPremiumData = [];
       
@@ -272,6 +319,13 @@ function Dashboard() {
       // Sort by date
       filteredPremiumData.sort((a, b) => new Date(a.date) - new Date(b.date));
       
+      // Calculate total premiums received
+      const totalPremiumsReceived = filteredPremiumData.reduce((total, item) => {
+        return total + (item.Premiums_Received || 0);
+      }, 0);
+      
+      console.log(`Total premiums received: $${totalPremiumsReceived.toFixed(2)}`);
+      
       console.log('Final premium data with proper scaling (non-zero only):', filteredPremiumData);
       
       // Convert the data into arrays for the main charts
@@ -294,174 +348,50 @@ function Dashboard() {
       // Extract trading logs where actual trading happened
       const tradingLogs = Object.entries(parsedData)
         .filter(([date, values]) => {
-          // First, check if there's any log content
-          if (!values.Trading_Log || values.Trading_Log.trim() === '') {
-            return false;
-          }
-          
-          // Log data from 2017-02-17 and 2017-02-28 should be included
-          // Those are the first and last days of February 2017
-          if (date === '2017-02-17' || date === '2017-02-28') {
-            console.log(`Including special trading log for date ${date}:`, values.Trading_Log);
-            return true;
-          }
-          
-          const log = values.Trading_Log.toLowerCase();
-          
-          // Less restrictive filter that allows different phrase patterns
-          const isActualTradeActivity = (
-            // Options activity keywords - more flexible patterns
-            log.includes('sell') || 
-            log.includes('buy') ||
-            log.includes('write') ||
-            log.includes('close') ||
-            log.includes('call') || 
-            log.includes('put') ||
-            log.includes('option') ||
-            log.includes('contract') ||
-            // Share activity keywords
-            log.includes('share') ||
-            // Premium/credit received indicators
-            log.includes('premium') ||
-            log.includes('credit') ||
-            // Explicit execution indicators
-            log.includes('executed') ||
-            log.includes('transaction') ||
-            // Look for dollar amounts which often indicate trades
-            log.includes('$') ||
-            // Look for dates, which often appear in trade logs with expiration dates
-            log.match(/\d{4}-\d{2}/) ||
-            log.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}/i)
-          );
-          
-          return isActualTradeActivity;
+          // Only include entries with non-empty trading logs
+          return values.Trading_Log && values.Trading_Log.trim() !== '';
         })
         .map(([date, values]) => {
-          const log = values.Trading_Log;
-          
-          // Parse the trading log to determine trade type and extract key information
-          let tradeType = "UNKNOWN";
-          let expiryDate = null;
-          let action = null;
-          let contracts = null;
-          let premium = null;
-          let tradeDetails = null;
-          
-          // Identify trade type and action
-          if (log.toLowerCase().includes('sell') || log.toLowerCase().includes('write')) {
-            if (log.toLowerCase().includes('call') || log.toLowerCase().includes('put')) {
-              action = "SELL/WRITE";
-              tradeType = "OPTION_WRITE";
-            } else if (log.toLowerCase().includes('share')) {
-              action = "SELL";
-              tradeType = "SHARE_SELL";
-            }
-          } else if (log.toLowerCase().includes('buy') || log.toLowerCase().includes('close')) {
-            if (log.toLowerCase().includes('call') || log.toLowerCase().includes('put')) {
-              action = "BUY/CLOSE";
-              tradeType = "OPTION_CLOSE";
-            } else if (log.toLowerCase().includes('share')) {
-              action = "BUY";
-              tradeType = "SHARE_BUY";
-              // Special case for 2018 dip buying
-              if (date.startsWith('2018-02')) {
-                tradeDetails = "Market Dip Purchase";
-              }
-            }
-          }
-          
-          // Extract option type (call/put)
-          let optionType = null;
-          if (log.toLowerCase().includes('call')) {
-            optionType = 'CALL';
-          } else if (log.toLowerCase().includes('put')) {
-            optionType = 'PUT';
-          }
-          
-          // Extract expiry date with more patterns
-          // Look for YYYY-MM patterns (like 2023-01)
-          const yearMonthPattern = /\b(20\d{2})[/-](\d{2})\b/;
-          // Look for month names with year (like Jan 2023)
-          const monthNamePattern = /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(20\d{2})\b/i;
-          
-          let expiryMatch = log.match(yearMonthPattern);
-          if (expiryMatch) {
-            expiryDate = `${expiryMatch[1]}-${expiryMatch[2]}`;
-          } else {
-            expiryMatch = log.match(monthNamePattern);
-            if (expiryMatch) {
-              // Convert month name to number
-              const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-              const monthIndex = monthNames.findIndex(m => expiryMatch[1].toLowerCase().startsWith(m)) + 1;
-              expiryDate = `${expiryMatch[2]}-${monthIndex.toString().padStart(2, '0')}`;
-            }
-          }
-          
-          // Extract number of contracts or shares with improved patterns
-          const quantityPatterns = [
-            /\b(\d+)\s*(?:call|put|contract|option)/i,    // For options
-            /\b(\d+)\s*(?:share)/i,                       // For shares
-            /(?:sell|buy|write|close)\s+(\d+)/i           // Generic sell/buy count
-          ];
-          
-          for (const pattern of quantityPatterns) {
-            const match = log.match(pattern);
-            if (match) {
-              contracts = match[1];
-              break;
-            }
-          }
-          
-          // Extract premium amount with improved patterns
-          const premiumPatterns = [
-            /premium:?\s*\$?(\d+(?:\.\d+)?)/i,
-            /credit:?\s*\$?(\d+(?:\.\d+)?)/i,
-            /\$(\d+(?:\.\d+)?)\s*(?:premium|credit)/i,
-            /(?:receive|collect|for)\s*\$(\d+(?:\.\d+)?)/i
-          ];
-          
-          for (const pattern of premiumPatterns) {
-            const match = log.match(pattern);
-            if (match) {
-              premium = match[1];
-              break;
-            }
-          }
-          
-          // Determine if date is likely first or last business day of month
-          const logDate = new Date(date);
-          const dayOfMonth = logDate.getDate();
-          const lastDayOfMonth = new Date(logDate.getFullYear(), logDate.getMonth() + 1, 0).getDate();
-          
-          let datePosition = "MID_MONTH";
-          let dateDescription = "";
-          
-          if (dayOfMonth <= 3) {
-            datePosition = "FIRST_DAYS";
-            dateDescription = "First trading days of month";
-          } else if (dayOfMonth >= lastDayOfMonth - 2) {
-            datePosition = "LAST_DAYS";
-            dateDescription = "Last trading days of month";
-          } else if (date.startsWith('2018-02')) {
-            // Special case for 2018-02 market dip
-            dateDescription = "Market dip opportunity";
-          }
-          
           return {
             date,
-            log,
-            tradeType,
-            optionType,
-            expiryDate,
-            action,
-            contracts,
-            premium,
-            datePosition,
-            dateDescription,
-            tradeDetails
+            log: values.Trading_Log
           };
         })
         .sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      // Analyze trading logs for "assigned" entries and calculate total cost
+      let totalAssignedCost = 0;
+      const assignedEntries = tradingLogs.filter(entry => {
+        const logLower = entry.log.toLowerCase();
+        return logLower.includes('assigned');
+      });
+      
+      assignedEntries.forEach(entry => {
+        const logLower = entry.log.toLowerCase();
+        if (logLower.includes('cost')) {
+          // Try to extract cost value using various patterns
+          const costPatterns = [
+            /cost:?\s*\$?(\d+(?:\.\d+)?)/i,
+            /cost\s+of\s+\$?(\d+(?:\.\d+)?)/i,
+            /at\s+a\s+cost\s+of\s+\$?(\d+(?:\.\d+)?)/i,
+            /\$(\d+(?:\.\d+)?)\s+cost/i
+          ];
+          
+          for (const pattern of costPatterns) {
+            const match = entry.log.match(pattern);
+            if (match && match[1]) {
+              const cost = parseFloat(match[1]);
+              if (!isNaN(cost)) {
+                totalAssignedCost += cost;
+                console.log(`Found assigned cost: $${cost} on ${entry.date}`);
+                break;
+              }
+            }
+          }
+        }
+      });
+      
+      console.log(`Total cost of assigned options: $${totalAssignedCost.toFixed(2)}`);
       
       // If we still have no premium data, create test data
       if (filteredPremiumData.length === 0) {
@@ -476,7 +406,9 @@ function Dashboard() {
         marginData: processedData,
         premiumData: filteredPremiumData,
         tradingLogs,
-        firstMonthRawData: feb2017Data
+        firstMonthRawData: feb2017Data,
+        totalAssignedCost,
+        totalPremiumsReceived
       });
     } catch (error) {
       console.error('Error processing simulation data:', error);
@@ -573,11 +505,12 @@ function Dashboard() {
       </Box>
 
       {/* Configuration Form */}
-      <Box component="form" mb={4}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField
+      <Box component="form" mb={3}>
+        <Grid container spacing={1}>
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
               fullWidth
+              size="small"
               label="Symbol"
               name="symbol"
               value={config.symbol}
@@ -585,10 +518,10 @@ function Dashboard() {
               disabled
             />
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <FormControl fullWidth>
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactFormControl fullWidth size="small">
               <InputLabel>Option Type</InputLabel>
-              <Select
+              <CompactSelect
                 name="optionType"
                 value={config.optionType}
                 onChange={handleConfigChange}
@@ -596,12 +529,13 @@ function Dashboard() {
               >
                 <MenuItem value="call">Call</MenuItem>
                 <MenuItem value="put">Put</MenuItem>
-              </Select>
-            </FormControl>
+              </CompactSelect>
+            </CompactFormControl>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
               fullWidth
+              size="small"
               type="number"
               label="Initial Balance"
               name="initialBalance"
@@ -609,9 +543,10 @@ function Dashboard() {
               onChange={handleConfigChange}
             />
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
               fullWidth
+              size="small"
               type="date"
               label="Start Date"
               name="startDate"
@@ -620,9 +555,10 @@ function Dashboard() {
               InputLabelProps={{ shrink: true }}
             />
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
               fullWidth
+              size="small"
               type="date"
               label="End Date"
               name="endDate"
@@ -631,11 +567,241 @@ function Dashboard() {
               InputLabelProps={{ shrink: true }}
             />
           </Grid>
+          
+          {/* Additional Strategy Parameters */}
+          <Grid item xs={12}>
+            <Typography variant="h6" gutterBottom mt={1} mb={1}>
+              Advanced Strategy Parameters
+            </Typography>
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Call Cost Buffer"
+              name="callCostBuffer"
+              value={config.callCostBuffer}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0, step: 0.01 } }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Contract Size"
+              name="contractSize"
+              value={config.contractSize}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 1, step: 1 } }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Covered Call Ratio"
+              name="coveredCallRatio"
+              value={config.coveredCallRatio}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0, step: 0.1 } }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Dip Buy Percent"
+              name="dipBuyPercent"
+              value={config.dipBuyPercent}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0, max: 1, step: 0.01 } }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Dip Trigger"
+              name="dipTrigger"
+              value={config.dipTrigger}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0, max: 1, step: 0.01 } }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Initial Position %"
+              name="initialPositionPercent"
+              value={config.initialPositionPercent}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0, max: 1, step: 0.01 } }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Margin Interest Rate"
+              name="marginInterestRate"
+              value={config.marginInterestRate}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0, step: 0.01 } }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Max Margin Ratio"
+              name="maxMarginRatio"
+              value={config.maxMarginRatio}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 1, step: 0.1 } }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Max Position Size"
+              name="maxPositionSize"
+              value={config.maxPositionSize}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0, step: 100 } }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Min Commission"
+              name="minCommission"
+              value={config.minCommission}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0, step: 0.01 } }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Min Strike Distance"
+              name="minStrikeDistance"
+              value={config.minStrikeDistance}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0, step: 0.001 } }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Min Trade Size"
+              name="minTradeSize"
+              value={config.minTradeSize}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0, step: 100 } }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Monthly Withdrawal"
+              name="monthlyWithdrawal"
+              value={config.monthlyWithdrawal}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0, step: 100 } }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Option Commission"
+              name="optionCommission"
+              value={config.optionCommission}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0, step: 0.01 } }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Risk Free Rate"
+              name="riskFreeRate"
+              value={config.riskFreeRate}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0, step: 0.01 } }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Stock Commission"
+              name="stockCommission"
+              value={config.stockCommission}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0, step: 0.01 } }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Vol. Scaling Factor"
+              name="volatilityScalingFactor"
+              value={config.volatilityScalingFactor}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0, step: 0.01 } }}
+            />
+          </Grid>
+          
           <Grid item xs={12}>
             <Button
               variant="contained"
               color="primary"
               onClick={handleRunSimulation}
+              sx={{ mt: 1 }}
             >
               RUN SIMULATION
             </Button>
@@ -792,6 +958,13 @@ function Dashboard() {
               <Typography variant="h6" gutterBottom>
                 Premium Received
               </Typography>
+              {data.totalPremiumsReceived > 0 && (
+                <Alert severity="success" sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2">
+                    Total premiums received during test period: ${data.totalPremiumsReceived.toFixed(2)}
+                  </Typography>
+                </Alert>
+              )}
               {data.premiumData && data.premiumData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={600}>
                   <BarChart
@@ -847,67 +1020,44 @@ function Dashboard() {
               <Typography variant="h6" gutterBottom>
                 Trading Activity Log
               </Typography>
-              <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-                Options are typically written on the first business day of each month and closed on the last business day.
-                {data.tradingLogs.some(log => log.date.startsWith('2018-02') && log.tradeType === "SHARE_BUY") && 
-                  " Market dip buying occurred in February 2018."}
-              </Typography>
+              {data.totalAssignedCost > 0 && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2">
+                    Total cost of assigned options during test period: ${data.totalAssignedCost.toFixed(2)}
+                  </Typography>
+                </Alert>
+              )}
+              {data.totalPremiumsReceived > 0 && (
+                <Alert severity="success" sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2">
+                    Total premiums received during test period: ${data.totalPremiumsReceived.toFixed(2)}
+                  </Typography>
+                </Alert>
+              )}
               <LogContainer>
-                {data.tradingLogs.map(({ date, log, tradeType, optionType, expiryDate, action, contracts, premium, datePosition, dateDescription, tradeDetails }) => (
+                {data.tradingLogs.map(({ date, log }) => (
                   <Box 
                     key={date} 
                     mb={2} 
                     p={1.5} 
                     border={1} 
                     borderRadius={1} 
-                    borderColor={
-                      tradeType === "OPTION_WRITE" ? "success.light" : 
-                      tradeType === "OPTION_CLOSE" ? "error.light" :
-                      tradeType === "SHARE_BUY" ? "info.light" :
-                      tradeType === "SHARE_SELL" ? "warning.light" :
-                      "grey.300"
-                    }
+                    borderColor={log.toLowerCase().includes('assigned') ? "warning.main" : "grey.300"}
                     sx={{
-                      background: datePosition === "FIRST_DAYS" ? "rgba(232, 245, 233, 0.2)" :
-                                datePosition === "LAST_DAYS" ? "rgba(255, 235, 238, 0.2)" :
-                                date.startsWith('2018-02') ? "rgba(227, 242, 253, 0.2)" :
-                                "transparent"
+                      backgroundColor: log.toLowerCase().includes('assigned') ? "rgba(255, 244, 229, 0.2)" : "transparent"
                     }}
                   >
                     <Typography variant="subtitle2" color="primary" fontWeight="bold">
-                      Transaction Date: {date} {dateDescription && `(${dateDescription})`}
+                      Transaction Date: {date}
                     </Typography>
-                    
-                    {expiryDate && (
-                      <Typography variant="body2" color="error" sx={{ mt: 0.5 }}>
-                        Option Expiry: {expiryDate} {optionType && `(${optionType})`}
-                      </Typography>
-                    )}
-                    
-                    {action && (
-                      <Typography variant="body2" sx={{ mt: 0.5 }}>
-                        <strong>Action:</strong> {action}
-                        {tradeType === "OPTION_WRITE" && datePosition === "FIRST_DAYS" && " (Monthly option writing)"}
-                        {tradeType === "OPTION_CLOSE" && datePosition === "LAST_DAYS" && " (Monthly option closing)"}
-                        {tradeDetails && ` - ${tradeDetails}`}
-                      </Typography>
-                    )}
-                    
-                    {contracts && (
-                      <Typography variant="body2">
-                        <strong>{tradeType.includes("SHARE") ? "Shares:" : "Contracts:"}</strong> {contracts}
-                      </Typography>
-                    )}
-                    
-                    {premium && (
-                      <Typography variant="body2">
-                        <strong>{tradeType === "OPTION_WRITE" ? "Premium Received:" : "Cost:"}</strong> ${premium}
-                      </Typography>
-                    )}
-                    
                     <Typography variant="body2" color="textSecondary" sx={{ mt: 1, fontSize: '0.875rem' }}>
                       {log}
                     </Typography>
+                    {log.toLowerCase().includes('assigned') && log.toLowerCase().includes('cost') && (
+                      <Typography variant="body2" color="error" sx={{ mt: 0.5, fontWeight: 'bold' }}>
+                        ⚠️ Assigned Options Event
+                      </Typography>
+                    )}
                   </Box>
                 ))}
                 {data.tradingLogs.length === 0 && (

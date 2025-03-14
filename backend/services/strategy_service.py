@@ -531,7 +531,8 @@ def run_spy_power_cashflow(
             balance_sources = [
                 ('parameter', initial_balance),
                 ('config', 'initial_balance'),
-                ('config', 'initialBalance')
+                ('config', 'initialBalance'),
+                ('config', 'INITIAL_CASH')
             ]
             
             # Check each possible source
@@ -547,19 +548,32 @@ def run_spy_power_cashflow(
                     print(f"Using {source} from config: {config[source]}")
                     balance_set = True
                     break
-            
-
                 
         except (ValueError, TypeError) as e:
             print(f"Error parsing initial balance: {e}, using default")
 
-
-        # Apply any other config parameters from the frontend
+        # Apply all config parameters from frontend to strategy_config
+        # Print frontend config for debugging
         print("\n=== Config from frontend ===")
         for key, value in config.items():
             print(key, value)
+            # Set attribute directly if it matches a strategy_config attribute 
+            # and is not already handled
+            if key != 'SYMBOL' and key != 'INITIAL_CASH' and hasattr(strategy_config, key):
+                try:
+                    if isinstance(value, (int, float)):
+                        setattr(strategy_config, key, float(value))
+                        print(f"Set {key} = {value} from frontend config")
+                    elif isinstance(value, str) and value.replace('.', '', 1).isdigit():
+                        setattr(strategy_config, key, float(value))
+                        print(f"Set {key} = {value} from frontend config (converted to float)")
+                    else:
+                        setattr(strategy_config, key, value)
+                        print(f"Set {key} = {value} from frontend config (non-numeric)")
+                except (ValueError, TypeError) as e:
+                    print(f"Error setting {key} from value {value}: {e}, using default")
 
-        print("\n=== Initial Config from module ===")
+        print("\n=== Final Config for simulation ===")
         for attr in dir(strategy_config):
             if not attr.startswith('__'):  # Skip private attributes
                 print(f"{attr}: {getattr(strategy_config, attr)}")
@@ -587,9 +601,7 @@ def run_spy_power_cashflow(
 
         print("\n=== Running Simulation ===")
         results_df = simulator.run()
-        print(results_df.head(30))
-        print(results_df.tail(30))
-        print(results_df.info())
+        
         # Process results
         daily_results = {}
         if results_df is not None and not results_df.empty:
@@ -712,19 +724,49 @@ def run_ccspy_strategy(
         # Set strategy type from the request data
         strategy_config.STRATEGY_TYPE = 'CCSPY'
 
-        # Apply any other config parameters from the frontend
+        # Set initial balance
+        if initial_balance is not None:
+            try:
+                strategy_config.INITIAL_CASH = float(initial_balance)
+                print(f"Using initial balance from parameter: {initial_balance}")
+            except (ValueError, TypeError) as e:
+                print(f"Error parsing initial balance: {e}, using default")
+        elif 'INITIAL_CASH' in config:
+            try:
+                strategy_config.INITIAL_CASH = float(config['INITIAL_CASH'])
+                print(f"Using INITIAL_CASH from config: {config['INITIAL_CASH']}")
+            except (ValueError, TypeError) as e:
+                print(f"Error parsing INITIAL_CASH: {e}, using default")
+        
+        # Apply all config parameters from frontend to strategy_config
+        # Print frontend config for debugging
+        print("\n=== Config from frontend ===")
         for key, value in config.items():
-            if key != 'SYMBOL':  # Already handled above
-                setattr(strategy_config, key, value)
+            print(key, value)
+            # Set attribute directly if it matches a strategy_config attribute 
+            # and is not already handled
+            if key != 'SYMBOL' and key != 'INITIAL_CASH' and hasattr(strategy_config, key):
+                try:
+                    if isinstance(value, (int, float)):
+                        setattr(strategy_config, key, float(value))
+                        print(f"Set {key} = {value} from frontend config")
+                    elif isinstance(value, str) and value.replace('.', '', 1).isdigit():
+                        setattr(strategy_config, key, float(value))
+                        print(f"Set {key} = {value} from frontend config (converted to float)")
+                    else:
+                        setattr(strategy_config, key, value)
+                        print(f"Set {key} = {value} from frontend config (non-numeric)")
+                except (ValueError, TypeError) as e:
+                    print(f"Error setting {key} from value {value}: {e}, using default")
 
-        print("\n=== Initial Config from module ===")
+        print("\n=== Final Config for simulation ===")
         for attr in dir(strategy_config):
             if not attr.startswith('__'):  # Skip private attributes
                 print(f"{attr}: {getattr(strategy_config, attr)}")
 
         # Initialize components
         market_data = MarketData(symbol=strategy_config.SYMBOL)
-        position = PositionTracker(initial_balance, strategy_config)
+        position = PositionTracker(strategy_config.INITIAL_CASH, strategy_config)
         strategy = OptionStrategy(strategy_config)
 
         # Create and run simulator

@@ -56,18 +56,26 @@ export const getSimulations = async (limit = 10, offset = 0) => {
  * @param {Object} config - Simulation configuration
  * @param {string} config.strategyId - Strategy type (default: 'SPY_POWER_CASHFLOW')
  * @param {string} config.symbol - Trading symbol (default: 'SPY')
- * @param {string} config.buyTime - Time to buy (default: '9:35')
- * @param {string} config.sellTime - Time to sell (default: '15:45')
- * @param {number} config.stopLoss - Stop loss percentage (default: 0.50)
- * @param {number} config.takeProfit - Take profit percentage (default: 1.00)
- * @param {string} config.optionType - Option type (default: 'call')
- * @param {number} config.dteMin - Minimum days to expiration (default: 1)
- * @param {number} config.dteMax - Maximum days to expiration (default: 5)
- * @param {number} config.deltaMin - Minimum delta (default: 0.40)
- * @param {number} config.deltaMax - Maximum delta (default: 0.60)
  * @param {string} config.startDate - Start date for simulation
  * @param {string} config.endDate - End date for simulation
  * @param {number} config.initialBalance - Initial balance (default: 10000.0)
+ * @param {number} config.callCostBuffer - Buffer for call cost (default: 0.05)
+ * @param {number} config.contractSize - Option contract size (default: 100)
+ * @param {number} config.coveredCallRatio - Covered call ratio (default: 1.0)
+ * @param {number} config.dipBuyPercent - Dip buy percentage (default: 0.4)
+ * @param {number} config.dipTrigger - Dip trigger threshold (default: 0.92)
+ * @param {number} config.initialPositionPercent - Initial position percentage (default: 0.6)
+ * @param {number} config.marginInterestRate - Margin interest rate (default: 0.06)
+ * @param {number} config.maxMarginRatio - Maximum margin ratio (default: 2)
+ * @param {number} config.maxPositionSize - Maximum position size (default: 10000)
+ * @param {number} config.minCommission - Minimum commission (default: 1.0)
+ * @param {number} config.minStrikeDistance - Minimum strike distance (default: 0.015)
+ * @param {number} config.minTradeSize - Minimum trade size (default: 1000)
+ * @param {number} config.monthlyWithdrawal - Monthly withdrawal amount (default: 5000.0)
+ * @param {number} config.optionCommission - Option commission (default: 0.65)
+ * @param {number} config.riskFreeRate - Risk-free rate (default: 0.05)
+ * @param {number} config.stockCommission - Stock commission (default: 0.01)
+ * @param {number} config.volatilityScalingFactor - Volatility scaling factor (default: 0.15)
  * @returns {Promise<Object>} Simulation results
  */
 export const runSimulation = async (config) => {
@@ -80,7 +88,25 @@ export const runSimulation = async (config) => {
       strategy_type: config.strategyId || 'SPY_POWER_CASHFLOW',
       config: {
         SYMBOL: config.symbol || 'SPY',       
-        OPTION_TYPE: config.optionType || 'call',        
+        OPTION_TYPE: config.optionType || 'call',
+        // Add all the new config parameters
+        CALL_COST_BUFFER: config.callCostBuffer !== undefined ? config.callCostBuffer : 0.05,
+        CONTRACT_SIZE: config.contractSize !== undefined ? config.contractSize : 100,
+        COVERED_CALL_RATIO: config.coveredCallRatio !== undefined ? config.coveredCallRatio : 1.0,
+        DIP_BUY_PERCENT: config.dipBuyPercent !== undefined ? config.dipBuyPercent : 0.4,
+        DIP_TRIGGER: config.dipTrigger !== undefined ? config.dipTrigger : 0.92,
+        INITIAL_POSITION_PERCENT: config.initialPositionPercent !== undefined ? config.initialPositionPercent : 0.6,
+        MARGIN_INTEREST_RATE: config.marginInterestRate !== undefined ? config.marginInterestRate : 0.06,
+        MAX_MARGIN_RATIO: config.maxMarginRatio !== undefined ? config.maxMarginRatio : 2,
+        MAX_POSITION_SIZE: config.maxPositionSize !== undefined ? config.maxPositionSize : 10000,
+        MIN_COMMISSION: config.minCommission !== undefined ? config.minCommission : 1.0,
+        MIN_STRIKE_DISTANCE: config.minStrikeDistance !== undefined ? config.minStrikeDistance : 0.015,
+        MIN_TRADE_SIZE: config.minTradeSize !== undefined ? config.minTradeSize : 1000,
+        MONTHLY_WITHDRAWAL: config.monthlyWithdrawal !== undefined ? config.monthlyWithdrawal : 5000.0,
+        OPTION_COMMISSION: config.optionCommission !== undefined ? config.optionCommission : 0.65,
+        RISK_FREE_RATE: config.riskFreeRate !== undefined ? config.riskFreeRate : 0.05,
+        STOCK_COMMISSION: config.stockCommission !== undefined ? config.stockCommission : 0.01,
+        VOLATILITY_SCALING_FACTOR: config.volatilityScalingFactor !== undefined ? config.volatilityScalingFactor : 0.15,
       },
       start_date: config.startDate,
       end_date: config.endDate
@@ -92,14 +118,18 @@ export const runSimulation = async (config) => {
       const balanceValue = parseFloat(config.initialBalance);
       if (!isNaN(balanceValue) && balanceValue > 0) {
         payload.initial_balance = balanceValue;
+        // Also add to config for the backend strategy
+        payload.config.INITIAL_CASH = balanceValue;
         console.log(`Setting initial_balance: ${balanceValue}`);
       } else {
-        payload.initial_balance = 500000.0;
-        console.log(`Invalid initialBalance, using default: 500000.0`);
+        payload.initial_balance = 200000.0;
+        payload.config.INITIAL_CASH = 200000.0;
+        console.log(`Invalid initialBalance, using default: 200000.0`);
       }
     } else {
-      payload.initial_balance = 500000.0;
-      console.log(`No initialBalance provided, using default: 500000.0`);
+      payload.initial_balance = 200000.0;
+      payload.config.INITIAL_CASH = 200000.0;
+      console.log(`No initialBalance provided, using default: 200000.0`);
     }
 
     console.log('Sending simulation request:', payload);
