@@ -108,10 +108,13 @@ export const runSimulation = async (config) => {
         STOCK_COMMISSION: config.stockCommission !== undefined ? config.stockCommission : 0.01,
         VOLATILITY_SCALING_FACTOR: config.volatilityScalingFactor !== undefined ? config.volatilityScalingFactor : 0.15,
       },
-      start_date: config.startDate,
-      end_date: config.endDate
+      // Ensure we're passing the correct date formats to the backend
+      start_date: config.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      end_date: config.endDate || new Date().toISOString().split('T')[0]
     };
     
+    console.log(`Using date range: ${payload.start_date} to ${payload.end_date}`);
+
     // Add initial balance with consistent naming
     if (config.initialBalance !== undefined && config.initialBalance !== null) {
       // Parse to ensure it's a proper number

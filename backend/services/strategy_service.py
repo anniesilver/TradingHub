@@ -600,7 +600,12 @@ def run_spy_power_cashflow(
         print("TradingSimulator created with all components")
 
         print("\n=== Running Simulation ===")
-        results_df = simulator.run()
+        # Convert datetime objects to string dates in YYYY-MM-DD format for the simulator
+        start_date = start_dt.strftime('%Y-%m-%d')
+        end_date = end_dt.strftime('%Y-%m-%d')
+        print(f"Running simulation from {start_date} to {end_date}")
+        
+        results_df = simulator.run(start_date=start_date, end_date=end_date)
         
         # Process results
         daily_results = {}
