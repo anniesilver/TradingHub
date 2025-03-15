@@ -44,7 +44,6 @@ def create_app():
 
     with app.app_context():
         # Import models (must be after db definition)
-        from models import user
         from routes.account import account_bp
 
         # Import and register blueprints
@@ -56,7 +55,7 @@ def create_app():
         app.register_blueprint(strategy_bp, url_prefix="/api/strategy")
 
         # Import strategy service
-        from services.strategy_service import init_database, run_strategy_simulation
+        from services.strategy_service import run_strategy_simulation
 
         # Create all tables
         db.create_all()

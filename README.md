@@ -40,7 +40,6 @@ TradingHub is a web-based platform for running trading strategy simulations, vis
    ```bash
    make venv
    ```
-   
    Alternatively, you can set up the virtual environment manually:
    ```bash
    python -m venv .venv
@@ -81,11 +80,11 @@ TradingHub is a web-based platform for running trading strategy simulations, vis
    ```bash
    # On Windows:
    .\.venv\Scripts\python backend\simple_app.py
-   
+
    # On Linux/Mac:
    ./.venv/bin/python backend/simple_app.py
    ```
-   
+
    The backend server will run on http://127.0.0.1:8080
 
 ### Starting the Frontend Server
@@ -95,7 +94,7 @@ TradingHub is a web-based platform for running trading strategy simulations, vis
    cd frontend
    npm start
    ```
-   
+
    The frontend will be available at http://localhost:3000 or http://localhost:3001
 
 ### Accessing the Application
@@ -117,4 +116,4 @@ TradingHub is a web-based platform for running trading strategy simulations, vis
 
 - **Port Conflicts:** If port 8080 or 3000 is already in use, check running processes and terminate any conflicting services.
 
-## Project Structure 
+## Project Structure

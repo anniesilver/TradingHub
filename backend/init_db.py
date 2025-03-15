@@ -1,4 +1,3 @@
-import os
 import sys
 
 from services.strategy_service import init_database

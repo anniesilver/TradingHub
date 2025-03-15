@@ -1,9 +1,6 @@
-# pylint: disable=import-error
 import importlib.util
-import json
 import os
 import sys
-from datetime import datetime, timedelta
 
 import pandas as pd
 import psycopg2
@@ -278,7 +275,7 @@ def get_db_connection():
         return None
 
     try:
-        print(f"Connecting to database with parameters:")
+        print("Connecting to database with parameters:")
         print(f"  dbname: {DB_CONFIG.get('dbname')}")
         print(f"  user: {DB_CONFIG.get('user')}")
         # Only print host and port if they exist in the config
@@ -367,7 +364,7 @@ def save_simulation_results(strategy_type, config, start_date, end_date, initial
             # Insert strategy simulation record
             cursor.execute(
                 """
-                INSERT INTO strategy_simulations 
+                INSERT INTO strategy_simulations
                 (strategy_type, config, start_date, end_date, initial_balance)
                 VALUES (%s, %s, %s, %s, %s)
                 RETURNING id
@@ -510,17 +507,17 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
             ]
 
             # Check each possible source
-            balance_set = False
+            # balance_set = False
             for source_type, source in balance_sources:
                 if source_type == "parameter" and source is not None:
                     strategy_config.INITIAL_CASH = float(source)
                     print(f"Using initial balance from parameter: {source}")
-                    balance_set = True
+                    # balance_set = True
                     break
                 elif source_type == "config" and source in config:
                     strategy_config.INITIAL_CASH = float(config[source])
                     print(f"Using {source} from config: {config[source]}")
-                    balance_set = True
+                    # balance_set = True
                     break
 
         except (ValueError, TypeError) as e:
@@ -737,14 +734,14 @@ def run_ccspy_strategy(TradingSimulator, OptionStrategy, config, start_dt, end_d
             # Calculate SPY buy & hold value using Close prices from results_df
             # New approach: Calculate shares purchased on first day, then keep that constant
             first_day_close = results_df["Close"].iloc[0]
-            spy_shares_bought = initial_balance / first_day_close
+            # spy_shares_bought = initial_balance / first_day_close
             print(
                 f"CCSPY - SPY Buy & Hold: Initial cash ${initial_balance}, first day close ${first_day_close}, "
                 "shares bought {spy_shares_bought}"
             )
 
             # Calculate daily value based on fixed shares
-            spy_values = results_df["Close"] * spy_shares_bought
+            # spy_values = results_df["Close"] * spy_shares_bought
 
             # Only include actual trading days - exclude weekends and holidays
             trading_days = results_df.index.tolist()
@@ -943,7 +940,7 @@ def test_imports():
     """Test function to verify imports work correctly"""
     try:
         print("Importing MarketData...")
-        from market_data import MarketData
+        from market_data import MarketData  # noqa:F401
 
         print("Successfully imported MarketData")
         return True

@@ -29,7 +29,7 @@ lint:  ## Run static code analysis
 		--exclude $(VENV_DIR) \
 		--max-line-length 120
 	@echo "==> Running pylint ..."
-	@$(VENV_DIR)/bin/pylint . \
+	@PYTHONPATH=$${PYTHONPATH}:backend $(VENV_DIR)/bin/pylint . \
 		--ignore-paths $$(basename $(VENV_DIR)) \
 		--max-line-length 120
 	@echo "==> Running mypy ..."
