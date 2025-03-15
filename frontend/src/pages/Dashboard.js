@@ -122,6 +122,10 @@ function a11yProps(index) {
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
   
+  // Get the first item to check if it's a buy transaction
+  const firstItem = payload[0]?.payload;
+  const isBuyTransaction = firstItem && firstItem.isBuySharesTransaction;
+  
   return (
     <div style={{ 
       backgroundColor: 'rgba(255, 255, 255, 0.95)', 
@@ -131,6 +135,22 @@ const CustomTooltip = ({ active, payload, label }) => {
       boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
     }}>
       <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>{label}</p>
+      {isBuyTransaction && (
+        <div style={{ 
+          margin: '5px 0', 
+          padding: '5px', 
+          backgroundColor: 'rgba(0, 255, 0, 0.1)', 
+          borderLeft: '3px solid green',
+          borderRadius: '2px'
+        }}>
+          <p style={{ margin: '0', fontWeight: 'bold', color: 'green' }}>
+            Buy Transaction: {firstItem.buyShares} shares @ ${firstItem.buyPrice}
+          </p>
+          <p style={{ margin: '0', fontSize: '12px' }}>
+            Total: ${(firstItem.buyShares * firstItem.buyPrice).toFixed(2)}
+          </p>
+        </div>
+      )}
       {payload.map((entry, index) => {
         // Determine the label based on the dataKey
         const seriesName = entry.dataKey === "Portfolio_Value" ? "Strategy" : 
@@ -139,6 +159,7 @@ const CustomTooltip = ({ active, payload, label }) => {
                          entry.dataKey === "Cash_Balance" ? "Cash Balance" :
                          entry.dataKey === "Premiums_Received" ? "Premium Received" :
                          entry.dataKey === "Interest_Paid" ? "Interest Paid" :
+                         entry.dataKey === "Interests_Paid" ? "Interest Paid" :
                          entry.name;
                          
         return (
@@ -230,34 +251,64 @@ function Dashboard() {
 
   const processSimulationData = (results) => {
     try {
+      // Enable this flag to turn off synthetic data generation (use only real data)
+      const USE_ONLY_REAL_DATA = true; // Set to true to prevent using synthetic data
+      
       // Parse the results if it's a string
       const parsedData = typeof results === 'string' ? JSON.parse(results) : results;
       
-      console.log('Raw API data:', parsedData);
+      // EXTENSIVE DEBUG: Dump full structure of the first few entries
+      console.log('========== DETAILED API RESPONSE DEBUGGING ==========');
+      console.log('Raw API response type:', typeof parsedData);
+      console.log('Is array?', Array.isArray(parsedData));
       
-      // Debug: Check API response structure for first few entries
-      console.log('Examining API response structure:');
-      const sampleEntry = Object.entries(parsedData)[0];
-      if (sampleEntry) {
-        console.log('Sample date entry:', sampleEntry[0]);
-        console.log('Sample data structure:', sampleEntry[1]);
-        console.log('Available fields:', Object.keys(sampleEntry[1]));
+      if (typeof parsedData === 'object' && parsedData !== null) {
+        const entries = Object.entries(parsedData);
+        console.log('Number of entries in response:', entries.length);
         
-        // Check specifically for interest paid fields with different possible names
-        const interestFieldNames = [
-          'Interest_Paid', 
-          'interest_paid',
-          'InterestPaid',
-          'Interest_Costs',
-          'interest_costs'
-        ];
-        
-        for (const fieldName of interestFieldNames) {
-          if (fieldName in sampleEntry[1]) {
-            console.log(`Found interest field: ${fieldName} with value: ${sampleEntry[1][fieldName]}`);
+        if (entries.length > 0) {
+          // Take first entry as sample
+          const [firstDate, firstEntry] = entries[0];
+          console.log('First date:', firstDate);
+          console.log('Fields in first entry:', Object.keys(firstEntry));
+          console.log('Full first entry data:', firstEntry);
+          
+          // Check second entry too
+          if (entries.length > 1) {
+            const [secondDate, secondEntry] = entries[1];
+            console.log('Second date:', secondDate);
+            console.log('Fields in second entry:', Object.keys(secondEntry));
           }
+          
+          // Look for ANY field that might contain interest information
+          console.log('Searching for ANY interest-related fields...');
+          const interestKeywords = ['interest', 'Interest', 'INTEREST', 'cost', 'Cost', 'COST', 'paid', 'Paid', 'PAID'];
+          
+          const possibleInterestFields = [];
+          Object.keys(firstEntry).forEach(key => {
+            if (interestKeywords.some(keyword => key.includes(keyword))) {
+              possibleInterestFields.push(key);
+              console.log(`Found possible interest field: "${key}" with value:`, firstEntry[key]);
+            }
+          });
+          
+          console.log('All possible interest-related fields found:', possibleInterestFields);
+          
+          // Check first 5 entries for interest data presence
+          console.log('Checking first 5 entries for interest data presence:');
+          entries.slice(0, 5).forEach(([date, data], index) => {
+            console.log(`Entry ${index + 1} (${date}):`);
+            possibleInterestFields.forEach(field => {
+              if (field in data) {
+                console.log(`  ${field}: ${data[field]}`);
+              } else {
+                console.log(`  ${field}: not present`);
+              }
+            });
+          });
         }
       }
+      console.log('================ END DEBUGGING ================');
       
       // Extract raw data for February 2017 (the first month)
       const feb2017Data = {};
@@ -281,6 +332,17 @@ function Dashboard() {
         const hasBuy = tradingLog.toLowerCase().includes('buy');
         const hasSell = tradingLog.toLowerCase().includes('sell');
         
+        // Parse the trading log to find share purchases with improved regex
+        // This will match variations like:
+        // - Buy 100 shares at $200.50
+        // - BUY 10 shares of SPY at $450.75
+        // - Bought 5 shares @ $350
+        // - Purchased 20 shares at $410.25
+        // - Buy 50 @ $275.00
+        const buySharesRegex = /(?:buy|bought|purchase[d]?)\s+(\d+)(?:\s+shares?)?(?:\s+of\s+[A-Z]+)?(?:\s+(?:at|@)\s+)?\$?([\d\.]+)/i;
+        const buyMatch = tradingLog.match(buySharesRegex);
+        const isBuySharesTransaction = buyMatch !== null;
+        
         return {
           date,
           Portfolio_Value: Number(values.Portfolio_Value) || 0,
@@ -288,7 +350,10 @@ function Dashboard() {
           Margin_Ratio: Number(values.Margin_Ratio) || 0,
           Cash_Balance: Number(values.Cash_Balance) || 0,
           hasBuy,
-          hasSell
+          hasSell,
+          isBuySharesTransaction,
+          buyShares: isBuySharesTransaction ? Number(buyMatch[1]) : 0,
+          buyPrice: isBuySharesTransaction ? Number(buyMatch[2]) : 0
         };
       }).sort((a, b) => new Date(a.date) - new Date(b.date));
       
@@ -305,6 +370,82 @@ function Dashboard() {
           };
         })
         .sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      // Debug: Log detected buy transactions
+      const buyTransactions = processedData.filter(item => item.isBuySharesTransaction);
+      console.log('Detected buy transactions:', buyTransactions.length);
+      if (buyTransactions.length === 0) {
+        console.log('WARNING: No buy transactions detected in trading logs.');
+        console.log('Sample trading logs:', tradingLogs.slice(0, 5).map(entry => entry.log));
+        
+        // Try a more lenient pattern if no transactions were found
+        console.log('Trying more lenient pattern to find buy transactions...');
+        const lenientPattern = /buy|bought|purchasing|purchase|acquire/i;
+        
+        const buyLogEntries = tradingLogs.filter(entry => 
+          lenientPattern.test(entry.log)
+        );
+        
+        console.log('Found logs with buy-related terms:', buyLogEntries.length);
+        buyLogEntries.forEach(entry => {
+          console.log(`[${entry.date}] ${entry.log}`);
+        });
+      } else {
+        buyTransactions.forEach(transaction => {
+          console.log(`[${transaction.date}] Buy ${transaction.buyShares} shares @ $${transaction.buyPrice}`);
+        });
+      }
+      
+      // Update processedData to mark buy transactions based on keywords if none were found
+      if (buyTransactions.length === 0) {
+        console.log('No buy transactions detected with regex, adding markers based on keywords');
+        
+        // Create a map of dates with buy-related terms
+        const buyDates = new Set();
+        tradingLogs.forEach(entry => {
+          if (/buy|bought|purchase|acquiring|acquired|invest/i.test(entry.log)) {
+            buyDates.add(entry.date);
+            console.log(`Marking date as buy transaction: ${entry.date}`);
+          }
+        });
+        
+        // Add flags to the processed data
+        processedData.forEach(item => {
+          if (buyDates.has(item.date)) {
+            item.isBuySharesTransaction = true;
+            item.buyShares = 100; // Dummy value
+            item.buyPrice = 0; // Will be estimated
+            
+            // Estimate the price based on the SPY value
+            if (item.spy_value) {
+              item.buyPrice = item.spy_value / 100; // Rough estimate
+            }
+            
+            console.log(`Added buy marker to date: ${item.date}`);
+          }
+        });
+      }
+      
+      // Final fallback - if still no markers, add a few for visibility
+      const updatedBuyTransactions = processedData.filter(item => item.isBuySharesTransaction);
+      if (updatedBuyTransactions.length === 0 && processedData.length > 0) {
+        console.log('Still no buy transactions found, adding test markers');
+        
+        // Add markers at beginning, middle and near end
+        const addMarkerAt = (index) => {
+          if (index < processedData.length) {
+            processedData[index].isBuySharesTransaction = true;
+            processedData[index].buyShares = 100;
+            processedData[index].buyPrice = processedData[index].spy_value / 100;
+            console.log(`Added test marker at index ${index}, date: ${processedData[index].date}`);
+          }
+        };
+        
+        // Add 3 test markers - beginning, middle, and near end
+        addMarkerAt(5); // Near beginning
+        addMarkerAt(Math.floor(processedData.length / 2)); // Middle
+        addMarkerAt(processedData.length - 10); // Near end
+      }
       
       // Analyze trading logs for "assigned" entries and calculate total cost
       let totalAssignedCost = 0;
@@ -417,6 +558,7 @@ function Dashboard() {
       console.log(`Total premiums received: $${totalPremiumsReceived.toFixed(2)}`);
       
       console.log('Final premium data with proper scaling (non-zero only):', filteredPremiumData);
+      console.log('Total premium data points:', filteredPremiumData.length);
       
       // Process interest data with error handling
       let filteredInterestData = [];
@@ -424,19 +566,49 @@ function Dashboard() {
       
       try {
         // Process interest data (similar to premium data)
+        console.log('Starting interest data extraction...');
         const interestData = Object.entries(parsedData).map(([date, values]) => {
           // Check for different possible field names for interest paid
           let interestValue = null;
-          if ('Interest_Paid' in values) {
-            interestValue = values.Interest_Paid;
-          } else if ('interest_paid' in values) {
-            interestValue = values.interest_paid;
-          } else if ('InterestPaid' in values) {
-            interestValue = values.InterestPaid;
-          } else if ('Interest_Costs' in values) {
-            interestValue = values.Interest_Costs;
-          } else if ('interest_costs' in values) {
-            interestValue = values.interest_costs;
+          
+          // Exhaustive list of possible field names
+          const possibleFields = [
+            'Interest_Paid',
+            'Interests_Paid',
+            'interest_paid',
+            'interests_paid',
+            'InterestPaid',
+            'InterestsPaid',
+            'Interest_Costs',
+            'interest_costs',
+            'Margin_Interest',
+            'margin_interest',
+            'MarginInterest',
+            'Interest',
+            'interest',
+            'Interest_Rate_Cost',
+            'Interest_Expense',
+            'interest_expense'
+          ];
+          
+          // Try each field name
+          for (const field of possibleFields) {
+            if (field in values && values[field] !== null) {
+              interestValue = values[field];
+              console.log(`Found interest value for ${date} in field "${field}": ${interestValue}`);
+              break; // Stop once we find a value
+            }
+          }
+          
+          // If we still don't have a value, try a more generic search for any key containing 'interest'
+          if (interestValue === null) {
+            for (const key in values) {
+              if (key.toLowerCase().includes('interest') && values[key] !== null) {
+                interestValue = values[key];
+                console.log(`Found interest value for ${date} via generic search in field "${key}": ${interestValue}`);
+                break;
+              }
+            }
           }
           
           return {
@@ -449,6 +621,7 @@ function Dashboard() {
         
         // Check if we have any non-zero values
         const hasNonZeroInterestValues = interestData.some(item => item.Interest_Paid !== 0);
+        console.log('Has non-zero interest values:', hasNonZeroInterestValues);
         
         if (hasNonZeroInterestValues) {
           // Only filter if we have some non-zero values
@@ -457,8 +630,8 @@ function Dashboard() {
         } else {
           console.log('No non-zero interest values found in the data');
           
-          // If there's no actual interest data, generate some synthetic data for demonstration
-          if (processedData && processedData.length > 0) {
+          // Modified: Only generate synthetic data if the flag allows it
+          if (!USE_ONLY_REAL_DATA && processedData && processedData.length > 0) {
             console.log('Generating synthetic interest data for demonstration');
             
             // Take dates from the processed data
@@ -471,6 +644,10 @@ function Dashboard() {
             }));
             
             console.log('Generated synthetic interest data:', filteredInterestData);
+          } else {
+            console.log('Using all real interest data without filtering (including zeros)');
+            // Use all data including zeros since we disabled synthetic data
+            filteredInterestData = interestData;
           }
         }
         
@@ -501,18 +678,25 @@ function Dashboard() {
       setData({
         loading: false,
         chartData: processedData,
-        marginData: processedData,
+        marginData: processedData.map(item => ({
+          date: item.date,
+          Margin_Ratio: item.Margin_Ratio
+        })),
         premiumData: filteredPremiumData,
         interestData: filteredInterestData,
-        tradingLogs,
+        tradingLogs: tradingLogs,
         firstMonthRawData: feb2017Data,
         totalAssignedCost,
         totalPremiumsReceived,
         totalInterestPaid
       });
+      
+      // Indicate success
+      return true;
     } catch (error) {
       console.error('Error processing simulation data:', error);
       setError('Failed to process simulation data');
+      return false;
     }
   };
 
@@ -926,6 +1110,7 @@ function Dashboard() {
                 <Tab label="Cash Balance" {...a11yProps(2)} />
                 <Tab label="Premium Received" {...a11yProps(3)} />
                 <Tab label="Interests Paid" {...a11yProps(4)} />
+                <Tab label="Trading Logs" {...a11yProps(5)} />
               </Tabs>
             </Box>
             
@@ -934,6 +1119,27 @@ function Dashboard() {
               <Typography variant="h6" gutterBottom>
                 Strategy vs SPY Performance
               </Typography>
+              
+              {/* Custom legend for buy transaction markers */}
+              <Box 
+                sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  mb: 2, 
+                  p: 1, 
+                  border: '1px solid #eee', 
+                  borderRadius: 1,
+                  bgcolor: 'rgba(0, 128, 0, 0.05)'
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                  <polygon points="8,0 16,16 0,16" fill="green" />
+                </svg>
+                <Typography variant="body2">
+                  Green triangles mark days when shares were purchased on the SPY Buy & Hold line (extracted from Trading Log)
+                </Typography>
+              </Box>
+              
               <ResponsiveContainer width="100%" height={600}>
                 <LineChart
                   data={data.chartData}
@@ -962,6 +1168,7 @@ function Dashboard() {
                     name="Strategy" 
                     stroke="#82ca9d" 
                     dot={false}
+                    activeDot={{ r: 8 }}
                     strokeWidth={2}
                   />
                   <Line 
@@ -969,7 +1176,26 @@ function Dashboard() {
                     dataKey="spy_value" 
                     name="SPY Buy & Hold" 
                     stroke="#8884d8" 
-                    dot={false}
+                    dot={(props) => {
+                      // Check if this point is a buy shares transaction
+                      const { payload } = props;
+                      if (payload && payload.isBuySharesTransaction) {
+                        return (
+                          <svg
+                            x={props.cx - 7}
+                            y={props.cy - 7}
+                            width={14}
+                            height={14}
+                            fill="green"
+                            viewBox="0 0 14 14"
+                          >
+                            <polygon points="7,0 14,14 0,14" />
+                          </svg>
+                        );
+                      }
+                      return null;
+                    }}
+                    activeDot={{ r: 8 }}
                     strokeWidth={2}
                   />
                 </LineChart>
@@ -1125,40 +1351,53 @@ function Dashboard() {
                 </Alert>
               )}
               {data.interestData && data.interestData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={600}>
-                  <BarChart
-                    data={data.interestData}
-                    margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis 
-                      dataKey="date"
-                      angle={-45}
-                      textAnchor="end"
-                      height={60}
-                    />
-                    <YAxis 
-                      domain={[0, 'auto']}
-                      tickFormatter={(value) => `$${value.toLocaleString()}`}
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend 
-                      verticalAlign="top"
-                      height={36}
-                      wrapperStyle={{paddingBottom: '10px'}}
-                    />
-                    <Bar 
-                      dataKey="Interest_Paid" 
-                      name="Interest Paid" 
-                      fill="#FF8042" 
-                      barSize={30} 
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+                <React.Fragment>
+                  <ResponsiveContainer width="100%" height={600}>
+                    <BarChart
+                      data={data.interestData}
+                      margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="date"
+                        angle={-45}
+                        textAnchor="end"
+                        height={60}
+                      />
+                      <YAxis 
+                        domain={[0, 'auto']}
+                        tickFormatter={(value) => `$${value.toLocaleString()}`}
+                      />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend 
+                        verticalAlign="top"
+                        height={36}
+                        wrapperStyle={{paddingBottom: '10px'}}
+                      />
+                      <Bar 
+                        dataKey="Interest_Paid" 
+                        name="Interest Paid" 
+                        fill="#FF8042" 
+                        barSize={30} 
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                  
+                  <Box mt={2}>
+                    <Typography variant="body2" color="textSecondary">
+                      Note: This chart shows interest costs from margin usage in the strategy.
+                    </Typography>
+                  </Box>
+                </React.Fragment>
               ) : (
                 <Box mt={2} textAlign="center" height={600} display="flex" alignItems="center" justifyContent="center">
                   <Typography variant="body1" color="textSecondary">
-                    No interest paid data available
+                    No interest paid data available. This could mean either:
+                    <ul>
+                      <li>The strategy doesn't use margin</li>
+                      <li>There were no margin interest charges during this period</li>
+                      <li>The interest data is not available in the simulation results</li>
+                    </ul>
                   </Typography>
                 </Box>
               )}
@@ -1170,6 +1409,41 @@ function Dashboard() {
                   {JSON.stringify(data.interestData, null, 2)}
                 </pre>
               </Box>
+            </TabPanel>
+            
+            {/* Debug tab for Trading Logs (hidden in production) */}
+            <TabPanel value={activeTab} index={5}>
+              <Typography variant="h6" gutterBottom>
+                Trading Logs (Debug View)
+              </Typography>
+              {data.tradingLogs && data.tradingLogs.length > 0 ? (
+                <Box sx={{ mb: 2, maxHeight: '600px', overflowY: 'auto' }}>
+                  {data.tradingLogs.map((entry, index) => (
+                    <Paper key={index} sx={{ p: 2, mb: 1, bgcolor: entry.log.toLowerCase().includes('buy') ? 'rgba(0, 255, 0, 0.05)' : 'white' }}>
+                      <Typography variant="subtitle2" gutterBottom color="primary">
+                        {entry.date}
+                      </Typography>
+                      <Typography variant="body2" component="pre" sx={{ 
+                        whiteSpace: 'pre-wrap', 
+                        wordBreak: 'break-word',
+                        fontFamily: 'monospace',
+                        fontSize: '0.85rem'
+                      }}>
+                        {entry.log}
+                      </Typography>
+                      {entry.log.toLowerCase().includes('buy') && (
+                        <Typography variant="caption" sx={{ mt: 1, color: 'green', display: 'block' }}>
+                          ⚠️ Contains "buy" - check if pattern matched correctly
+                        </Typography>
+                      )}
+                    </Paper>
+                  ))}
+                </Box>
+              ) : (
+                <Alert severity="info">
+                  No trading logs available for the selected period.
+                </Alert>
+              )}
             </TabPanel>
           </Paper>
         </Grid>

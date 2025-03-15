@@ -628,7 +628,7 @@ def run_spy_power_cashflow(
             
             # Only include actual trading days - exclude weekends and holidays
             trading_days = results_df.index.tolist()
-
+            
             for idx, row in results_df.iterrows():
                 # Skip dates that aren't in the original DataFrame
                 if idx not in trading_days:
@@ -649,7 +649,7 @@ def run_spy_power_cashflow(
                     ),
                     'spy_value': float(spy_values.get(idx, 0)),                    
                     'Interest_Paid': float(
-                        row.get('Interest_Paid', 0)
+                        row.get('Interests_Paid', 0)                        
                     ),
                     'Premiums_Received': float(
                         row.get('Premiums_Received', 0)
