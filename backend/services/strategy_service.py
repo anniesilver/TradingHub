@@ -10,18 +10,15 @@ import psycopg2
 from dotenv import load_dotenv
 from psycopg2.extras import DictCursor, Json
 
-
 # CRITICAL FIX: Create absolute paths to the strategy modules
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-BASE_DIR = os.path.dirname(
-    os.path.dirname(SCRIPT_DIR)
-)  # Get two directories up
-os.environ['PYTHONPATH'] = f"{os.environ.get('PYTHONPATH', '')}:{BASE_DIR}"
+BASE_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR))  # Get two directories up
+os.environ["PYTHONPATH"] = f"{os.environ.get('PYTHONPATH', '')}:{BASE_DIR}"
 print(f"Set PYTHONPATH to include: {BASE_DIR}")
 
 # Load environment variables from .env file (with graceful fallback)
-env_path = os.path.join(os.path.dirname(__file__), '.env')
-root_env_path = os.path.join(os.getcwd(), '.env')
+env_path = os.path.join(os.path.dirname(__file__), ".env")
+root_env_path = os.path.join(os.getcwd(), ".env")
 
 if os.path.exists(env_path):
     load_dotenv(dotenv_path=env_path)
@@ -33,12 +30,12 @@ else:
     print("No .env file found, using default configuration")
 
 # Base path for all strategies
-ALGO_BASE_PATH = os.environ.get('ALGO_BASE_PATH', 'C:/ALGO/algo_trading')
+ALGO_BASE_PATH = os.environ.get("ALGO_BASE_PATH", "C:/ALGO/algo_trading")
 
 # Dictionary of available strategies
 STRATEGY_PATHS = {
-    'SPY_POWER_CASHFLOW': os.path.join(ALGO_BASE_PATH, 'SPY_POWER_CASHFLOW'),
-    'CCSPY': os.path.join(ALGO_BASE_PATH, 'CCSPY'),
+    "SPY_POWER_CASHFLOW": os.path.join(ALGO_BASE_PATH, "SPY_POWER_CASHFLOW"),
+    "CCSPY": os.path.join(ALGO_BASE_PATH, "CCSPY"),
 }
 
 # Add all strategy paths to sys.path for importing
@@ -49,11 +46,11 @@ for path in STRATEGY_PATHS.values():
 
 # Database connection parameters from environment variables
 DB_CONFIG = {
-    'dbname': os.environ.get('DB_NAME'),
-    'user': os.environ.get('DB_USER'),
-    'password': os.environ.get('DB_PASSWORD'),
-    'host': os.environ.get('DB_HOST'),
-    'port': os.environ.get('DB_PORT'),
+    "dbname": os.environ.get("DB_NAME"),
+    "user": os.environ.get("DB_USER"),
+    "password": os.environ.get("DB_PASSWORD"),
+    "host": os.environ.get("DB_HOST"),
+    "port": os.environ.get("DB_PORT"),
 }
 
 # Remove None values if they exist to let psycopg2 use its own defaults
@@ -63,17 +60,11 @@ DB_CONFIG = {k: v for k, v in DB_CONFIG.items() if v is not None}
 # Check for required database configuration
 def validate_db_config():
     """Validate that required database configuration is present"""
-    required_keys = ['dbname', 'user', 'password']
-    missing_keys = [
-        key
-        for key in required_keys
-        if key not in DB_CONFIG or not DB_CONFIG[key]
-    ]
+    required_keys = ["dbname", "user", "password"]
+    missing_keys = [key for key in required_keys if key not in DB_CONFIG or not DB_CONFIG[key]]
 
     if missing_keys:
-        print(
-            f"ERROR: Missing required database configuration: {', '.join(missing_keys)}"
-        )
+        print(f"ERROR: Missing required database configuration: {', '.join(missing_keys)}")
         print("Please check your .env file or environment variables")
         return False
     return True
@@ -145,10 +136,7 @@ def ensure_strategy_dependencies():
 
     if missing_packages:
         print(f"Missing required packages: {', '.join(missing_packages)}")
-        print(
-            "Please install them using: pip install "
-            + " ".join(missing_packages)
-        )
+        print("Please install them using: pip install " + " ".join(missing_packages))
         return False
     return True
 
@@ -182,11 +170,11 @@ def import_strategy(strategy_type):
     # Important: Clear sys.modules of any previous imports that might conflict
     for key in list(sys.modules.keys()):
         if key in [
-            'trading_simulator',
-            'option_strategy',
-            'market_data',
-            'position',
-            'config',
+            "trading_simulator",
+            "option_strategy",
+            "market_data",
+            "position",
+            "config",
         ]:
             del sys.modules[key]
             print(f"Removed previous import of {key} from sys.modules")
@@ -254,9 +242,7 @@ def import_strategy(strategy_type):
 
                     print("Successfully imported TradingSimulator for CCSPY")
                 except ImportError as e:
-                    print(
-                        f"Failed to import TradingSimulator for CCSPY: {str(e)}"
-                    )
+                    print(f"Failed to import TradingSimulator for CCSPY: {str(e)}")
                     raise
 
                 try:
@@ -264,9 +250,7 @@ def import_strategy(strategy_type):
 
                     print("Successfully imported OptionStrategy for CCSPY")
                 except ImportError as e:
-                    print(
-                        f"Failed to import OptionStrategy for CCSPY: {str(e)}"
-                    )
+                    print(f"Failed to import OptionStrategy for CCSPY: {str(e)}")
                     raise
 
                 strategy_modules[strategy_type] = (
@@ -298,9 +282,9 @@ def get_db_connection():
         print(f"  dbname: {DB_CONFIG.get('dbname')}")
         print(f"  user: {DB_CONFIG.get('user')}")
         # Only print host and port if they exist in the config
-        if 'host' in DB_CONFIG:
+        if "host" in DB_CONFIG:
             print(f"  host: {DB_CONFIG.get('host')}")
-        if 'port' in DB_CONFIG:
+        if "port" in DB_CONFIG:
             print(f"  port: {DB_CONFIG.get('port')}")
         connection = psycopg2.connect(**DB_CONFIG)
         return connection
@@ -359,9 +343,7 @@ def init_database():
         conn.close()
 
 
-def save_simulation_results(
-    strategy_type, config, start_date, end_date, initial_balance, daily_results
-):
+def save_simulation_results(strategy_type, config, start_date, end_date, initial_balance, daily_results):
     """
     Save strategy simulation results to the database.
 
@@ -412,9 +394,9 @@ def save_simulation_results(
                     (
                         simulation_id,
                         date_str,
-                        data['balance'],
-                        data['trades_count'],
-                        data['profit_loss'],
+                        data["balance"],
+                        data["trades_count"],
+                        data["profit_loss"],
                     ),
                 )
 
@@ -477,11 +459,9 @@ def run_strategy_simulation(
         return None
 
 
-def run_spy_power_cashflow(
-    TradingSimulator, OptionStrategy, config, start_dt, end_dt, initial_balance=None
-):
+def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, end_dt, initial_balance=None):
     """Run the SPY_POWER_CASHFLOW strategy simulation."""
-    strategy_path = STRATEGY_PATHS['SPY_POWER_CASHFLOW']
+    strategy_path = STRATEGY_PATHS["SPY_POWER_CASHFLOW"]
     original_path = sys.path.copy()
 
     try:
@@ -490,65 +470,59 @@ def run_spy_power_cashflow(
             print(f"Temporarily added {strategy_path} to sys.path")
 
         # Import required modules using importlib
-        spec = importlib.util.spec_from_file_location(
-            "market_data", os.path.join(strategy_path, "market_data.py")
-        )
+        spec = importlib.util.spec_from_file_location("market_data", os.path.join(strategy_path, "market_data.py"))
         market_data_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(market_data_module)
         MarketData = market_data_module.MarketData
 
-        spec = importlib.util.spec_from_file_location(
-            "position", os.path.join(strategy_path, "position.py")
-        )
+        spec = importlib.util.spec_from_file_location("position", os.path.join(strategy_path, "position.py"))
         position_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(position_module)
         PositionTracker = position_module.PositionTracker
 
-        spec = importlib.util.spec_from_file_location(
-            "config", os.path.join(strategy_path, "config.py")
-        )
+        spec = importlib.util.spec_from_file_location("config", os.path.join(strategy_path, "config.py"))
         config_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(config_module)
         Config = config_module.Config
 
         # Create a Config object
         strategy_config = Config()
-        
+
         # Apply config values from frontend rather than hardcoding
         # Transfer any config parameters from the frontend to the strategy_config
-        if 'SYMBOL' in config:
-            strategy_config.SYMBOL = config['SYMBOL']
+        if "SYMBOL" in config:
+            strategy_config.SYMBOL = config["SYMBOL"]
         else:
             # Fallback to default value for backwards compatibility
-            strategy_config.SYMBOL = 'SPY'
-        
+            strategy_config.SYMBOL = "SPY"
+
         # Set strategy type from the request data
-        strategy_config.STRATEGY_TYPE = 'SPY_POWER_CASHFLOW'
-        
+        strategy_config.STRATEGY_TYPE = "SPY_POWER_CASHFLOW"
+
         # Get initial balance from request
         try:
             # Define possible parameter locations and names
             balance_sources = [
-                ('parameter', initial_balance),
-                ('config', 'initial_balance'),
-                ('config', 'initialBalance'),
-                ('config', 'INITIAL_CASH')
+                ("parameter", initial_balance),
+                ("config", "initial_balance"),
+                ("config", "initialBalance"),
+                ("config", "INITIAL_CASH"),
             ]
-            
+
             # Check each possible source
             balance_set = False
             for source_type, source in balance_sources:
-                if source_type == 'parameter' and source is not None:
+                if source_type == "parameter" and source is not None:
                     strategy_config.INITIAL_CASH = float(source)
                     print(f"Using initial balance from parameter: {source}")
                     balance_set = True
                     break
-                elif source_type == 'config' and source in config:
+                elif source_type == "config" and source in config:
                     strategy_config.INITIAL_CASH = float(config[source])
                     print(f"Using {source} from config: {config[source]}")
                     balance_set = True
                     break
-                
+
         except (ValueError, TypeError) as e:
             print(f"Error parsing initial balance: {e}, using default")
 
@@ -557,14 +531,14 @@ def run_spy_power_cashflow(
         print("\n=== Config from frontend ===")
         for key, value in config.items():
             print(key, value)
-            # Set attribute directly if it matches a strategy_config attribute 
+            # Set attribute directly if it matches a strategy_config attribute
             # and is not already handled
-            if key != 'SYMBOL' and key != 'INITIAL_CASH' and hasattr(strategy_config, key):
+            if key != "SYMBOL" and key != "INITIAL_CASH" and hasattr(strategy_config, key):
                 try:
                     if isinstance(value, (int, float)):
                         setattr(strategy_config, key, float(value))
                         print(f"Set {key} = {value} from frontend config")
-                    elif isinstance(value, str) and value.replace('.', '', 1).isdigit():
+                    elif isinstance(value, str) and value.replace(".", "", 1).isdigit():
                         setattr(strategy_config, key, float(value))
                         print(f"Set {key} = {value} from frontend config (converted to float)")
                     else:
@@ -575,7 +549,7 @@ def run_spy_power_cashflow(
 
         print("\n=== Final Config for simulation ===")
         for attr in dir(strategy_config):
-            if not attr.startswith('__'):  # Skip private attributes
+            if not attr.startswith("__"):  # Skip private attributes
                 print(f"{attr}: {getattr(strategy_config, attr)}")
 
         # Initialize components with debug prints
@@ -584,9 +558,7 @@ def run_spy_power_cashflow(
         print(f"MarketData symbol: {market_data.symbol}")
 
         print("\n=== Initializing PositionTracker ===")
-        position = PositionTracker(
-            strategy_config.INITIAL_CASH, strategy_config
-        )
+        position = PositionTracker(strategy_config.INITIAL_CASH, strategy_config)
         print(f"PositionTracker initial balance: {position.cash}")
 
         print("\n=== Initializing OptionStrategy ===")
@@ -594,19 +566,17 @@ def run_spy_power_cashflow(
         print(f"OptionStrategy type: {strategy_config.STRATEGY_TYPE}")
 
         print("\n=== Creating TradingSimulator ===")
-        simulator = TradingSimulator(
-            market_data, position, strategy, strategy_config
-        )
+        simulator = TradingSimulator(market_data, position, strategy, strategy_config)
         print("TradingSimulator created with all components")
 
         print("\n=== Running Simulation ===")
         # Convert datetime objects to string dates in YYYY-MM-DD format for the simulator
-        start_date = start_dt.strftime('%Y-%m-%d')
-        end_date = end_dt.strftime('%Y-%m-%d')
+        start_date = start_dt.strftime("%Y-%m-%d")
+        end_date = end_dt.strftime("%Y-%m-%d")
         print(f"Running simulation from {start_date} to {end_date}")
-        
+
         results_df = simulator.run(start_date=start_date, end_date=end_date)
-        
+
         # Process results
         daily_results = {}
         if results_df is not None and not results_df.empty:
@@ -618,58 +588,43 @@ def run_spy_power_cashflow(
 
             # Calculate SPY buy & hold value using Close prices from results_df
             # New approach: Calculate shares purchased on first day, then keep that constant
-            first_day_close = results_df['Close'].iloc[0]
+            first_day_close = results_df["Close"].iloc[0]
             initial_cash = strategy_config.INITIAL_CASH
             spy_shares_bought = initial_cash / first_day_close
-            print(f"SPY Buy & Hold: Initial cash ${initial_cash}, first day close ${first_day_close}, shares bought {spy_shares_bought}")
-            
+            print(
+                f"SPY Buy & Hold: Initial cash ${initial_cash}, first day close ${first_day_close}, "
+                "shares bought {spy_shares_bought}"
+            )
+
             # Calculate daily value based on fixed shares
-            spy_values = results_df['Close'] * spy_shares_bought
-            
+            spy_values = results_df["Close"] * spy_shares_bought
+
             # Only include actual trading days - exclude weekends and holidays
             trading_days = results_df.index.tolist()
-            
+
             for idx, row in results_df.iterrows():
                 # Skip dates that aren't in the original DataFrame
                 if idx not in trading_days:
                     continue
-                    
-                date_str = idx.strftime('%Y-%m-%d')
+
+                date_str = idx.strftime("%Y-%m-%d")
                 # Map simulator output fields to frontend expected fields
                 daily_results[date_str] = {
-                    'Portfolio_Value': float(
-                        row.get('Portfolio_Value', 0)
-                    ),
-                    'Cash_Balance': float(
-                        row.get('Cash_Balance', 0)
-                    ),
-                    'Close': float(row.get('Close', 0)),
-                    'Margin_Ratio': float(
-                        row.get('Margin_Ratio', 0)
-                    ),
-                    'spy_value': float(spy_values.get(idx, 0)),                    
-                    'Interest_Paid': float(
-                        row.get('Interests_Paid', 0)                        
-                    ),
-                    'Premiums_Received': float(
-                        row.get('Premiums_Received', 0)
-                    ),
-                    'Commissions_Paid': float(
-                        row.get('Commissions_Paid', 0)
-                    ),
-                    'Open_Positions': int(
-                        row.get('Open_Positions', 0)
-                    ),
-                    'Closed_Positions': int(
-                        row.get('Closed_Positions', 0)
-                    ),
-                    'Open': float(row.get('Open', 0)),
-                    'High': float(row.get('High', 0)),
-                    'Low': float(row.get('Low', 0)),
-                    'VIX': float(row.get('VIX', 0)),
-                    'Trading_Log': str(
-                        row.get('Trading_Log', '')
-                    ),
+                    "Portfolio_Value": float(row.get("Portfolio_Value", 0)),
+                    "Cash_Balance": float(row.get("Cash_Balance", 0)),
+                    "Close": float(row.get("Close", 0)),
+                    "Margin_Ratio": float(row.get("Margin_Ratio", 0)),
+                    "spy_value": float(spy_values.get(idx, 0)),
+                    "Interest_Paid": float(row.get("Interests_Paid", 0)),
+                    "Premiums_Received": float(row.get("Premiums_Received", 0)),
+                    "Commissions_Paid": float(row.get("Commissions_Paid", 0)),
+                    "Open_Positions": int(row.get("Open_Positions", 0)),
+                    "Closed_Positions": int(row.get("Closed_Positions", 0)),
+                    "Open": float(row.get("Open", 0)),
+                    "High": float(row.get("High", 0)),
+                    "Low": float(row.get("Low", 0)),
+                    "VIX": float(row.get("VIX", 0)),
+                    "Trading_Log": str(row.get("Trading_Log", "")),
                 }
 
         return daily_results
@@ -681,11 +636,9 @@ def run_spy_power_cashflow(
         sys.path = original_path
 
 
-def run_ccspy_strategy(
-    TradingSimulator, OptionStrategy, config, start_dt, end_dt, initial_balance
-):
+def run_ccspy_strategy(TradingSimulator, OptionStrategy, config, start_dt, end_dt, initial_balance):
     """Run the CCSPY strategy simulation."""
-    strategy_path = STRATEGY_PATHS['CCSPY']
+    strategy_path = STRATEGY_PATHS["CCSPY"]
     original_path = sys.path.copy()
 
     try:
@@ -694,40 +647,34 @@ def run_ccspy_strategy(
             print(f"Temporarily added {strategy_path} to sys.path")
 
         # Import required modules using importlib
-        spec = importlib.util.spec_from_file_location(
-            "market_data", os.path.join(strategy_path, "market_data.py")
-        )
+        spec = importlib.util.spec_from_file_location("market_data", os.path.join(strategy_path, "market_data.py"))
         market_data_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(market_data_module)
         MarketData = market_data_module.MarketData
 
-        spec = importlib.util.spec_from_file_location(
-            "position", os.path.join(strategy_path, "position.py")
-        )
+        spec = importlib.util.spec_from_file_location("position", os.path.join(strategy_path, "position.py"))
         position_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(position_module)
         PositionTracker = position_module.PositionTracker
 
-        spec = importlib.util.spec_from_file_location(
-            "config", os.path.join(strategy_path, "config.py")
-        )
+        spec = importlib.util.spec_from_file_location("config", os.path.join(strategy_path, "config.py"))
         config_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(config_module)
         Config = config_module.Config
 
         # Create a Config object
-        strategy_config = Config()        
-        
+        strategy_config = Config()
+
         # Apply config values from frontend rather than hardcoding
         # Transfer any config parameters from the frontend to the strategy_config
-        if 'SYMBOL' in config:
-            strategy_config.SYMBOL = config['SYMBOL']
+        if "SYMBOL" in config:
+            strategy_config.SYMBOL = config["SYMBOL"]
         else:
             # Fallback to default value for backwards compatibility
-            strategy_config.SYMBOL = 'SPY'
-        
+            strategy_config.SYMBOL = "SPY"
+
         # Set strategy type from the request data
-        strategy_config.STRATEGY_TYPE = 'CCSPY'
+        strategy_config.STRATEGY_TYPE = "CCSPY"
 
         # Set initial balance
         if initial_balance is not None:
@@ -736,26 +683,26 @@ def run_ccspy_strategy(
                 print(f"Using initial balance from parameter: {initial_balance}")
             except (ValueError, TypeError) as e:
                 print(f"Error parsing initial balance: {e}, using default")
-        elif 'INITIAL_CASH' in config:
+        elif "INITIAL_CASH" in config:
             try:
-                strategy_config.INITIAL_CASH = float(config['INITIAL_CASH'])
+                strategy_config.INITIAL_CASH = float(config["INITIAL_CASH"])
                 print(f"Using INITIAL_CASH from config: {config['INITIAL_CASH']}")
             except (ValueError, TypeError) as e:
                 print(f"Error parsing INITIAL_CASH: {e}, using default")
-        
+
         # Apply all config parameters from frontend to strategy_config
         # Print frontend config for debugging
         print("\n=== Config from frontend ===")
         for key, value in config.items():
             print(key, value)
-            # Set attribute directly if it matches a strategy_config attribute 
+            # Set attribute directly if it matches a strategy_config attribute
             # and is not already handled
-            if key != 'SYMBOL' and key != 'INITIAL_CASH' and hasattr(strategy_config, key):
+            if key != "SYMBOL" and key != "INITIAL_CASH" and hasattr(strategy_config, key):
                 try:
                     if isinstance(value, (int, float)):
                         setattr(strategy_config, key, float(value))
                         print(f"Set {key} = {value} from frontend config")
-                    elif isinstance(value, str) and value.replace('.', '', 1).isdigit():
+                    elif isinstance(value, str) and value.replace(".", "", 1).isdigit():
                         setattr(strategy_config, key, float(value))
                         print(f"Set {key} = {value} from frontend config (converted to float)")
                     else:
@@ -766,7 +713,7 @@ def run_ccspy_strategy(
 
         print("\n=== Final Config for simulation ===")
         for attr in dir(strategy_config):
-            if not attr.startswith('__'):  # Skip private attributes
+            if not attr.startswith("__"):  # Skip private attributes
                 print(f"{attr}: {getattr(strategy_config, attr)}")
 
         # Initialize components
@@ -775,9 +722,7 @@ def run_ccspy_strategy(
         strategy = OptionStrategy(strategy_config)
 
         # Create and run simulator
-        simulator = TradingSimulator(
-            market_data, position, strategy, strategy_config
-        )
+        simulator = TradingSimulator(market_data, position, strategy, strategy_config)
         results_df = simulator.run()
 
         # Process results
@@ -789,15 +734,18 @@ def run_ccspy_strategy(
             if not isinstance(results_df.index, pd.DatetimeIndex):
                 results_df.index = pd.to_datetime(results_df.index)
 
-            # Calculate SPY buy & hold value using Close prices from results_df   
+            # Calculate SPY buy & hold value using Close prices from results_df
             # New approach: Calculate shares purchased on first day, then keep that constant
-            first_day_close = results_df['Close'].iloc[0]
+            first_day_close = results_df["Close"].iloc[0]
             spy_shares_bought = initial_balance / first_day_close
-            print(f"CCSPY - SPY Buy & Hold: Initial cash ${initial_balance}, first day close ${first_day_close}, shares bought {spy_shares_bought}")
-            
+            print(
+                f"CCSPY - SPY Buy & Hold: Initial cash ${initial_balance}, first day close ${first_day_close}, "
+                "shares bought {spy_shares_bought}"
+            )
+
             # Calculate daily value based on fixed shares
-            spy_values = results_df['Close'] * spy_shares_bought
-            
+            spy_values = results_df["Close"] * spy_shares_bought
+
             # Only include actual trading days - exclude weekends and holidays
             trading_days = results_df.index.tolist()
 
@@ -805,16 +753,12 @@ def run_ccspy_strategy(
                 # Skip dates that aren't in the original DataFrame
                 if idx not in trading_days:
                     continue
-                    
-                date_str = idx.strftime('%Y-%m-%d')
+
+                date_str = idx.strftime("%Y-%m-%d")
                 daily_results[date_str] = {
-                    'balance': float(
-                        row.get('balance', row.get('portfolio_value', 0))
-                    ),
-                    'trades_count': int(row.get('trades_count', 0)),
-                    'profit_loss': float(
-                        row.get('profit_loss', row.get('daily_pnl', 0))
-                    ),
+                    "balance": float(row.get("balance", row.get("portfolio_value", 0))),
+                    "trades_count": int(row.get("trades_count", 0)),
+                    "profit_loss": float(row.get("profit_loss", row.get("daily_pnl", 0))),
                 }
         else:
             print("Warning: No results data returned from strategy simulation")
@@ -912,13 +856,13 @@ def get_simulation_results(simulation_id):
             days = {}
             for row in cursor.fetchall():
                 day_data = dict(row)
-                days[day_data['date'].strftime('%Y-%m-%d')] = {
-                    'balance': day_data['balance'],
-                    'trades_count': day_data['trades_count'],
-                    'profit_loss': day_data['profit_loss'],
+                days[day_data["date"].strftime("%Y-%m-%d")] = {
+                    "balance": day_data["balance"],
+                    "trades_count": day_data["trades_count"],
+                    "profit_loss": day_data["profit_loss"],
                 }
 
-            simulation['daily_results'] = days
+            simulation["daily_results"] = days
             return simulation
     except Exception as e:
         print(f"Error retrieving simulation results: {str(e)}")
@@ -941,9 +885,9 @@ def get_available_strategies():
             # For now, just return the strategy name and path
             # In a real implementation, you might want to read additional metadata
             strategy_info = {
-                'name': strategy_name,
-                'path': path,
-                'config_options': get_strategy_config_options(strategy_name),
+                "name": strategy_name,
+                "path": path,
+                "config_options": get_strategy_config_options(strategy_name),
             }
             strategies.append(strategy_info)
 
@@ -961,35 +905,35 @@ def get_strategy_config_options(strategy_name):
     Returns:
         dict: Dictionary of configuration options and their default values
     """
-    if strategy_name == 'SPY_POWER_CASHFLOW':
+    if strategy_name == "SPY_POWER_CASHFLOW":
         return {
-            'symbol': 'SPY',
-            'buy_time': '9:35',
-            'sell_time': '15:45',
-            'stop_loss_pct': 0.50,
-            'take_profit_pct': 1.00,
-            'strategy_type': 'power_cashflow',
-            'option_type': 'call',
-            'dte_min': 1,
-            'dte_max': 5,
-            'delta_min': 0.40,
-            'delta_max': 0.60,
-            'commission': 0.65,
+            "symbol": "SPY",
+            "buy_time": "9:35",
+            "sell_time": "15:45",
+            "stop_loss_pct": 0.50,
+            "take_profit_pct": 1.00,
+            "strategy_type": "power_cashflow",
+            "option_type": "call",
+            "dte_min": 1,
+            "dte_max": 5,
+            "delta_min": 0.40,
+            "delta_max": 0.60,
+            "commission": 0.65,
         }
-    elif strategy_name == 'CCSPY':
+    elif strategy_name == "CCSPY":
         return {
-            'symbol': 'SPY',
-            'buy_time': '9:35',
-            'sell_time': '15:45',
-            'stop_loss_pct': 0.50,
-            'take_profit_pct': 1.00,
-            'strategy_type': 'ccspy',
-            'option_type': 'call',
-            'dte_min': 1,
-            'dte_max': 5,
-            'delta_min': 0.40,
-            'delta_max': 0.60,
-            'commission': 0.65,
+            "symbol": "SPY",
+            "buy_time": "9:35",
+            "sell_time": "15:45",
+            "stop_loss_pct": 0.50,
+            "take_profit_pct": 1.00,
+            "strategy_type": "ccspy",
+            "option_type": "call",
+            "dte_min": 1,
+            "dte_max": 5,
+            "delta_min": 0.40,
+            "delta_max": 0.60,
+            "commission": 0.65,
         }
     else:
         return {}

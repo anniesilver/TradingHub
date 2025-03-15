@@ -16,7 +16,7 @@ all: venv format lint test  ## Build all common targets
 format:  ## Format all python code
 	@echo "==> Formatting all python code"
 	@$(VENV_DIR)/bin/black . \
-		--line-length=79 \
+		--line-length=120 \
 		--skip-string-normalization
 	@$(VENV_DIR)/bin/isort . \
 		--profile black
@@ -26,13 +26,16 @@ lint:  ## Run static code analysis
 	@echo "==> Running static code analysis"
 	@echo "==> Running flake8 ..."
 	@$(VENV_DIR)/bin/flake8 . \
-		--exclude $(VENV_DIR)
+		--exclude $(VENV_DIR) \
+		--max-line-length 120
 	@echo "==> Running pylint ..."
 	@$(VENV_DIR)/bin/pylint . \
-		--ignore-paths $(VENV_DIR)
+		--ignore-paths $$(basename $(VENV_DIR)) \
+		--max-line-length 120
 	@echo "==> Running mypy ..."
 	@$(VENV_DIR)/bin/mypy . \
-		--exclude $(VENV_DIR)
+		--exclude $(VENV_DIR) \
+		--max-line-length 120
 
 .PHONY: venv
 venv:  ## kick off venv

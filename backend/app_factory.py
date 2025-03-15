@@ -18,15 +18,13 @@ def create_app():
     app = Flask(__name__)
 
     # Configure the app
-    app.config['SECRET_KEY'] = 'your-secret-key'  # Change in production
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
-        'DATABASE_URL',
-        'postgresql://trading_user:your_secure_password@localhost/trading_platform',
+    app.config["SECRET_KEY"] = "your-secret-key"  # Change in production
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+        "DATABASE_URL",
+        "postgresql://trading_user:your_secure_password@localhost/trading_platform",
     )
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['JWT_SECRET_KEY'] = (
-        'your-jwt-secret-key'  # Change in production
-    )
+    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["JWT_SECRET_KEY"] = "your-jwt-secret-key"  # Change in production
 
     # Initialize extensions with app
     db.init_app(app)
@@ -39,11 +37,7 @@ def create_app():
         app,
         origins=["http://localhost:3000"],
         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=[
-            "Content-Type",
-            "Authorization",
-            "Access-Control-Allow-Origin",
-        ],
+        allow_headers=["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
         supports_credentials=True,
         max_age=3600,
     )
@@ -57,48 +51,41 @@ def create_app():
         from routes.auth import auth_bp
         from routes.strategy import strategy_bp
 
-        app.register_blueprint(auth_bp, url_prefix='/api/auth')
-        app.register_blueprint(account_bp, url_prefix='/api/account')
-        app.register_blueprint(strategy_bp, url_prefix='/api/strategy')
+        app.register_blueprint(auth_bp, url_prefix="/api/auth")
+        app.register_blueprint(account_bp, url_prefix="/api/account")
+        app.register_blueprint(strategy_bp, url_prefix="/api/strategy")
 
         # Import strategy service
-        from services.strategy_service import (
-            init_database,
-            run_strategy_simulation,
-        )
+        from services.strategy_service import init_database, run_strategy_simulation
 
         # Create all tables
         db.create_all()
 
-        @app.route('/api/health')
+        @app.route("/api/health")
         def health_check():
             return {"status": "healthy"}
 
         # Add FastAPI-like routes for strategy simulation
-        @app.route('/', methods=['GET'])
+        @app.route("/", methods=["GET"])
         def read_root():
             return {"message": "Welcome to TradingHub API"}
 
-        @app.route('/api/strategies', methods=['GET'])
+        @app.route("/api/strategies", methods=["GET"])
         def get_strategies():
-            return {
-                "strategies": [
-                    {"id": "SPY_POWER_CASHFLOW", "name": "SPY Power Cashflow"}
-                ]
-            }
+            return {"strategies": [{"id": "SPY_POWER_CASHFLOW", "name": "SPY Power Cashflow"}]}
 
-        @app.route('/api/simulate', methods=['POST'])
+        @app.route("/api/simulate", methods=["POST"])
         def run_simulation():
             from flask import request
 
             data = request.get_json()
 
             results = run_strategy_simulation(
-                data['strategy_type'],
-                data['config'],
-                data['start_date'],
-                data['end_date'],
-                data.get('initial_balance', 10000.0),
+                data["strategy_type"],
+                data["config"],
+                data["start_date"],
+                data["end_date"],
+                data.get("initial_balance", 10000.0),
             )
 
             if not results:
