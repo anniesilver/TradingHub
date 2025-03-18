@@ -297,23 +297,24 @@ function Dashboard() {
       
       // Define the regex pattern for buy transactions at a higher scope so it's available throughout the function
       // This regex needs to match the EXACT format that's shown in the Trading Logs tab
-      // Based on the screenshot, the format is "Buy: 4272 shares at $103.64"
+      // Based on the screenshot, the format is "Buy: 382 shares at $560.77"
       const buySharesRegex = /Buy:\s+(\d+)\s+shares\s+at\s+\$([\d.]+)/i;
       
-      // Define other formats that might also be used
+      // Define other formats that might also be used for BUY transactions only
       const otherBuyPatterns = [
         /(?:buy|bought|purchase[d]?)(?:\s+|:\s*)(\d+)(?:\s+shares?)?(?:\s+of\s+[A-Z]+)?(?:\s+(?:at|@)\s+)?\$?([\d.]+)/i,
         /buy\s+transaction:\s+(\d+)\s+shares\s+@\s+\$([\d.]+)/i,
-        // Add specific 2007 format patterns
-        /wrote\s+(\d+)\s+calls?\s+at\s+\$([\d.]+)/i,
-        /wrote\s+(\d+)\s+[a-zA-Z]+\s+calls?\s+at\s+\$([\d.]+)/i,
-        // Generic pattern for any transaction with number and dollar amount
-        /(\d+)(?:\s+[a-zA-Z]+)?\s+at\s+\$([\d.]+)/i
       ];
       
       // Helper function to apply both patterns and get a match
       const getBuyMatch = (text) => {
         if (!text) return null;
+        
+        // Only match BUY transactions - check if text contains "buy" related terms first
+        const lowerText = text.toLowerCase();
+        if (!lowerText.includes('buy') && !lowerText.includes('bought') && !lowerText.includes('purchase')) {
+          return null;
+        }
         
         // Try main pattern first
         const mainMatch = text.match(buySharesRegex);
@@ -440,17 +441,19 @@ function Dashboard() {
           // In 2007 data, "wrote calls" pattern indicates a transaction
           const isOlderFormat = date.startsWith('2007-');
           if (isOlderFormat && tradingLog && !isBuySharesTransaction) {
-            if (tradingLog.toLowerCase().includes('wrote') || 
-                tradingLog.toLowerCase().includes('call')) {
-              console.log(`Detected older transaction format for date ${date}: "${tradingLog}"`);
+            // Only look for buy transactions in older format data, not "wrote calls"
+            if (tradingLog.toLowerCase().includes('buy') || 
+                tradingLog.toLowerCase().includes('bought') ||
+                tradingLog.toLowerCase().includes('purchase')) {
+              console.log(`Detected older buy transaction format for date ${date}: "${tradingLog}"`);
               // Try to extract numbers using more relaxed pattern
-              const callMatch = tradingLog.match(/(\d+)\s+calls?|contracts?/i);
+              const shareMatch = tradingLog.match(/(\d+)\s+shares?/i);
               const priceMatch = tradingLog.match(/\$([\d.]+)/i);
               
-              if (callMatch && callMatch[1]) {
-                buyShares = Number(callMatch[1]) || 0;
+              if (shareMatch && shareMatch[1]) {
+                buyShares = Number(shareMatch[1]) || 0;
                 isBuySharesTransaction = true;
-                console.log(`Extracted contract count: ${buyShares}`);
+                console.log(`Extracted share count: ${buyShares}`);
               }
               
               if (priceMatch && priceMatch[1]) {
@@ -592,9 +595,8 @@ function Dashboard() {
       console.log('Looking at all trading logs for buy-related content:');
       tradingLogs.forEach(entry => {
         if (entry.log.toLowerCase().includes('buy') || 
-            entry.log.toLowerCase().includes('transaction') || 
-            entry.log.toLowerCase().includes('purchased') || 
-            entry.log.toLowerCase().includes('shares')) {
+            entry.log.toLowerCase().includes('bought') || 
+            entry.log.toLowerCase().includes('purchased')) {
           console.log(`Potential buy transaction in log: "${entry.log}"`);
           
           // Test regex directly
@@ -623,7 +625,7 @@ function Dashboard() {
         
         // Try a more lenient pattern if no transactions were found
         console.log('Trying more lenient pattern to find buy transactions...');
-        const lenientPattern = /buy|bought|purchasing|purchase|acquire/i;
+        const lenientPattern = /buy|bought|purchasing|purchase|acquired/i;
         
         const buyLogEntries = tradingLogs.filter(entry => 
           lenientPattern.test(entry.log)
@@ -638,19 +640,24 @@ function Dashboard() {
         console.log('Trying direct pattern match for key buy formats:');
         const directMatches = [];
         tradingLogs.forEach(entry => {
-          // Use the same regex patterns we defined earlier
-          const directMatch = getBuyMatch(entry.log);
-          if (directMatch) {
-            console.log(`Direct match found in: "${entry.log}"`);
-            console.log(`  Shares: ${directMatch[1]}, Price: ${directMatch[2]}`);
-            
-            // Update the corresponding processed data entry
-            const dateMatch = processedData.findIndex(d => d.date === entry.date);
-            if (dateMatch >= 0) {
-              processedData[dateMatch].isBuySharesTransaction = true;
-              processedData[dateMatch].buyShares = Number(directMatch[1]);
-              processedData[dateMatch].buyPrice = Number(directMatch[2]);
-              directMatches.push(processedData[dateMatch]);
+          // Only try to match entries with buy-related terms
+          if (entry.log.toLowerCase().includes('buy') || 
+              entry.log.toLowerCase().includes('bought') ||
+              entry.log.toLowerCase().includes('purchase')) {
+            // Use the same regex patterns we defined earlier
+            const directMatch = getBuyMatch(entry.log);
+            if (directMatch) {
+              console.log(`Direct match found in: "${entry.log}"`);
+              console.log(`  Shares: ${directMatch[1]}, Price: ${directMatch[2]}`);
+              
+              // Update the corresponding processed data entry
+              const dateMatch = processedData.findIndex(d => d.date === entry.date);
+              if (dateMatch >= 0) {
+                processedData[dateMatch].isBuySharesTransaction = true;
+                processedData[dateMatch].buyShares = Number(directMatch[1]);
+                processedData[dateMatch].buyPrice = Number(directMatch[2]);
+                directMatches.push(processedData[dateMatch]);
+              }
             }
           }
         });
@@ -671,7 +678,11 @@ function Dashboard() {
         // Create a map of dates with buy-related terms
         const buyDates = new Set();
         tradingLogs.forEach(entry => {
-          if (/buy|bought|purchase|acquiring|acquired|invest/i.test(entry.log)) {
+          // Only include clear buy-related terms, not any transaction
+          if (/buy|bought|purchase|acquiring/i.test(entry.log) && 
+              !entry.log.toLowerCase().includes('wrote') && 
+              !entry.log.toLowerCase().includes('call expired') && 
+              !entry.log.toLowerCase().includes('assigned')) {
             buyDates.add(entry.date);
             console.log(`Marking date as buy transaction: ${entry.date}`);
           }
@@ -697,22 +708,7 @@ function Dashboard() {
       // Final fallback - if still no markers, add a few for visibility
       const updatedBuyTransactions = processedData.filter(item => item.isBuySharesTransaction);
       if (updatedBuyTransactions.length === 0 && processedData.length > 0) {
-        console.log('Still no buy transactions found, adding test markers');
-        
-        // Add markers at beginning, middle and near end
-        const addMarkerAt = (index) => {
-          if (index < processedData.length) {
-            processedData[index].isBuySharesTransaction = true;
-            processedData[index].buyShares = 100;
-            processedData[index].buyPrice = processedData[index].spy_value / 100;
-            console.log(`Added test marker at index ${index}, date: ${processedData[index].date}`);
-          }
-        };
-        
-        // Add 3 test markers - beginning, middle, and near end
-        addMarkerAt(5); // Near beginning
-        addMarkerAt(Math.floor(processedData.length / 2)); // Middle
-        addMarkerAt(processedData.length - 10); // Near end
+        console.log('No buy transactions found in trading logs. No markers will be displayed.');
       }
       
       // Analyze trading logs for "assigned" entries and calculate total cost
@@ -837,10 +833,6 @@ function Dashboard() {
         return total + (item.Premiums_Received || 0);
       }, 0);
       
-      console.log(`Total premiums received: $${totalPremiumsReceived.toFixed(2)}`);
-      
-      console.log('Final premium data with proper scaling (non-zero only):', filteredPremiumData);
-      console.log('Total premium data points:', filteredPremiumData.length);
       
       // Process interest data with error handling
       let filteredInterestData = [];
@@ -877,7 +869,6 @@ function Dashboard() {
           for (const field of possibleFields) {
             if (field in values && values[field] !== null) {
               interestValue = values[field];
-              console.log(`Found interest value for ${date} in field "${field}": ${interestValue}`);
               break; // Stop once we find a value
             }
           }
@@ -887,7 +878,6 @@ function Dashboard() {
             for (const key in values) {
               if (key.toLowerCase().includes('interest') && values[key] !== null) {
                 interestValue = values[key];
-                console.log(`Found interest value for ${date} via generic search in field "${key}": ${interestValue}`);
                 break;
               }
             }
@@ -899,16 +889,16 @@ function Dashboard() {
           };
         });
         
-        console.log('Raw interest data (before filtering):', interestData);
+
         
         // Check if we have any non-zero values
         const hasNonZeroInterestValues = interestData.some(item => item.Interest_Paid !== 0);
-        console.log('Has non-zero interest values:', hasNonZeroInterestValues);
+
         
         if (hasNonZeroInterestValues) {
           // Only filter if we have some non-zero values
           filteredInterestData = interestData.filter(item => item.Interest_Paid !== 0);
-          console.log('Using real interest data with filtering');
+
         } else {
           console.log('No non-zero interest values found in the data');
           
@@ -952,9 +942,7 @@ function Dashboard() {
       if (filteredPremiumData.length === 0) {
         console.log('No premium data found, creating varied test data');
       }
-      
-      console.log('Final premium data for chart:', filteredPremiumData);
-      console.log('Total premium data points:', filteredPremiumData.length);
+
       
       // Update state with all processed data
       setData({
@@ -1099,9 +1087,7 @@ function Dashboard() {
           <Typography variant="h6" gutterBottom>Error Processing Data</Typography>
           <Typography variant="body1">{error}</Typography>
           <Typography variant="body2" sx={{ mt: 1 }}>
-            {error.includes('2007') || config.startDate.startsWith('2007') ? 
-              "There may be issues processing older data formats. Try a more recent date range." : 
-              "Try adjusting parameters or selecting a different date range."}
+            Try adjusting parameters or selecting a different date range.
           </Typography>
         </Alert>
       </ErrorContainer>
@@ -1451,15 +1437,6 @@ function Dashboard() {
                 Strategy vs SPY Performance
               </Typography>
               
-              {/* Check if we have 2007 data and display special message */}
-              {data.chartData.some(item => item.date.startsWith('2007-')) && (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  <Typography variant="body2">
-                    <strong>Displaying historical data from 2007.</strong> This data may use different formatting and transaction types than more recent data.
-                  </Typography>
-                </Alert>
-              )}
-              
               {/* Custom legend for buy transaction markers */}
               <Box 
                 sx={{ 
@@ -1491,8 +1468,7 @@ function Dashboard() {
                     angle={-45}
                     textAnchor="end"
                     height={60}
-                    // For 2007 data, show fewer tick marks
-                    interval={data.chartData.some(item => item.date.startsWith('2007-')) ? 20 : 'preserveEnd'}
+                    interval="preserveEnd"
                   />
                   <YAxis 
                     domain={['auto', 'auto']}
