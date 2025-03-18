@@ -1734,6 +1734,32 @@ function Dashboard() {
               <Typography variant="h6" gutterBottom>
                 Trading Logs (Debug View)
               </Typography>
+              
+              {/* Add summary info boxes */}
+              <Box sx={{ mb: 3 }}>
+                {data.totalAssignedCost > 0 && (
+                  <Alert severity="info" sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2">
+                      Total cost of assigned options during test period: ${data.totalAssignedCost.toFixed(2)}
+                    </Typography>
+                  </Alert>
+                )}
+                {data.totalPremiumsReceived > 0 && (
+                  <Alert severity="success" sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2">
+                      Total premiums received during test period: ${data.totalPremiumsReceived.toFixed(2)}
+                    </Typography>
+                  </Alert>
+                )}
+                {data.totalInterestPaid > 0 && (
+                  <Alert severity="warning" sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2">
+                      Total interest paid during test period: ${data.totalInterestPaid.toFixed(2)}
+                    </Typography>
+                  </Alert>
+                )}
+              </Box>
+              
               {data.tradingLogs && data.tradingLogs.length > 0 ? (
                 <Box sx={{ mb: 2, maxHeight: '600px', overflowY: 'auto' }}>
                   {data.tradingLogs.map(({ date, log, isTransaction }) => (
@@ -1772,72 +1798,6 @@ function Dashboard() {
               )}
             </TabPanel>
           </Paper>
-        </Grid>
-
-        {/* Trading Logs */}
-        <Grid item xs={12}>
-          <StyledCard>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Trading Activity Log
-              </Typography>
-              {data.totalAssignedCost > 0 && (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">
-                    Total cost of assigned options during test period: ${data.totalAssignedCost.toFixed(2)}
-                  </Typography>
-                </Alert>
-              )}
-              {data.totalPremiumsReceived > 0 && (
-                <Alert severity="success" sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">
-                    Total premiums received during test period: ${data.totalPremiumsReceived.toFixed(2)}
-                  </Typography>
-                </Alert>
-              )}
-              <LogContainer>
-                {data.tradingLogs.map(({ date, log, isTransaction }) => (
-                  <Box 
-                    key={date} 
-                    mb={2} 
-                    p={1.5} 
-                    border={1} 
-                    borderRadius={1} 
-                    borderColor={log.toLowerCase().includes('assigned') ? "warning.main" : isTransaction ? "success.light" : "grey.300"}
-                    sx={{
-                      backgroundColor: log.toLowerCase().includes('assigned') ? "rgba(255, 244, 229, 0.2)" : 
-                                      isTransaction ? "rgba(232, 245, 233, 0.2)" : "transparent"
-                    }}
-                  >
-                    <Typography variant="subtitle2" color="primary" fontWeight="bold">
-                      Transaction Date: {date}
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary" sx={{ mt: 1, fontSize: '0.875rem' }}>
-                      {log}
-                    </Typography>
-                    {log.toLowerCase().includes('assigned') && log.toLowerCase().includes('cost') && (
-                      <Typography variant="body2" color="error" sx={{ mt: 0.5, fontWeight: 'bold' }}>
-                        ⚠️ Assigned Options Event
-                      </Typography>
-                    )}
-                    {isTransaction && !log.toLowerCase().includes('assigned') && (
-                      <Typography variant="body2" color="success.main" sx={{ mt: 0.5, fontWeight: 'bold' }}>
-                        {log.toLowerCase().includes('wrote') ? '📝 Option Written' : 
-                         log.toLowerCase().includes('buy') ? '🔼 Buy Transaction' : 
-                         log.toLowerCase().includes('sell') ? '🔽 Sell Transaction' : 
-                         '💼 Trading Activity'}
-                      </Typography>
-                    )}
-                  </Box>
-                ))}
-                {data.tradingLogs.length === 0 && (
-                  <Typography variant="body2" color="textSecondary">
-                    No trading activity in this period
-                  </Typography>
-                )}
-              </LogContainer>
-            </CardContent>
-          </StyledCard>
         </Grid>
       </Grid>
     </Root>
