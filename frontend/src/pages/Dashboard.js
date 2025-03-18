@@ -37,12 +37,12 @@ const Root = styled('div')(({ theme }) => ({
   padding: theme.spacing(3),
 }));
 
-const LoadingContainer = styled('div')({
+const LoadingContainer = styled('div')(({ theme }) => ({
   display: 'flex',
   justifyContent: 'center',
   alignItems: 'center',
   minHeight: '400px',
-});
+}));
 
 const ErrorContainer = styled('div')(({ theme }) => ({
   margin: theme.spacing(2),
@@ -143,12 +143,30 @@ const CustomTooltip = ({ active, payload, label }) => {
           borderLeft: '3px solid green',
           borderRadius: '2px'
         }}>
-          <p style={{ margin: '0', fontWeight: 'bold', color: 'green' }}>
-            Buy Transaction: {firstItem.buyShares} shares @ ${firstItem.buyPrice}
-          </p>
-          <p style={{ margin: '0', fontSize: '12px' }}>
-            Total: ${(firstItem.buyShares * firstItem.buyPrice).toFixed(2)}
-          </p>
+          {firstItem.tradingLogSummary ? (
+            <>
+              <p style={{ margin: '0', fontWeight: 'bold', color: 'green' }}>
+                Transaction Details:
+              </p>
+              <p style={{ margin: '2px 0', fontSize: '13px' }}>
+                {firstItem.tradingLogSummary}
+              </p>
+            </>
+          ) : (
+            <>
+              <p style={{ margin: '0', fontWeight: 'bold', color: 'green' }}>
+                {firstItem.isOlderFormat ? 
+                  `Transaction: ${firstItem.buyShares} @ $${firstItem.buyPrice}` :
+                  firstItem.tradingLogSummary && firstItem.tradingLogSummary.toLowerCase().includes('wrote') ? 
+                    `Wrote Calls: ${firstItem.buyShares} @ $${firstItem.buyPrice}` :
+                    `Buy Transaction: ${firstItem.buyShares} shares @ $${firstItem.buyPrice}`
+                }
+              </p>
+              <p style={{ margin: '0', fontSize: '12px' }}>
+                Total: ${(firstItem.buyShares * firstItem.buyPrice).toFixed(2)}
+              </p>
+            </>
+          )}
         </div>
       )}
       {payload.map((entry, index) => {
@@ -161,6 +179,11 @@ const CustomTooltip = ({ active, payload, label }) => {
                          entry.dataKey === "Interest_Paid" ? "Interest Paid" :
                          entry.dataKey === "Interests_Paid" ? "Interest Paid" :
                          entry.name;
+        
+        // Filter out undefined values
+        if (entry.value === undefined || entry.value === null) {
+          return null;
+        }
                          
         return (
           <p key={index} style={{ margin: '5px 0', color: entry.color }}>
@@ -170,7 +193,7 @@ const CustomTooltip = ({ active, payload, label }) => {
             })}
           </p>
         );
-      })}
+      }).filter(Boolean)}
     </div>
   );
 };
@@ -251,11 +274,96 @@ function Dashboard() {
 
   const processSimulationData = (results) => {
     try {
+      // Enhanced initial validation
+      if (results === null || results === undefined) {
+        console.error('⚠️ Simulation results are null or undefined');
+        throw new Error('No data received from simulation API');
+      }
+      
+      console.log('Raw results type:', typeof results);
+      console.log('Is results an array?', Array.isArray(results));
+      console.log('Results length or size:', Array.isArray(results) ? results.length : 
+                  (typeof results === 'object' ? Object.keys(results).length : 'N/A'));
+      
+      // If results is empty object or array
+      if ((typeof results === 'object' && Object.keys(results).length === 0) || 
+          (Array.isArray(results) && results.length === 0)) {
+        console.error('⚠️ Simulation results are empty (no data)');
+        throw new Error('Empty data received from simulation API');
+      }
+      
       // Enable this flag to turn off synthetic data generation (use only real data)
       const USE_ONLY_REAL_DATA = true; // Set to true to prevent using synthetic data
       
+      // Define the regex pattern for buy transactions at a higher scope so it's available throughout the function
+      // This regex needs to match the EXACT format that's shown in the Trading Logs tab
+      // Based on the screenshot, the format is "Buy: 4272 shares at $103.64"
+      const buySharesRegex = /Buy:\s+(\d+)\s+shares\s+at\s+\$([\d.]+)/i;
+      
+      // Define other formats that might also be used
+      const otherBuyPatterns = [
+        /(?:buy|bought|purchase[d]?)(?:\s+|:\s*)(\d+)(?:\s+shares?)?(?:\s+of\s+[A-Z]+)?(?:\s+(?:at|@)\s+)?\$?([\d.]+)/i,
+        /buy\s+transaction:\s+(\d+)\s+shares\s+@\s+\$([\d.]+)/i,
+        // Add specific 2007 format patterns
+        /wrote\s+(\d+)\s+calls?\s+at\s+\$([\d.]+)/i,
+        /wrote\s+(\d+)\s+[a-zA-Z]+\s+calls?\s+at\s+\$([\d.]+)/i,
+        // Generic pattern for any transaction with number and dollar amount
+        /(\d+)(?:\s+[a-zA-Z]+)?\s+at\s+\$([\d.]+)/i
+      ];
+      
+      // Helper function to apply both patterns and get a match
+      const getBuyMatch = (text) => {
+        if (!text) return null;
+        
+        // Try main pattern first
+        const mainMatch = text.match(buySharesRegex);
+        if (mainMatch) return mainMatch;
+        
+        // Try each alternative pattern
+        for (const pattern of otherBuyPatterns) {
+          const match = text.match(pattern);
+          if (match) return match;
+        }
+        
+        return null;
+      };
+      
       // Parse the results if it's a string
-      const parsedData = typeof results === 'string' ? JSON.parse(results) : results;
+      let parsedData;
+      try {
+        parsedData = typeof results === 'string' ? JSON.parse(results) : results;
+        console.log('Successfully parsed data');
+      } catch (parseError) {
+        console.error('Error parsing results:', parseError);
+        throw new Error('Failed to parse simulation results: ' + parseError.message);
+      }
+      
+      // Special handling for 2007 data format
+      // First, check if this is likely a 2007 dataset by looking at keys
+      const isOlderDataset = Object.keys(parsedData).some(key => key.startsWith('2007-'));
+      console.log('Is older dataset (2007):', isOlderDataset);
+      
+      if (isOlderDataset) {
+        console.log('Detected 2007 data format - applying special handling');
+        // Additional validation for older data
+        // Look for any suspicious data that needs normalization
+        Object.entries(parsedData).forEach(([date, values]) => {
+          // Ensure all required fields exist with fallbacks
+          parsedData[date] = {
+            // Required fields with fallbacks
+            Portfolio_Value: values.Portfolio_Value || values.portfolio_value || 0,
+            spy_value: values.spy_value || values.SPY_value || values.spy_Value || 0,
+            Margin_Ratio: values.Margin_Ratio || values.margin_ratio || 0,
+            Cash_Balance: values.Cash_Balance || values.cash_balance || 0,
+            Trading_Log: values.Trading_Log || values.trading_log || '',
+            // Handle different naming conventions for these fields
+            Premiums_Received: values.Premiums_Received || values.Premium_Received || values.premium || 0,
+            Interest_Paid: values.Interest_Paid || values.Interests_Paid || values.interest_paid || 0,
+            // Keep all original values for debugging
+            ...values
+          };
+        });
+      }
       
       // EXTENSIVE DEBUG: Dump full structure of the first few entries
       console.log('========== DETAILED API RESPONSE DEBUGGING ==========');
@@ -279,104 +387,239 @@ function Dashboard() {
             console.log('Second date:', secondDate);
             console.log('Fields in second entry:', Object.keys(secondEntry));
           }
-          
-          // Look for ANY field that might contain interest information
-          console.log('Searching for ANY interest-related fields...');
-          const interestKeywords = ['interest', 'Interest', 'INTEREST', 'cost', 'Cost', 'COST', 'paid', 'Paid', 'PAID'];
-          
-          const possibleInterestFields = [];
-          Object.keys(firstEntry).forEach(key => {
-            if (interestKeywords.some(keyword => key.includes(keyword))) {
-              possibleInterestFields.push(key);
-              console.log(`Found possible interest field: "${key}" with value:`, firstEntry[key]);
-            }
-          });
-          
-          console.log('All possible interest-related fields found:', possibleInterestFields);
-          
-          // Check first 5 entries for interest data presence
-          console.log('Checking first 5 entries for interest data presence:');
-          entries.slice(0, 5).forEach(([date, data], index) => {
-            console.log(`Entry ${index + 1} (${date}):`);
-            possibleInterestFields.forEach(field => {
-              if (field in data) {
-                console.log(`  ${field}: ${data[field]}`);
-              } else {
-                console.log(`  ${field}: not present`);
-              }
-            });
-          });
         }
       }
       console.log('================ END DEBUGGING ================');
       
-      // Extract raw data for February 2017 (the first month)
-      const feb2017Data = {};
-      Object.entries(parsedData)
-        .filter(([date, _]) => date.startsWith('2017-02'))
-        .forEach(([date, values]) => {
-          feb2017Data[date] = {
-            Trading_Log: values.Trading_Log || '',
-            Portfolio_Value: values.Portfolio_Value,
-            Cash_Balance: values.Cash_Balance,
-            Margin_Ratio: values.Margin_Ratio,
-            Premiums_Received: values.Premiums_Received || 0,
-            spy_value: values.spy_value
-          };
-        });
+      // Extract raw data for first month (if it exists)
+      const firstMonthData = {};
+      // Find the first month in the data
+      const sortedDates = Object.keys(parsedData).sort();
+      if (sortedDates.length > 0) {
+        const firstDate = sortedDates[0];
+        const firstMonth = firstDate.substring(0, 7); // YYYY-MM
+        
+        Object.entries(parsedData)
+          .filter(([date, _]) => date.startsWith(firstMonth))
+          .forEach(([date, values]) => {
+            firstMonthData[date] = {
+              Trading_Log: values.Trading_Log || '',
+              Portfolio_Value: values.Portfolio_Value || 0,
+              Cash_Balance: values.Cash_Balance || 0,
+              Margin_Ratio: values.Margin_Ratio || 0,
+              Premiums_Received: values.Premiums_Received || 0,
+              spy_value: values.spy_value || 0
+            };
+          });
+      }
       
       // CRITICAL CHANGE: Process main data first to avoid reference errors
       // Convert the data into arrays for the main charts
-      const processedData = Object.entries(parsedData).map(([date, values]) => {
-        const tradingLog = values.Trading_Log || '';
-        const hasBuy = tradingLog.toLowerCase().includes('buy');
-        const hasSell = tradingLog.toLowerCase().includes('sell');
-        
-        // Parse the trading log to find share purchases with improved regex
-        // This will match variations like:
-        // - Buy 100 shares at $200.50
-        // - BUY 10 shares of SPY at $450.75
-        // - Bought 5 shares @ $350
-        // - Purchased 20 shares at $410.25
-        // - Buy 50 @ $275.00
-        const buySharesRegex = /(?:buy|bought|purchase[d]?)\s+(\d+)(?:\s+shares?)?(?:\s+of\s+[A-Z]+)?(?:\s+(?:at|@)\s+)?\$?([\d\.]+)/i;
-        const buyMatch = tradingLog.match(buySharesRegex);
-        const isBuySharesTransaction = buyMatch !== null;
-        
-        return {
-          date,
-          Portfolio_Value: Number(values.Portfolio_Value) || 0,
-          spy_value: Number(values.spy_value) || 0,
-          Margin_Ratio: Number(values.Margin_Ratio) || 0,
-          Cash_Balance: Number(values.Cash_Balance) || 0,
-          hasBuy,
-          hasSell,
-          isBuySharesTransaction,
-          buyShares: isBuySharesTransaction ? Number(buyMatch[1]) : 0,
-          buyPrice: isBuySharesTransaction ? Number(buyMatch[2]) : 0
-        };
-      }).sort((a, b) => new Date(a.date) - new Date(b.date));
-      
-      // Extract trading logs where actual trading happened
-      const tradingLogs = Object.entries(parsedData)
-        .filter(([date, values]) => {
-          // Only include entries with non-empty trading logs
-          return values.Trading_Log && values.Trading_Log.trim() !== '';
-        })
-        .map(([date, values]) => {
+      let processedData = [];
+      try {
+        processedData = Object.entries(parsedData).map(([date, values]) => {
+          // Safely access trading log with fallback
+          const tradingLog = values.Trading_Log || '';
+          
+          // Handle different Trading_Log formats, especially for older dates
+          let buyShares = 0;
+          let buyPrice = 0;
+          let isBuySharesTransaction = false;
+          
+          // Parse the trading log to find share purchases using our helper function
+          const match = getBuyMatch(tradingLog);
+          isBuySharesTransaction = match !== null;
+          
+          // Extract the share count and price from the matched pattern
+          if (match) {
+            buyShares = Number(match[1]) || 0;
+            buyPrice = Number(match[2]) || 0;
+          }
+          
+          // Special handling for older data formats (2007)
+          // In 2007 data, "wrote calls" pattern indicates a transaction
+          const isOlderFormat = date.startsWith('2007-');
+          if (isOlderFormat && tradingLog && !isBuySharesTransaction) {
+            if (tradingLog.toLowerCase().includes('wrote') || 
+                tradingLog.toLowerCase().includes('call')) {
+              console.log(`Detected older transaction format for date ${date}: "${tradingLog}"`);
+              // Try to extract numbers using more relaxed pattern
+              const callMatch = tradingLog.match(/(\d+)\s+calls?|contracts?/i);
+              const priceMatch = tradingLog.match(/\$([\d.]+)/i);
+              
+              if (callMatch && callMatch[1]) {
+                buyShares = Number(callMatch[1]) || 0;
+                isBuySharesTransaction = true;
+                console.log(`Extracted contract count: ${buyShares}`);
+              }
+              
+              if (priceMatch && priceMatch[1]) {
+                buyPrice = Number(priceMatch[1]) || 0;
+                console.log(`Extracted price: $${buyPrice}`);
+              }
+              
+              if (buyShares > 0 || buyPrice > 0) {
+                console.log(`Set as buyTransaction: ${buyShares} @ $${buyPrice}`);
+                isBuySharesTransaction = true;
+              }
+            }
+          }
+          
+          // For older data (2007), ensure we handle null/undefined values properly
           return {
             date,
-            log: values.Trading_Log
+            Portfolio_Value: Number(values.Portfolio_Value || 0),
+            spy_value: Number(values.spy_value || 0),
+            Margin_Ratio: Number(values.Margin_Ratio || 0),
+            Cash_Balance: Number(values.Cash_Balance || 0),
+            Premiums_Received: Number(values.Premiums_Received || 0),
+            Interest_Paid: Number(values.Interest_Paid || values.Interests_Paid || 0), // Handle both spellings
+            isBuySharesTransaction,
+            buyShares: buyShares,
+            buyPrice: buyPrice,
+            tradingLogSummary: tradingLog,
+            isOlderFormat: isOlderFormat  // Flag older format for UI
           };
-        })
-        .sort((a, b) => new Date(b.date) - new Date(a.date));
+        }).sort((a, b) => new Date(a.date) - new Date(b.date));
+        console.log('Successfully processed main data:', processedData.length, 'entries');
+      } catch (dataError) {
+        console.error('Error processing main chart data:', dataError);
+        console.error('Sample data that caused error:', 
+          Object.entries(parsedData).slice(0, 2).map(([date, values]) => ({ 
+            date, 
+            keys: Object.keys(values),
+            sample: values 
+          }))
+        );
+        
+        // FALLBACK: Create minimal processed data - attempt to recover
+        try {
+          console.log('Attempting fallback data processing with minimal fields');
+          processedData = Object.entries(parsedData).map(([date, values]) => {
+            // Extremely simplified data processing
+            return {
+              date,
+              Portfolio_Value: typeof values.Portfolio_Value === 'number' ? values.Portfolio_Value : 0,
+              spy_value: typeof values.spy_value === 'number' ? values.spy_value : 0,
+              Margin_Ratio: typeof values.Margin_Ratio === 'number' ? values.Margin_Ratio : 0,
+              Cash_Balance: typeof values.Cash_Balance === 'number' ? values.Cash_Balance : 0,
+              tradingLogSummary: typeof values.Trading_Log === 'string' ? values.Trading_Log : ''
+            };
+          }).sort((a, b) => new Date(a.date) - new Date(b.date));
+          
+          console.log('Fallback processing successful with', processedData.length, 'entries');
+        } catch (fallbackError) {
+          console.error('Even fallback processing failed:', fallbackError);
+          processedData = [];
+          throw new Error('Failed to process chart data even with fallback mechanism: ' + dataError.message);
+        }
+      }
+      
+      // Extract trading logs where actual trading happened
+      let tradingLogs = [];
+      try {
+        tradingLogs = Object.entries(parsedData)
+          .filter(([date, values]) => {
+            // Only include entries with non-empty trading logs
+            const log = values.Trading_Log || '';
+            
+            // For 2007 data, include logs with specific keywords
+            const isOlderFormat = date.startsWith('2007-');
+            if (isOlderFormat) {
+              return log.trim() !== '' && (
+                log.toLowerCase().includes('wrote') || 
+                log.toLowerCase().includes('call') || 
+                log.toLowerCase().includes('transaction') || 
+                log.toLowerCase().includes('buy') || 
+                log.toLowerCase().includes('sell') ||
+                log.toLowerCase().includes('premium')
+              );
+            }
+            
+            // Default behavior for newer data
+            return log.trim() !== '';
+          })
+          .map(([date, values]) => {
+            const log = values.Trading_Log || '';
+            
+            // For 2007 data, enhance the log display if needed
+            const isOlderFormat = date.startsWith('2007-');
+            if (isOlderFormat && log.includes('wrote')) {
+              // Add more context for older format logs to make them more readable
+              if (!log.toLowerCase().includes('premium') && values.Premiums_Received) {
+                return {
+                  date,
+                  log: `${log} (Premium received: $${values.Premiums_Received.toFixed(2)})`,
+                  isTransaction: true
+                };
+              }
+            }
+            
+            // Check if this log contains a transaction for display highlighting
+            const isTransaction = log.toLowerCase().includes('buy') || 
+                               log.toLowerCase().includes('sell') || 
+                               log.toLowerCase().includes('wrote') || 
+                               log.toLowerCase().includes('call');
+            
+            return {
+              date,
+              log,
+              isTransaction
+            };
+          })
+          .sort((a, b) => new Date(b.date) - new Date(a.date));
+        console.log('Successfully extracted trading logs:', tradingLogs.length);
+      } catch (logsError) {
+        console.error('Error extracting trading logs:', logsError);
+        // Continue without trading logs instead of failing completely
+        tradingLogs = [];
+        console.log('Continuing without trading logs due to error');
+      }
       
       // Debug: Log detected buy transactions
       const buyTransactions = processedData.filter(item => item.isBuySharesTransaction);
       console.log('Detected buy transactions:', buyTransactions.length);
+      
+      // Log the actual buyTransactions data for verification
+      if (buyTransactions.length > 0) {
+        console.log('Successfully detected buy transactions:');
+        buyTransactions.forEach(transaction => {
+          console.log(`[${transaction.date}] ${transaction.buyShares} shares @ $${transaction.buyPrice} - From log: "${transaction.tradingLogSummary}"`);
+        });
+      }
+      
+      // Enhanced logging of trading logs that might be buy transactions
+      console.log('Looking at all trading logs for buy-related content:');
+      tradingLogs.forEach(entry => {
+        if (entry.log.toLowerCase().includes('buy') || 
+            entry.log.toLowerCase().includes('transaction') || 
+            entry.log.toLowerCase().includes('purchased') || 
+            entry.log.toLowerCase().includes('shares')) {
+          console.log(`Potential buy transaction in log: "${entry.log}"`);
+          
+          // Test regex directly
+          const matchResult = entry.log.match(buySharesRegex);
+          console.log(`  Match result:`, matchResult);
+          
+          // If not matched, try to identify why
+          if (!matchResult) {
+            console.log(`  Investigating why no match: Does it contain 'buy'?`, entry.log.toLowerCase().includes('buy'));
+            console.log(`  Does it contain 'shares'?`, entry.log.toLowerCase().includes('shares'));
+            console.log(`  Does it contain a number?`, /\d+/.test(entry.log));
+            console.log(`  Does it contain a price with $ sign?`, /\$\d+/.test(entry.log));
+          }
+        }
+      });
+      
       if (buyTransactions.length === 0) {
         console.log('WARNING: No buy transactions detected in trading logs.');
         console.log('Sample trading logs:', tradingLogs.slice(0, 5).map(entry => entry.log));
+        
+        // Additional debugging: Test regex directly against sample logs
+        tradingLogs.slice(0, 5).forEach(entry => {
+          const testMatch = entry.log.match(buySharesRegex);
+          console.log(`Testing log: "${entry.log}" - Match result:`, testMatch);
+        });
         
         // Try a more lenient pattern if no transactions were found
         console.log('Trying more lenient pattern to find buy transactions...');
@@ -390,6 +633,31 @@ function Dashboard() {
         buyLogEntries.forEach(entry => {
           console.log(`[${entry.date}] ${entry.log}`);
         });
+        
+        // Direct targeting of the specific format from the screenshot
+        console.log('Trying direct pattern match for key buy formats:');
+        const directMatches = [];
+        tradingLogs.forEach(entry => {
+          // Use the same regex patterns we defined earlier
+          const directMatch = getBuyMatch(entry.log);
+          if (directMatch) {
+            console.log(`Direct match found in: "${entry.log}"`);
+            console.log(`  Shares: ${directMatch[1]}, Price: ${directMatch[2]}`);
+            
+            // Update the corresponding processed data entry
+            const dateMatch = processedData.findIndex(d => d.date === entry.date);
+            if (dateMatch >= 0) {
+              processedData[dateMatch].isBuySharesTransaction = true;
+              processedData[dateMatch].buyShares = Number(directMatch[1]);
+              processedData[dateMatch].buyPrice = Number(directMatch[2]);
+              directMatches.push(processedData[dateMatch]);
+            }
+          }
+        });
+        
+        if (directMatches.length > 0) {
+          console.log(`Found ${directMatches.length} direct matches`);
+        }
       } else {
         buyTransactions.forEach(transaction => {
           console.log(`[${transaction.date}] Buy ${transaction.buyShares} shares @ $${transaction.buyPrice}`);
@@ -503,6 +771,20 @@ function Dashboard() {
                                
             const contractsMatch = tradingLog.match(/(\d+)\s*calls?/i) || 
                                  tradingLog.match(/(\d+)\s*puts?/i);
+                                 
+            // Use extracted values if found
+            if (premiumMatch && premiumMatch[1]) {
+              premiumValue = parseFloat(premiumMatch[1]);
+              
+              // Adjust premium based on number of contracts if available
+              if (contractsMatch && contractsMatch[1]) {
+                const numContracts = parseInt(contractsMatch[1], 10);
+                if (!isNaN(numContracts) && numContracts > 0) {
+                  console.log(`Adjusting premium by number of contracts: ${numContracts}`);
+                  premiumValue *= numContracts;
+                }
+              }
+            }
           }
         }
         
@@ -685,7 +967,7 @@ function Dashboard() {
         premiumData: filteredPremiumData,
         interestData: filteredInterestData,
         tradingLogs: tradingLogs,
-        firstMonthRawData: feb2017Data,
+        firstMonthRawData: firstMonthData,
         totalAssignedCost,
         totalPremiumsReceived,
         totalInterestPaid
@@ -695,7 +977,19 @@ function Dashboard() {
       return true;
     } catch (error) {
       console.error('Error processing simulation data:', error);
-      setError('Failed to process simulation data');
+      console.error('Error stack:', error.stack);
+      console.error('Error occurred in processSimulationData function');
+      
+      // Check if the error is related to parsing JSON
+      if (error instanceof SyntaxError && error.message.includes('JSON')) {
+        console.error('JSON parsing error - invalid data format received from API');
+        setError('Failed to process simulation data: Invalid data format');
+      } else {
+        // Set a more descriptive error message if possible
+        const errorMessage = error.message || 'Unknown error';
+        setError(`Failed to process simulation data: ${errorMessage}`);
+      }
+      
       return false;
     }
   };
@@ -716,7 +1010,15 @@ function Dashboard() {
       });
       
       console.log('Simulation API response received');
-      processSimulationData(results);
+      const processSuccess = processSimulationData(results);
+      
+      if (!processSuccess) {
+        console.error('Failed to process simulation data - processSimulationData returned false');
+        if (!error) {
+          // Only set this error if another specific error hasn't been set
+          setError('Failed to process simulation data');
+        }
+      }
     } catch (err) {
       console.error('Error in handleRunSimulation:', err);
       setError(err.response?.data?.error || err.message || 'Failed to run simulation');
@@ -731,6 +1033,7 @@ function Dashboard() {
   }, []);
 
   // Helper function to extract first month with trading activity
+  // eslint-disable-next-line no-unused-vars
   const extractFirstMonthWithTrading = (data) => {
     // Convert data to array of [date, values] pairs and sort by date
     const sortedEntries = Object.entries(data)
@@ -772,7 +1075,35 @@ function Dashboard() {
   if (error) {
     return (
       <ErrorContainer>
-        <Alert severity="error">{error}</Alert>
+        <Alert severity="error" 
+          action={
+            <Button 
+              color="inherit" 
+              size="small"
+              onClick={() => {
+                // Reset error and set default dates
+                setError(null);
+                setConfig(prev => ({
+                  ...prev,
+                  startDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 90 days ago
+                  endDate: new Date().toISOString().split('T')[0] // Today
+                }));
+                // Wait for state update then run simulation
+                setTimeout(() => handleRunSimulation(), 100);
+              }}
+            >
+              Try Recent Data
+            </Button>
+          }
+        >
+          <Typography variant="h6" gutterBottom>Error Processing Data</Typography>
+          <Typography variant="body1">{error}</Typography>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            {error.includes('2007') || config.startDate.startsWith('2007') ? 
+              "There may be issues processing older data formats. Try a more recent date range." : 
+              "Try adjusting parameters or selecting a different date range."}
+          </Typography>
+        </Alert>
       </ErrorContainer>
     );
   }
@@ -1120,6 +1451,15 @@ function Dashboard() {
                 Strategy vs SPY Performance
               </Typography>
               
+              {/* Check if we have 2007 data and display special message */}
+              {data.chartData.some(item => item.date.startsWith('2007-')) && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Displaying historical data from 2007.</strong> This data may use different formatting and transaction types than more recent data.
+                  </Typography>
+                </Alert>
+              )}
+              
               {/* Custom legend for buy transaction markers */}
               <Box 
                 sx={{ 
@@ -1136,7 +1476,7 @@ function Dashboard() {
                   <polygon points="8,0 16,16 0,16" fill="green" />
                 </svg>
                 <Typography variant="body2">
-                  Green triangles mark days when shares were purchased on the SPY Buy & Hold line (extracted from Trading Log)
+                  Green triangles mark days when shares were purchased or options were written (extracted from Trading Log)
                 </Typography>
               </Box>
               
@@ -1151,6 +1491,8 @@ function Dashboard() {
                     angle={-45}
                     textAnchor="end"
                     height={60}
+                    // For 2007 data, show fewer tick marks
+                    interval={data.chartData.some(item => item.date.startsWith('2007-')) ? 20 : 'preserveEnd'}
                   />
                   <YAxis 
                     domain={['auto', 'auto']}
@@ -1418,10 +1760,10 @@ function Dashboard() {
               </Typography>
               {data.tradingLogs && data.tradingLogs.length > 0 ? (
                 <Box sx={{ mb: 2, maxHeight: '600px', overflowY: 'auto' }}>
-                  {data.tradingLogs.map((entry, index) => (
-                    <Paper key={index} sx={{ p: 2, mb: 1, bgcolor: entry.log.toLowerCase().includes('buy') ? 'rgba(0, 255, 0, 0.05)' : 'white' }}>
-                      <Typography variant="subtitle2" gutterBottom color="primary">
-                        {entry.date}
+                  {data.tradingLogs.map(({ date, log, isTransaction }) => (
+                    <Paper key={date} sx={{ p: 2, mb: 1, bgcolor: log.toLowerCase().includes('assigned') ? "rgba(255, 244, 229, 0.2)" : isTransaction ? "rgba(232, 245, 233, 0.2)" : "white" }}>
+                      <Typography variant="subtitle2" gutterBottom color="primary" fontWeight="bold">
+                        Transaction Date: {date}
                       </Typography>
                       <Typography variant="body2" component="pre" sx={{ 
                         whiteSpace: 'pre-wrap', 
@@ -1429,11 +1771,19 @@ function Dashboard() {
                         fontFamily: 'monospace',
                         fontSize: '0.85rem'
                       }}>
-                        {entry.log}
+                        {log}
                       </Typography>
-                      {entry.log.toLowerCase().includes('buy') && (
-                        <Typography variant="caption" sx={{ mt: 1, color: 'green', display: 'block' }}>
-                          ⚠️ Contains "buy" - check if pattern matched correctly
+                      {log.toLowerCase().includes('assigned') && log.toLowerCase().includes('cost') && (
+                        <Typography variant="body2" color="error" sx={{ mt: 0.5, fontWeight: 'bold' }}>
+                          ⚠️ Assigned Options Event
+                        </Typography>
+                      )}
+                      {isTransaction && !log.toLowerCase().includes('assigned') && (
+                        <Typography variant="body2" color="success.main" sx={{ mt: 0.5, fontWeight: 'bold' }}>
+                          {log.toLowerCase().includes('wrote') ? '📝 Option Written' : 
+                           log.toLowerCase().includes('buy') ? '🔼 Buy Transaction' : 
+                           log.toLowerCase().includes('sell') ? '🔽 Sell Transaction' : 
+                           '💼 Trading Activity'}
                         </Typography>
                       )}
                     </Paper>
@@ -1470,16 +1820,17 @@ function Dashboard() {
                 </Alert>
               )}
               <LogContainer>
-                {data.tradingLogs.map(({ date, log }) => (
+                {data.tradingLogs.map(({ date, log, isTransaction }) => (
                   <Box 
                     key={date} 
                     mb={2} 
                     p={1.5} 
                     border={1} 
                     borderRadius={1} 
-                    borderColor={log.toLowerCase().includes('assigned') ? "warning.main" : "grey.300"}
+                    borderColor={log.toLowerCase().includes('assigned') ? "warning.main" : isTransaction ? "success.light" : "grey.300"}
                     sx={{
-                      backgroundColor: log.toLowerCase().includes('assigned') ? "rgba(255, 244, 229, 0.2)" : "transparent"
+                      backgroundColor: log.toLowerCase().includes('assigned') ? "rgba(255, 244, 229, 0.2)" : 
+                                      isTransaction ? "rgba(232, 245, 233, 0.2)" : "transparent"
                     }}
                   >
                     <Typography variant="subtitle2" color="primary" fontWeight="bold">
@@ -1491,6 +1842,14 @@ function Dashboard() {
                     {log.toLowerCase().includes('assigned') && log.toLowerCase().includes('cost') && (
                       <Typography variant="body2" color="error" sx={{ mt: 0.5, fontWeight: 'bold' }}>
                         ⚠️ Assigned Options Event
+                      </Typography>
+                    )}
+                    {isTransaction && !log.toLowerCase().includes('assigned') && (
+                      <Typography variant="body2" color="success.main" sx={{ mt: 0.5, fontWeight: 'bold' }}>
+                        {log.toLowerCase().includes('wrote') ? '📝 Option Written' : 
+                         log.toLowerCase().includes('buy') ? '🔼 Buy Transaction' : 
+                         log.toLowerCase().includes('sell') ? '🔽 Sell Transaction' : 
+                         '💼 Trading Activity'}
                       </Typography>
                     )}
                   </Box>

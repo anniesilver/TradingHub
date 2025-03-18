@@ -142,6 +142,32 @@ export const runSimulation = async (config) => {
       throw new Error('No data received from simulation');
     }
     
+    // Additional validation of the response data
+    if (typeof response.data === 'object') {
+      // Check if the data object has any entries
+      const dataSize = Object.keys(response.data).length;
+      console.log(`Response data contains ${dataSize} entries`);
+      
+      if (dataSize === 0) {
+        throw new Error('Simulation returned empty data object');
+      }
+      
+      // Check a few expected fields in the first entry
+      const firstEntryKey = Object.keys(response.data)[0];
+      if (firstEntryKey) {
+        const firstEntry = response.data[firstEntryKey];
+        console.log('First entry sample:', firstEntry);
+        
+        // Check for required fields
+        const requiredFields = ['Portfolio_Value', 'spy_value', 'Margin_Ratio'];
+        const missingFields = requiredFields.filter(field => !(field in firstEntry));
+        
+        if (missingFields.length > 0) {
+          console.warn(`Missing expected fields in response data: ${missingFields.join(', ')}`);
+        }
+      }
+    }
+    
     console.log('Simulation response:', response.data);
     return response.data;
   } catch (error) {

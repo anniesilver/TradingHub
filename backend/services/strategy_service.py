@@ -3,6 +3,7 @@ import os
 import sys
 
 import pandas as pd
+import numpy as np  # Add numpy import for isinf function
 import psycopg2
 from dotenv import load_dotenv
 from psycopg2.extras import DictCursor, Json
@@ -577,57 +578,158 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
         # Process results
         daily_results = {}
         if results_df is not None and not results_df.empty:
-            print(f"Results DataFrame columns: {results_df.columns.tolist()}")
+            print(f"Original Results DataFrame columns: {results_df.columns.tolist()}")
+            
+            # Make a copy to avoid modifying the original
+            cleaned_df = results_df.copy()
 
             # Ensure the index is datetime
-            if not isinstance(results_df.index, pd.DatetimeIndex):
-                results_df.index = pd.to_datetime(results_df.index)
+            if not isinstance(cleaned_df.index, pd.DatetimeIndex):
+                cleaned_df.index = pd.to_datetime(cleaned_df.index)
+
+            # Clean DataFrame to handle NaN and Inf values
+            print("Cleaning DataFrame of NaN and Infinity values")
+            cleaned_df = cleaned_df.replace([float('inf'), float('-inf')], 0)
+            cleaned_df = cleaned_df.fillna(0)  # Replace NaN with zeros
+            
+            # Normalize column names (replace spaces with underscores)
+            print("Normalizing column names")
+            cleaned_df.columns = [col.replace(' ', '_') for col in cleaned_df.columns]
+            
+            # Print normalized column names for debugging
+            print(f"Normalized DataFrame columns: {cleaned_df.columns.tolist()}")
 
             # Calculate SPY buy & hold value using Close prices from results_df
             # New approach: Calculate shares purchased on first day, then keep that constant
-            first_day_close = results_df["Close"].iloc[0]
+            first_day_close = cleaned_df["Close"].iloc[0]
             initial_cash = strategy_config.INITIAL_CASH
-            spy_shares_bought = initial_cash / first_day_close
+            spy_shares_bought = initial_cash / first_day_close if first_day_close > 0 else 0
             print(
-                f"SPY Buy & Hold: Initial cash ${initial_cash}, first day close ${first_day_close}, "
-                "shares bought {spy_shares_bought}"
+                f"SPY Buy & Hold: Initial cash ${initial_cash:.2f}, first day close ${first_day_close:.2f}, "
+                f"shares bought {spy_shares_bought:.2f}"
             )
 
             # Calculate daily value based on fixed shares
-            spy_values = results_df["Close"] * spy_shares_bought
+            spy_values = cleaned_df["Close"] * spy_shares_bought
 
             # Only include actual trading days - exclude weekends and holidays
-            trading_days = results_df.index.tolist()
+            trading_days = cleaned_df.index.tolist()
 
-            for idx, row in results_df.iterrows():
+            # Define helper functions for safe value conversion
+            def safe_float(value, default=0.0, decimal_places=4):
+                """
+                Safely convert a value to a float with specified decimal places.
+                Returns default if value is NaN, Inf, or cannot be converted.
+                """
+                try:
+                    val = float(value)
+                    # Check for infinity or NaN using numpy instead of pandas
+                    if pd.isna(val) or np.isinf(val):
+                        print(f"Warning: Detected NaN or Inf value: {value}, using default {default}")
+                        return default
+                    # Round to specified decimal places
+                    return round(val, decimal_places)
+                except (ValueError, TypeError) as e:
+                    print(f"Warning: Error converting value to float: {value}, {str(e)}, using default {default}")
+                    return default
+            
+            def safe_int(value, default=0):
+                """
+                Safely convert a value to an integer.
+                Returns default if value is NaN or cannot be converted.
+                """
+                try:
+                    val = int(float(value))  # Convert to float first in case it's a float string
+                    if pd.isna(val):
+                        print(f"Warning: Detected NaN value for int conversion: {value}, using default {default}")
+                        return default
+                    return val
+                except (ValueError, TypeError) as e:
+                    print(f"Warning: Error converting value to int: {value}, {str(e)}, using default {default}")
+                    return default
+            
+            # Function to get value from row with multiple possible column names
+            def get_column_value(row_data, possible_names, default=0):
+                """
+                Try multiple possible column names to get a value from a DataFrame row.
+                Returns default if none of the column names exist.
+                """
+                # Convert Series index to list for easier checking
+                available_columns = list(row_data.index)
+                
+                for name in possible_names:
+                    if name in available_columns:
+                        val = row_data.get(name, default)
+                        # Print for debugging on first row
+                        if row_data.name == cleaned_df.index[0]:
+                            print(f"Found column '{name}' with value: {val}")
+                        return val
+                
+                # If we get here, none of the columns were found
+                if row_data.name == cleaned_df.index[0]:
+                    print(f"Warning: None of the columns {possible_names} found, using default {default}")
+                return default
+
+            print("\n=== Processing daily results ===")
+            for idx, row in cleaned_df.iterrows():
                 # Skip dates that aren't in the original DataFrame
                 if idx not in trading_days:
                     continue
 
                 date_str = idx.strftime("%Y-%m-%d")
-                # Map simulator output fields to frontend expected fields
-                daily_results[date_str] = {
-                    "Portfolio_Value": float(row.get("Portfolio_Value", 0)),
-                    "Cash_Balance": float(row.get("Cash_Balance", 0)),
-                    "Close": float(row.get("Close", 0)),
-                    "Margin_Ratio": float(row.get("Margin_Ratio", 0)),
-                    "spy_value": float(spy_values.get(idx, 0)),
-                    "Interest_Paid": float(row.get("Interests_Paid", 0)),
-                    "Premiums_Received": float(row.get("Premiums_Received", 0)),
-                    "Commissions_Paid": float(row.get("Commissions_Paid", 0)),
-                    "Open_Positions": int(row.get("Open_Positions", 0)),
-                    "Closed_Positions": int(row.get("Closed_Positions", 0)),
-                    "Open": float(row.get("Open", 0)),
-                    "High": float(row.get("High", 0)),
-                    "Low": float(row.get("Low", 0)),
-                    "VIX": float(row.get("VIX", 0)),
-                    "Trading_Log": str(row.get("Trading_Log", "")),
+                
+                # Map simulator output fields to frontend expected fields with safe conversion
+                # We check for multiple possible column names since the DataFrame may use different formats
+                result_dict = {
+                    "Portfolio_Value": safe_float(get_column_value(row, ["Portfolio_Value", "Portfolio Value", "portfolio_value"]), 0.0),
+                    "Cash_Balance": safe_float(get_column_value(row, ["Cash_Balance", "Cash Balance", "cash_balance"]), 0.0),
+                    "Close": safe_float(row.get("Close", 0.0)),
+                    "Margin_Ratio": safe_float(get_column_value(row, ["Margin_Ratio", "Margin Ratio", "margin_ratio"]), 0.0),
+                    "spy_value": safe_float(spy_values.get(idx, 0.0)),
+                    "Interest_Paid": safe_float(get_column_value(row, ["Interest_Paid", "Interests_Paid", "Interests Paid", "interests_paid"]), 0.0),
+                    "Premiums_Received": safe_float(get_column_value(row, ["Premiums_Received", "Premiums Received", "premiums_received"]), 0.0),
+                    "Commissions_Paid": safe_float(get_column_value(row, ["Commissions_Paid", "Commissions Paid", "commissions_paid"]), 0.0),
+                    "Open_Positions": safe_int(get_column_value(row, ["Open_Positions", "Open Positions", "open_positions"]), 0),
+                    "Closed_Positions": safe_int(get_column_value(row, ["Closed_Positions", "Closed Positions", "closed_positions"]), 0),
+                    "Open": safe_float(row.get("Open", 0.0)),
+                    "High": safe_float(row.get("High", 0.0)),
+                    "Low": safe_float(row.get("Low", 0.0)),
+                    "VIX": safe_float(row.get("VIX", 0.0)),
+                    "Trading_Log": str(get_column_value(row, ["Trading_Log", "Trading Log", "trading_log"], "")),
                 }
+                
+                # Add to daily results
+                daily_results[date_str] = result_dict
+                
+                # Print the first day's data for debugging
+                if idx == cleaned_df.index[0]:
+                    print("First day data sample (after processing):")
+                    for k, v in result_dict.items():
+                        print(f"  {k}: {v}")
+
+            print(f"Processed {len(daily_results)} days of data")
+            
+            # Verify there's no NaN or Infinity in the results
+            print("Verifying no NaN or Infinity values in the final results...")
+            for date_str, data in daily_results.items():
+                for key, value in data.items():
+                    if isinstance(value, (int, float)) and (pd.isna(value) or np.isinf(value)):
+                        print(f"Warning: Found invalid value in final results: {key}={value} for date {date_str}")
+                        # Fix the value
+                        if key in ["Open_Positions", "Closed_Positions"]:
+                            daily_results[date_str][key] = 0
+                        else:
+                            daily_results[date_str][key] = 0.0
+
+        else:
+            print("Warning: No results data returned from strategy simulation")
 
         return daily_results
 
     except Exception as e:
         print(f"Error in run_spy_power_cashflow: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
         raise
     finally:
         sys.path = original_path
@@ -725,44 +827,143 @@ def run_ccspy_strategy(TradingSimulator, OptionStrategy, config, start_dt, end_d
         # Process results
         daily_results = {}
         if results_df is not None and not results_df.empty:
-            print(f"Results DataFrame columns: {results_df.columns.tolist()}")
+            print(f"Original Results DataFrame columns: {results_df.columns.tolist()}")
+            
+            # Make a copy to avoid modifying the original
+            cleaned_df = results_df.copy()
 
             # Ensure the index is datetime
-            if not isinstance(results_df.index, pd.DatetimeIndex):
-                results_df.index = pd.to_datetime(results_df.index)
+            if not isinstance(cleaned_df.index, pd.DatetimeIndex):
+                cleaned_df.index = pd.to_datetime(cleaned_df.index)
+                
+            # Clean DataFrame to handle NaN and Inf values
+            print("Cleaning DataFrame of NaN and Infinity values")
+            cleaned_df = cleaned_df.replace([float('inf'), float('-inf')], 0)
+            cleaned_df = cleaned_df.fillna(0)  # Replace NaN with zeros
+            
+            # Normalize column names (replace spaces with underscores)
+            print("Normalizing column names")
+            cleaned_df.columns = [col.replace(' ', '_') for col in cleaned_df.columns]
+            
+            # Print normalized column names for debugging
+            print(f"Normalized DataFrame columns: {cleaned_df.columns.tolist()}")
 
             # Calculate SPY buy & hold value using Close prices from results_df
             # New approach: Calculate shares purchased on first day, then keep that constant
-            first_day_close = results_df["Close"].iloc[0]
-            # spy_shares_bought = initial_balance / first_day_close
+            first_day_close = cleaned_df["Close"].iloc[0]
+            initial_cash = float(initial_balance) if initial_balance is not None else strategy_config.INITIAL_CASH
+            spy_shares_bought = initial_cash / first_day_close if first_day_close > 0 else 0
             print(
-                f"CCSPY - SPY Buy & Hold: Initial cash ${initial_balance}, first day close ${first_day_close}, "
-                "shares bought {spy_shares_bought}"
+                f"CCSPY - SPY Buy & Hold: Initial cash ${initial_cash:.2f}, first day close ${first_day_close:.2f}, "
+                f"shares bought {spy_shares_bought:.2f}"
             )
 
             # Calculate daily value based on fixed shares
             # spy_values = results_df["Close"] * spy_shares_bought
 
             # Only include actual trading days - exclude weekends and holidays
-            trading_days = results_df.index.tolist()
+            trading_days = cleaned_df.index.tolist()
+            
+            # Define helper functions for safe value conversion
+            def safe_float(value, default=0.0, decimal_places=4):
+                """
+                Safely convert a value to a float with specified decimal places.
+                Returns default if value is NaN, Inf, or cannot be converted.
+                """
+                try:
+                    val = float(value)
+                    # Check for infinity or NaN using numpy instead of pandas
+                    if pd.isna(val) or np.isinf(val):
+                        print(f"Warning: Detected NaN or Inf value: {value}, using default {default}")
+                        return default
+                    # Round to specified decimal places
+                    return round(val, decimal_places)
+                except (ValueError, TypeError) as e:
+                    print(f"Warning: Error converting value to float: {value}, {str(e)}, using default {default}")
+                    return default
+            
+            def safe_int(value, default=0):
+                """
+                Safely convert a value to an integer.
+                Returns default if value is NaN or cannot be converted.
+                """
+                try:
+                    val = int(float(value))  # Convert to float first in case it's a float string
+                    if pd.isna(val):
+                        print(f"Warning: Detected NaN value for int conversion: {value}, using default {default}")
+                        return default
+                    return val
+                except (ValueError, TypeError) as e:
+                    print(f"Warning: Error converting value to int: {value}, {str(e)}, using default {default}")
+                    return default
+                
+            # Function to get value from row with multiple possible column names
+            def get_column_value(row_data, possible_names, default=0):
+                """
+                Try multiple possible column names to get a value from a DataFrame row.
+                Returns default if none of the column names exist.
+                """
+                # Convert Series index to list for easier checking
+                available_columns = list(row_data.index)
+                
+                for name in possible_names:
+                    if name in available_columns:
+                        val = row_data.get(name, default)
+                        # Print for debugging on first row
+                        if row_data.name == cleaned_df.index[0]:
+                            print(f"Found column '{name}' with value: {val}")
+                        return val
+                
+                # If we get here, none of the columns were found
+                if row_data.name == cleaned_df.index[0]:
+                    print(f"Warning: None of the columns {possible_names} found, using default {default}")
+                return default
 
-            for idx, row in results_df.iterrows():
+            print("\n=== Processing daily results ===")
+            for idx, row in cleaned_df.iterrows():
                 # Skip dates that aren't in the original DataFrame
                 if idx not in trading_days:
                     continue
 
                 date_str = idx.strftime("%Y-%m-%d")
-                daily_results[date_str] = {
-                    "balance": float(row.get("balance", row.get("portfolio_value", 0))),
-                    "trades_count": int(row.get("trades_count", 0)),
-                    "profit_loss": float(row.get("profit_loss", row.get("daily_pnl", 0))),
+                
+                # Create result dictionary with safe conversions
+                result_dict = {
+                    "balance": safe_float(get_column_value(row, ["balance", "portfolio_value", "Balance", "Portfolio_Value"]), 0.0),
+                    "trades_count": safe_int(get_column_value(row, ["trades_count", "Trades_Count", "trades_count"]), 0),
+                    "profit_loss": safe_float(get_column_value(row, ["profit_loss", "daily_pnl", "Profit_Loss", "Daily_PnL"]), 0.0),
                 }
+                
+                # Add to daily results
+                daily_results[date_str] = result_dict
+                
+                # Print the first day's data for debugging
+                if idx == cleaned_df.index[0]:
+                    print("First day data sample (after processing):")
+                    for k, v in result_dict.items():
+                        print(f"  {k}: {v}")
+            
+            print(f"Processed {len(daily_results)} days of data")
+            
+            # Verify there's no NaN or Infinity in the results
+            print("Verifying no NaN or Infinity values in the final results...")
+            for date_str, data in daily_results.items():
+                for key, value in data.items():
+                    if isinstance(value, (int, float)) and (pd.isna(value) or np.isinf(value)):
+                        print(f"Warning: Found invalid value in final results: {key}={value} for date {date_str}")
+                        # Fix the value
+                        if key == "trades_count":
+                            daily_results[date_str][key] = 0
+                        else:
+                            daily_results[date_str][key] = 0.0
         else:
             print("Warning: No results data returned from strategy simulation")
 
         return daily_results
     except Exception as e:
         print(f"Error in run_ccspy_strategy: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
         raise
     finally:
         sys.path = original_path
