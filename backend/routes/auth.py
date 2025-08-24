@@ -1,6 +1,6 @@
 import datetime
 
-from app import db
+from app_factory import db
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import (
     create_access_token,

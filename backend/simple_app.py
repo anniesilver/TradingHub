@@ -8,6 +8,7 @@ from datetime import datetime
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from services.strategy_service import import_strategy, run_spy_power_cashflow
+from routes.market_data import market_data_bp
 
 
 def is_port_in_use(port):
@@ -26,6 +27,9 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
+
+# Register blueprints
+app.register_blueprint(market_data_bp)
 
 
 @app.before_request

@@ -1,6 +1,17 @@
 import os
 
+from dotenv import load_dotenv
 from flask import Flask
+
+# Load environment variables
+env_path = os.path.join(os.path.dirname(__file__), "services", ".env")
+if os.path.exists(env_path):
+    load_dotenv(dotenv_path=env_path)
+else:
+    # Try loading from project root
+    root_env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+    if os.path.exists(root_env_path):
+        load_dotenv(dotenv_path=root_env_path)
 from flask_bcrypt import Bcrypt
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -19,10 +30,15 @@ def create_app():
 
     # Configure the app
     app.config["SECRET_KEY"] = "your-secret-key"  # Change in production
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
-        "DATABASE_URL",
-        "postgresql://trading_user:your_secure_password@localhost/trading_platform",
-    )
+    # Database configuration from environment variables
+    db_name = os.environ.get("DB_NAME", "tradinghub")
+    db_user = os.environ.get("DB_USER", "postgres")
+    db_password = os.environ.get("DB_PASSWORD", "your_password")
+    db_host = os.environ.get("DB_HOST", "localhost")
+    db_port = os.environ.get("DB_PORT", "5432")
+    
+    database_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", database_url)
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["JWT_SECRET_KEY"] = "your-jwt-secret-key"  # Change in production
 

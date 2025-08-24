@@ -13,6 +13,7 @@ Flask-JWT-Extended==4.7.1
 Flask-Migrate==4.1.0
 Flask-SQLAlchemy==3.1.1
 fonttools==4.56.0
+ibapi==9.81.1.post1
 idna==3.10
 importlib_metadata==8.6.1
 importlib_resources==6.5.2

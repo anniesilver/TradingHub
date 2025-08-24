@@ -467,11 +467,8 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
             sys.path.insert(0, strategy_path)
             print(f"Temporarily added {strategy_path} to sys.path")
 
-        # Import required modules using importlib
-        spec = importlib.util.spec_from_file_location("market_data", os.path.join(strategy_path, "market_data.py"))
-        market_data_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(market_data_module)
-        MarketData = market_data_module.MarketData
+        # Import enhanced market data class with IBKR integration
+        from enhanced_market_data import EnhancedMarketData as MarketData
 
         spec = importlib.util.spec_from_file_location("position", os.path.join(strategy_path, "position.py"))
         position_module = importlib.util.module_from_spec(spec)
@@ -745,11 +742,8 @@ def run_ccspy_strategy(TradingSimulator, OptionStrategy, config, start_dt, end_d
             sys.path.insert(0, strategy_path)
             print(f"Temporarily added {strategy_path} to sys.path")
 
-        # Import required modules using importlib
-        spec = importlib.util.spec_from_file_location("market_data", os.path.join(strategy_path, "market_data.py"))
-        market_data_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(market_data_module)
-        MarketData = market_data_module.MarketData
+        # Import enhanced market data class with IBKR integration
+        from enhanced_market_data import EnhancedMarketData as MarketData
 
         spec = importlib.util.spec_from_file_location("position", os.path.join(strategy_path, "position.py"))
         position_module = importlib.util.module_from_spec(spec)
