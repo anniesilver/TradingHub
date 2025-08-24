@@ -2,7 +2,7 @@
 
 import os
 import sys
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -154,7 +154,7 @@ class EnhancedMarketData:
         return float(self.data.loc[date, 'VIX'])
 
     def get_data_for_range(
-        self, start_date: Optional[pd.Timestamp] = None, end_date: Optional[pd.Timestamp] = None
+        self, start_date: Optional[Union[pd.Timestamp, str]] = None, end_date: Optional[Union[pd.Timestamp, str]] = None
     ) -> pd.DataFrame:
         """Get data for a specific date range
 
@@ -166,8 +166,16 @@ class EnhancedMarketData:
             pd.DataFrame: Filtered data for the specified date range
         """
         # Convert timestamps to strings for the load_data method
-        start_str = start_date.strftime("%Y-%m-%d") if start_date else None
-        end_str = end_date.strftime("%Y-%m-%d") if end_date else None
+        # Handle both string and datetime inputs
+        if isinstance(start_date, str):
+            start_str = start_date
+        else:
+            start_str = start_date.strftime("%Y-%m-%d") if start_date else None
+            
+        if isinstance(end_date, str):
+            end_str = end_date
+        else:
+            end_str = end_date.strftime("%Y-%m-%d") if end_date else None
         
         # Load data for the specific range
         if not self._data_loaded or start_str or end_str:

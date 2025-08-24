@@ -118,10 +118,10 @@ class IBKRDataClient(EWrapper, EClient):
                 contract.exchange = 'CBOE'
                 data_type = "TRADES"
             else:
-                # For normal tickers like SPY - use TRADES since MIDPOINT needs market data subscription
+                # For normal tickers like SPY - use MIDPOINT for STK securities
                 contract.secType = 'STK'
                 contract.exchange = 'SMART'
-                data_type = "TRADES"
+                data_type = "MIDPOINT"
             
             # Initialize variable to store candle (exactly like loading_data.py)
             self.data = []
@@ -307,8 +307,20 @@ class IBKRDataService:
                 start_dt = pd.to_datetime(start_date)
                 end_dt = pd.to_datetime(end_date)
                 
-                # Check if we have data for the full range
-                if df.index.min() <= start_dt and df.index.max() >= end_dt:
+                logger.info(f"DB coverage check - DB range: {df.index.min()} to {df.index.max()}")
+                logger.info(f"Requested range: {start_dt} to {end_dt}")
+                
+                # Check if we have data for the full range, accounting for weekends/holidays
+                # Allow for reasonable gaps at the start/end due to non-trading days
+                
+                # Check if DB start is within 5 days of requested start (handles weekends/holidays)
+                start_gap_days = (df.index.min() - start_dt).days
+                end_gap_days = (end_dt - df.index.max()).days
+                
+                logger.info(f"Gap analysis - Start gap: {start_gap_days} days, End gap: {end_gap_days} days")
+                
+                # Allow up to 5 days gap for weekends/holidays at start and end
+                if start_gap_days >= -5 and start_gap_days <= 5 and end_gap_days >= -5 and end_gap_days <= 5:
                     logger.info(f"Complete data found in DB for {symbol}")
                     return df[start_dt:end_dt]
             
