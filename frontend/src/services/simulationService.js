@@ -66,7 +66,7 @@ export const getSimulations = async (limit = 10, offset = 0) => {
  * @param {number} config.dipTrigger - Dip trigger threshold (default: 0.92)
  * @param {number} config.initialPositionPercent - Initial position percentage (default: 0.6)
  * @param {number} config.marginInterestRate - Margin interest rate (default: 0.06)
- * @param {number} config.maxMarginRatio - Maximum margin ratio (default: 2)
+ * @param {number} config.maxMarginRatio - Maximum leverage ratio (position_value/account_value) (default: 2)
  * @param {number} config.maxPositionSize - Maximum position size (default: 10000)
  * @param {number} config.minCommission - Minimum commission (default: 1.0)
  * @param {number} config.minStrikeDistance - Minimum strike distance (default: 0.015)

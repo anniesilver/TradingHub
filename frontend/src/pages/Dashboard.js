@@ -1272,7 +1272,7 @@ function Dashboard() {
               fullWidth
               size="small"
               type="number"
-              label="Max Margin Ratio"
+              label="Max Leverage Ratio"
               name="maxMarginRatio"
               value={config.maxMarginRatio}
               onChange={handleConfigChange}
