@@ -77,7 +77,9 @@ def run_strategy(user_product_id):
     # Get simulation parameters from request
     data = request.get_json() or {}
     start_date = data.get("start_date")
-    end_date = data.get("end_date", datetime.now().strftime("%Y-%m-%d"))
+    # Use yesterday's date to avoid issues when market is open (no close data for today yet)
+    yesterday = datetime.now() - timedelta(days=1)
+    end_date = data.get("end_date", yesterday.strftime("%Y-%m-%d"))
 
     # If no start date provided, use the latest record date + 1 day or purchase date
     if not start_date:

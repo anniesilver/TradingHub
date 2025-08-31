@@ -35,7 +35,9 @@ def get_data_status(symbol):
     try:
         # Get date range from query parameters
         start_date = request.args.get('start_date', '2015-01-01')
-        end_date = request.args.get('end_date', datetime.now().strftime('%Y-%m-%d'))
+        # Use yesterday's date to avoid issues when market is open (no close data for today yet)
+        yesterday = datetime.now() - timedelta(days=1)
+        end_date = request.args.get('end_date', yesterday.strftime('%Y-%m-%d'))
         
         # Check what data we have in the database
         df = ibkr_service.get_data_from_db(symbol.upper(), start_date, end_date)

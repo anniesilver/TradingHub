@@ -116,4 +116,44 @@ TradingHub is a web-based platform for running trading strategy simulations, vis
 
 - **Port Conflicts:** If port 8080 or 3000 is already in use, check running processes and terminate any conflicting services.
 
+## Strategy Parameters
+
+TradingHub provides extensive customization through advanced strategy parameters. Below is a comprehensive guide to all available parameters:
+
+### Basic Configuration
+- **Symbol** (default: 'SPY') - The trading symbol/ticker for the underlying asset
+- **Option Type** (default: 'call') - Type of options to trade (call or put)
+- **Initial Balance** (default: $200,000) - Starting cash amount for the simulation
+
+### Position Management Parameters
+- **Initial Position Percent** (default: 0.6 = 60%) - Percentage of available cash to use for initial stock position
+- **Dip Buy Percent** (default: 0.4 = 40%) - Additional percentage of cash to deploy when buying dips
+- **Dip Trigger** (default: 0.92 = 92%) - Price threshold (as ratio of recent high) that triggers dip buying
+- **Max Position Size** (default: 10,000) - Maximum number of shares that can be held
+- **Min Trade Size** (default: 1,000) - Minimum dollar amount for a trade to be executed
+
+### Options Parameters
+- **Call Cost Buffer** (default: 0.05 = 5%) - Safety buffer added to call option cost calculations
+- **Contract Size** (default: 100) - Number of shares per options contract (standard is 100)
+- **Covered Call Ratio** (default: 1.0 = 100%) - Ratio of covered calls to write relative to stock position
+- **Min Strike Distance** (default: 0.015 = 1.5%) - Minimum distance between current price and option strike price
+
+### Risk Management Parameters
+- **Max Leverage Ratio** (default: 2.0 = 2:1) - Maximum leverage ratio (position_value/account_value)
+  - 2.0 = 2:1 leverage = 50% margin requirement (Reg T compliant)
+  - IBKR allows up to 4:1 leverage (25% margin) for liquid stocks like SPY
+- **Margin Interest Rate** (default: 0.06 = 6%) - Annual interest rate charged on borrowed funds
+- **Risk Free Rate** (default: 0.05 = 5%) - Risk-free interest rate for option pricing models
+
+### Trading Costs
+- **Stock Commission** (default: $0.01) - Commission per share for stock trades
+- **Option Commission** (default: $0.65) - Commission per options contract
+- **Min Commission** (default: $1.00) - Minimum commission charged per trade
+
+### Cash Management
+- **Monthly Withdrawal** (default: $5,000) - Fixed monthly cash withdrawal amount
+
+### Volatility Parameters
+- **Volatility Scaling Factor** (default: 0.15 = 15%) - Factor used to scale VIX volatility for option pricing
+
 ## Project Structure

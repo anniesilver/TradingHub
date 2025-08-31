@@ -40,7 +40,9 @@ class EnhancedMarketData:
             if start_date is None:
                 start_date = "2015-01-01"  # 10 years of data
             if end_date is None:
-                end_date = pd.Timestamp.now().strftime("%Y-%m-%d")
+                # Use yesterday's date to avoid issues when market is open (no close data for today yet)
+                yesterday = pd.Timestamp.now() - pd.Timedelta(days=1)
+                end_date = yesterday.strftime("%Y-%m-%d")
 
             print(f"Loading data for {self.symbol} from {start_date} to {end_date}")
 
