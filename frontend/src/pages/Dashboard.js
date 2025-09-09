@@ -16,6 +16,12 @@ import {
   Tabs,
   Tab,
   Paper,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  Divider,
+  Drawer,
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import {
@@ -33,6 +39,21 @@ import {
 import { runSimulation } from '../services/simulationService';
 
 const Root = styled('div')(({ theme }) => ({
+  display: 'flex',
+  flexGrow: 1,
+}));
+
+const StrategyDrawer = styled(Drawer)(({ theme }) => ({
+  width: 280,
+  flexShrink: 0,
+  '& .MuiDrawer-paper': {
+    width: 280,
+    boxSizing: 'border-box',
+    position: 'relative',
+  },
+}));
+
+const MainContent = styled('div')(({ theme }) => ({
   flexGrow: 1,
   padding: theme.spacing(3),
 }));
@@ -198,9 +219,23 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
+const AVAILABLE_STRATEGIES = [
+  {
+    id: 'SPY_POWER_CASHFLOW',
+    name: 'SPY Power Cashflow',
+    description: 'Original covered call strategy with leveraged positions'
+  },
+  {
+    id: 'SPY_ENHANCED_CASHFLOW',
+    name: 'SPY Enhanced Cashflow',
+    description: 'Enhanced strategy with intelligent dip buying and defensive overlays'
+  }
+];
+
 function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedStrategy, setSelectedStrategy] = useState('SPY_POWER_CASHFLOW');
   const [data, setData] = useState({
     chartData: [],
     marginData: [],
@@ -994,7 +1029,7 @@ function Dashboard() {
       
       const results = await runSimulation({
         ...config,
-        strategyId: 'SPY_POWER_CASHFLOW'
+        strategyId: selectedStrategy
       });
       
       console.log('Simulation API response received');
@@ -1018,7 +1053,7 @@ function Dashboard() {
   useEffect(() => {
     handleRunSimulation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedStrategy]);
 
   // Helper function to extract first month with trading activity
   // eslint-disable-next-line no-unused-vars
@@ -1094,16 +1129,71 @@ function Dashboard() {
     );
   }
 
+  const handleStrategyChange = (strategyId) => {
+    setSelectedStrategy(strategyId);
+    setLoading(true);
+    setError(null);
+  };
+
+  const selectedStrategyInfo = AVAILABLE_STRATEGIES.find(s => s.id === selectedStrategy);
+
   return (
     <Root>
-      <Box mb={4}>
-        <Typography variant="h4" gutterBottom>
-          Trading Strategy Performance
-        </Typography>
-        <Typography variant="subtitle1" color="textSecondary">
-          Strategy: SPY Power Cashflow
-        </Typography>
-      </Box>
+      {/* Strategy Selection Sidebar */}
+      <StrategyDrawer variant="permanent">
+        <Box sx={{ p: 2 }}>
+          <Typography variant="h6" gutterBottom>
+            Trading Strategies
+          </Typography>
+          <List>
+            {AVAILABLE_STRATEGIES.map((strategy) => (
+              <ListItem key={strategy.id} disablePadding>
+                <ListItemButton
+                  selected={selectedStrategy === strategy.id}
+                  onClick={() => handleStrategyChange(strategy.id)}
+                  sx={{
+                    borderRadius: 1,
+                    mb: 1,
+                    '&.Mui-selected': {
+                      backgroundColor: 'primary.main',
+                      color: 'primary.contrastText',
+                      '&:hover': {
+                        backgroundColor: 'primary.dark',
+                      }
+                    }
+                  }}
+                >
+                  <ListItemText
+                    primary={strategy.name}
+                    secondary={strategy.description}
+                    secondaryTypographyProps={{
+                      sx: { 
+                        fontSize: '0.75rem',
+                        color: selectedStrategy === strategy.id ? 'primary.contrastText' : 'text.secondary'
+                      }
+                    }}
+                  />
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </List>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="body2" color="textSecondary">
+            Select a strategy to view its performance metrics and configure parameters.
+          </Typography>
+        </Box>
+      </StrategyDrawer>
+
+      {/* Main Content */}
+      <MainContent>
+        <Box mb={4}>
+          <Typography variant="h4" gutterBottom>
+            Trading Strategy Performance
+          </Typography>
+          <Typography variant="subtitle1" color="textSecondary">
+            Strategy: {selectedStrategyInfo?.name || 'Unknown Strategy'}
+          </Typography>
+        </Box>
 
       {/* Configuration Form */}
       <Box component="form" mb={3}>
@@ -1800,6 +1890,7 @@ function Dashboard() {
           </Paper>
         </Grid>
       </Grid>
+      </MainContent>
     </Root>
   );
 }
