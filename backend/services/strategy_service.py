@@ -467,8 +467,8 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
             sys.path.insert(0, strategy_path)
             print(f"Temporarily added {strategy_path} to sys.path")
 
-        # Import enhanced market data class with IBKR integration
-        from enhanced_market_data import EnhancedMarketData as MarketData
+        # Import unified market data class with database-first approach
+        from market_data import MarketData
 
         spec = importlib.util.spec_from_file_location("position", os.path.join(strategy_path, "position.py"))
         position_module = importlib.util.module_from_spec(spec)
@@ -551,6 +551,11 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
         print("\n=== Initializing MarketData ===")
         market_data = MarketData(symbol=strategy_config.SYMBOL)
         print(f"MarketData symbol: {market_data.symbol}")
+
+        # Load data with user-specified date range
+        print(f"Loading market data for date range: {start_date} to {end_date}")
+        market_data.load_data(start_date=start_date, end_date=end_date)
+        print(f"Market data loaded successfully")
 
         print("\n=== Initializing PositionTracker ===")
         position = PositionTracker(strategy_config.INITIAL_CASH, strategy_config)
@@ -742,8 +747,8 @@ def run_ccspy_strategy(TradingSimulator, OptionStrategy, config, start_dt, end_d
             sys.path.insert(0, strategy_path)
             print(f"Temporarily added {strategy_path} to sys.path")
 
-        # Import enhanced market data class with IBKR integration
-        from enhanced_market_data import EnhancedMarketData as MarketData
+        # Import unified market data class with database-first approach
+        from market_data import MarketData
 
         spec = importlib.util.spec_from_file_location("position", os.path.join(strategy_path, "position.py"))
         position_module = importlib.util.module_from_spec(spec)
@@ -811,6 +816,16 @@ def run_ccspy_strategy(TradingSimulator, OptionStrategy, config, start_dt, end_d
 
         # Initialize components
         market_data = MarketData(symbol=strategy_config.SYMBOL)
+
+        # Convert datetime objects to string dates for market data loading
+        start_date = start_dt.strftime("%Y-%m-%d")
+        end_date = end_dt.strftime("%Y-%m-%d")
+
+        # Load data with user-specified date range
+        print(f"Loading market data for date range: {start_date} to {end_date}")
+        market_data.load_data(start_date=start_date, end_date=end_date)
+        print(f"Market data loaded successfully")
+
         position = PositionTracker(strategy_config.INITIAL_CASH, strategy_config)
         strategy = OptionStrategy(strategy_config)
 
