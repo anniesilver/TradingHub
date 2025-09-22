@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Read(/C:\\algo\\algo_trading\\SPY_POWER_CASHFLOW/**)",
-      "Read(/C:\\algo\\algo_trading\\SPY_POWER_CASHFLOW/**)"
+      "Read(/C:\\algo\\algo_trading\\SPY_POWER_CASHFLOW/**)",
+      "Read(//c/ALGO/TradingHub/backend/services/**)",
+      "Read(//c/ALGO/TradingHub/backend/**)",
+      "Read(//c/ALGO/algo_trading/SPY_ENHANCED_CASHFLOW/**)"
     ],
     "deny": [],
     "ask": []

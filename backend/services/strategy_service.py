@@ -33,7 +33,6 @@ ALGO_BASE_PATH = os.environ.get("ALGO_BASE_PATH", "C:/ALGO/algo_trading")
 # Dictionary of available strategies
 STRATEGY_PATHS = {
     "SPY_POWER_CASHFLOW": os.path.join(ALGO_BASE_PATH, "SPY_POWER_CASHFLOW"),
-    "CCSPY": os.path.join(ALGO_BASE_PATH, "CCSPY"),
 }
 
 # Add all strategy paths to sys.path for importing
@@ -223,42 +222,6 @@ def import_strategy(strategy_type):
                 return TradingSimulator, OptionStrategy, True
             except Exception as e:
                 print(f"Detailed import error: {str(e)}")
-                raise
-        elif strategy_type == "CCSPY":
-            try:
-                # Try explicit imports with full path
-                print(f"Importing from {path}")
-                sys.path.insert(0, path)
-
-                # Look for the module files explicitly
-                module_files = os.listdir(path)
-                print(f"Files in strategy directory: {module_files}")
-
-                # Import with more verbose error handling
-                try:
-                    from trading_simulator import TradingSimulator
-
-                    print("Successfully imported TradingSimulator for CCSPY")
-                except ImportError as e:
-                    print(f"Failed to import TradingSimulator for CCSPY: {str(e)}")
-                    raise
-
-                try:
-                    from option_strategy import OptionStrategy
-
-                    print("Successfully imported OptionStrategy for CCSPY")
-                except ImportError as e:
-                    print(f"Failed to import OptionStrategy for CCSPY: {str(e)}")
-                    raise
-
-                strategy_modules[strategy_type] = (
-                    TradingSimulator,
-                    OptionStrategy,
-                    True,
-                )
-                return TradingSimulator, OptionStrategy, True
-            except Exception as e:
-                print(f"Detailed import error for CCSPY: {str(e)}")
                 raise
 
         print(f"Could not import strategy modules for {strategy_type}")
@@ -468,7 +431,14 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
             print(f"Temporarily added {strategy_path} to sys.path")
 
         # Import unified market data class with database-first approach
-        from market_data import MarketData
+        # Use explicit path-based import to avoid conflict with strategy's local MarketData
+        import importlib.util
+        current_services_path = os.path.dirname(__file__)
+        market_data_path = os.path.join(current_services_path, "market_data.py")
+        spec = importlib.util.spec_from_file_location("unified_market_data", market_data_path)
+        unified_market_data_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(unified_market_data_module)
+        MarketData = unified_market_data_module.MarketData
 
         spec = importlib.util.spec_from_file_location("position", os.path.join(strategy_path, "position.py"))
         position_module = importlib.util.module_from_spec(spec)
@@ -523,9 +493,26 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
 
         # Apply all config parameters from frontend to strategy_config
         # Print frontend config for debugging
-        print("\n=== Config from frontend ===")
+        print("\n=== BACKEND PARAMETER DEBUG ===")
+        print("Full config from frontend:", config)
+        print("\n=== Individual Config Parameters ===")
         for key, value in config.items():
-            print(key, value)
+            print(f"{key}: {value} (type: {type(value)})")
+
+        # Specifically check for monthly withdrawal parameters
+        print("\n=== MONTHLY WITHDRAWAL DEBUG ===")
+        if "MONTHLY_WITHDRAWAL" in config:
+            print(f"MONTHLY_WITHDRAWAL found: {config['MONTHLY_WITHDRAWAL']}")
+        else:
+            print("MONTHLY_WITHDRAWAL not found in config")
+
+        if "MONTHLY_WITHDRAWAL_RATE" in config:
+            print(f"MONTHLY_WITHDRAWAL_RATE found: {config['MONTHLY_WITHDRAWAL_RATE']}")
+        else:
+            print("MONTHLY_WITHDRAWAL_RATE not found in config")
+        print("=== END BACKEND DEBUG ===")
+
+        for key, value in config.items():
             # Set attribute directly if it matches a strategy_config attribute
             # and is not already handled
             if key != "SYMBOL" and key != "INITIAL_CASH" and hasattr(strategy_config, key):
@@ -552,9 +539,13 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
         market_data = MarketData(symbol=strategy_config.SYMBOL)
         print(f"MarketData symbol: {market_data.symbol}")
 
+        # Convert datetime objects to string dates first
+        start_date_str = start_dt.strftime("%Y-%m-%d")
+        end_date_str = end_dt.strftime("%Y-%m-%d")
+
         # Load data with user-specified date range
-        print(f"Loading market data for date range: {start_date} to {end_date}")
-        market_data.load_data(start_date=start_date, end_date=end_date)
+        print(f"Loading market data for date range: {start_date_str} to {end_date_str}")
+        market_data.load_data(start_date=start_date_str, end_date=end_date_str)
         print(f"Market data loaded successfully")
 
         print("\n=== Initializing PositionTracker ===")
@@ -570,12 +561,9 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
         print("TradingSimulator created with all components")
 
         print("\n=== Running Simulation ===")
-        # Convert datetime objects to string dates in YYYY-MM-DD format for the simulator
-        start_date = start_dt.strftime("%Y-%m-%d")
-        end_date = end_dt.strftime("%Y-%m-%d")
-        print(f"Running simulation from {start_date} to {end_date}")
+        print(f"Running simulation from {start_date_str} to {end_date_str}")
 
-        results_df = simulator.run(start_date=start_date, end_date=end_date)
+        results_df = simulator.run(start_date=start_date_str, end_date=end_date_str)
 
         # Process results
         daily_results = {}
@@ -737,245 +725,7 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
         sys.path = original_path
 
 
-def run_ccspy_strategy(TradingSimulator, OptionStrategy, config, start_dt, end_dt, initial_balance):
-    """Run the CCSPY strategy simulation."""
-    strategy_path = STRATEGY_PATHS["CCSPY"]
-    original_path = sys.path.copy()
 
-    try:
-        if strategy_path not in sys.path:
-            sys.path.insert(0, strategy_path)
-            print(f"Temporarily added {strategy_path} to sys.path")
-
-        # Import unified market data class with database-first approach
-        from market_data import MarketData
-
-        spec = importlib.util.spec_from_file_location("position", os.path.join(strategy_path, "position.py"))
-        position_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(position_module)
-        PositionTracker = position_module.PositionTracker
-
-        spec = importlib.util.spec_from_file_location("config", os.path.join(strategy_path, "config.py"))
-        config_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(config_module)
-        Config = config_module.Config
-
-        # Create a Config object
-        strategy_config = Config()
-
-        # Apply config values from frontend rather than hardcoding
-        # Transfer any config parameters from the frontend to the strategy_config
-        if "SYMBOL" in config:
-            strategy_config.SYMBOL = config["SYMBOL"]
-        else:
-            # Fallback to default value for backwards compatibility
-            strategy_config.SYMBOL = "SPY"
-
-        # Set strategy type from the request data
-        strategy_config.STRATEGY_TYPE = "CCSPY"
-
-        # Set initial balance
-        if initial_balance is not None:
-            try:
-                strategy_config.INITIAL_CASH = float(initial_balance)
-                print(f"Using initial balance from parameter: {initial_balance}")
-            except (ValueError, TypeError) as e:
-                print(f"Error parsing initial balance: {e}, using default")
-        elif "INITIAL_CASH" in config:
-            try:
-                strategy_config.INITIAL_CASH = float(config["INITIAL_CASH"])
-                print(f"Using INITIAL_CASH from config: {config['INITIAL_CASH']}")
-            except (ValueError, TypeError) as e:
-                print(f"Error parsing INITIAL_CASH: {e}, using default")
-
-        # Apply all config parameters from frontend to strategy_config
-        # Print frontend config for debugging
-        print("\n=== Config from frontend ===")
-        for key, value in config.items():
-            print(key, value)
-            # Set attribute directly if it matches a strategy_config attribute
-            # and is not already handled
-            if key != "SYMBOL" and key != "INITIAL_CASH" and hasattr(strategy_config, key):
-                try:
-                    if isinstance(value, (int, float)):
-                        setattr(strategy_config, key, float(value))
-                        print(f"Set {key} = {value} from frontend config")
-                    elif isinstance(value, str) and value.replace(".", "", 1).isdigit():
-                        setattr(strategy_config, key, float(value))
-                        print(f"Set {key} = {value} from frontend config (converted to float)")
-                    else:
-                        setattr(strategy_config, key, value)
-                        print(f"Set {key} = {value} from frontend config (non-numeric)")
-                except (ValueError, TypeError) as e:
-                    print(f"Error setting {key} from value {value}: {e}, using default")
-
-        print("\n=== Final Config for simulation ===")
-        for attr in dir(strategy_config):
-            if not attr.startswith("__"):  # Skip private attributes
-                print(f"{attr}: {getattr(strategy_config, attr)}")
-
-        # Initialize components
-        market_data = MarketData(symbol=strategy_config.SYMBOL)
-
-        # Convert datetime objects to string dates for market data loading
-        start_date = start_dt.strftime("%Y-%m-%d")
-        end_date = end_dt.strftime("%Y-%m-%d")
-
-        # Load data with user-specified date range
-        print(f"Loading market data for date range: {start_date} to {end_date}")
-        market_data.load_data(start_date=start_date, end_date=end_date)
-        print(f"Market data loaded successfully")
-
-        position = PositionTracker(strategy_config.INITIAL_CASH, strategy_config)
-        strategy = OptionStrategy(strategy_config)
-
-        # Create and run simulator
-        simulator = TradingSimulator(market_data, position, strategy, strategy_config)
-        results_df = simulator.run()
-
-        # Process results
-        daily_results = {}
-        if results_df is not None and not results_df.empty:
-            print(f"Original Results DataFrame columns: {results_df.columns.tolist()}")
-            
-            # Make a copy to avoid modifying the original
-            cleaned_df = results_df.copy()
-
-            # Ensure the index is datetime
-            if not isinstance(cleaned_df.index, pd.DatetimeIndex):
-                cleaned_df.index = pd.to_datetime(cleaned_df.index)
-                
-            # Clean DataFrame to handle NaN and Inf values
-            print("Cleaning DataFrame of NaN and Infinity values")
-            cleaned_df = cleaned_df.replace([float('inf'), float('-inf')], 0)
-            cleaned_df = cleaned_df.fillna(0)  # Replace NaN with zeros
-            
-            # Normalize column names (replace spaces with underscores)
-            print("Normalizing column names")
-            cleaned_df.columns = [col.replace(' ', '_') for col in cleaned_df.columns]
-            
-            # Print normalized column names for debugging
-            print(f"Normalized DataFrame columns: {cleaned_df.columns.tolist()}")
-
-            # Calculate SPY buy & hold value using Close prices from results_df
-            # New approach: Calculate shares purchased on first day, then keep that constant
-            first_day_close = cleaned_df["Close"].iloc[0]
-            initial_cash = float(initial_balance) if initial_balance is not None else strategy_config.INITIAL_CASH
-            spy_shares_bought = initial_cash / first_day_close if first_day_close > 0 else 0
-            print(
-                f"CCSPY - SPY Buy & Hold: Initial cash ${initial_cash:.2f}, first day close ${first_day_close:.2f}, "
-                f"shares bought {spy_shares_bought:.2f}"
-            )
-
-            # Calculate daily value based on fixed shares
-            # spy_values = results_df["Close"] * spy_shares_bought
-
-            # Only include actual trading days - exclude weekends and holidays
-            trading_days = cleaned_df.index.tolist()
-            
-            # Define helper functions for safe value conversion
-            def safe_float(value, default=0.0, decimal_places=4):
-                """
-                Safely convert a value to a float with specified decimal places.
-                Returns default if value is NaN, Inf, or cannot be converted.
-                """
-                try:
-                    val = float(value)
-                    # Check for infinity or NaN using numpy instead of pandas
-                    if pd.isna(val) or np.isinf(val):
-                        print(f"Warning: Detected NaN or Inf value: {value}, using default {default}")
-                        return default
-                    # Round to specified decimal places
-                    return round(val, decimal_places)
-                except (ValueError, TypeError) as e:
-                    print(f"Warning: Error converting value to float: {value}, {str(e)}, using default {default}")
-                    return default
-            
-            def safe_int(value, default=0):
-                """
-                Safely convert a value to an integer.
-                Returns default if value is NaN or cannot be converted.
-                """
-                try:
-                    val = int(float(value))  # Convert to float first in case it's a float string
-                    if pd.isna(val):
-                        print(f"Warning: Detected NaN value for int conversion: {value}, using default {default}")
-                        return default
-                    return val
-                except (ValueError, TypeError) as e:
-                    print(f"Warning: Error converting value to int: {value}, {str(e)}, using default {default}")
-                    return default
-                
-            # Function to get value from row with multiple possible column names
-            def get_column_value(row_data, possible_names, default=0):
-                """
-                Try multiple possible column names to get a value from a DataFrame row.
-                Returns default if none of the column names exist.
-                """
-                # Convert Series index to list for easier checking
-                available_columns = list(row_data.index)
-                
-                for name in possible_names:
-                    if name in available_columns:
-                        val = row_data.get(name, default)
-                        # Print for debugging on first row
-                        if row_data.name == cleaned_df.index[0]:
-                            print(f"Found column '{name}' with value: {val}")
-                        return val
-                
-                # If we get here, none of the columns were found
-                if row_data.name == cleaned_df.index[0]:
-                    print(f"Warning: None of the columns {possible_names} found, using default {default}")
-                return default
-
-            print("\n=== Processing daily results ===")
-            for idx, row in cleaned_df.iterrows():
-                # Skip dates that aren't in the original DataFrame
-                if idx not in trading_days:
-                    continue
-
-                date_str = idx.strftime("%Y-%m-%d")
-                
-                # Create result dictionary with safe conversions
-                result_dict = {
-                    "balance": safe_float(get_column_value(row, ["balance", "portfolio_value", "Balance", "Portfolio_Value"]), 0.0),
-                    "trades_count": safe_int(get_column_value(row, ["trades_count", "Trades_Count", "trades_count"]), 0),
-                    "profit_loss": safe_float(get_column_value(row, ["profit_loss", "daily_pnl", "Profit_Loss", "Daily_PnL"]), 0.0),
-                }
-                
-                # Add to daily results
-                daily_results[date_str] = result_dict
-                
-                # Print the first day's data for debugging
-                if idx == cleaned_df.index[0]:
-                    print("First day data sample (after processing):")
-                    for k, v in result_dict.items():
-                        print(f"  {k}: {v}")
-            
-            print(f"Processed {len(daily_results)} days of data")
-            
-            # Verify there's no NaN or Infinity in the results
-            print("Verifying no NaN or Infinity values in the final results...")
-            for date_str, data in daily_results.items():
-                for key, value in data.items():
-                    if isinstance(value, (int, float)) and (pd.isna(value) or np.isinf(value)):
-                        print(f"Warning: Found invalid value in final results: {key}={value} for date {date_str}")
-                        # Fix the value
-                        if key == "trades_count":
-                            daily_results[date_str][key] = 0
-                        else:
-                            daily_results[date_str][key] = 0.0
-        else:
-            print("Warning: No results data returned from strategy simulation")
-
-        return daily_results
-    except Exception as e:
-        print(f"Error in run_ccspy_strategy: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
-        raise
-    finally:
-        sys.path = original_path
 
 
 def get_simulations(limit=10, offset=0):
@@ -1120,21 +870,6 @@ def get_strategy_config_options(strategy_name):
             "stop_loss_pct": 0.50,
             "take_profit_pct": 1.00,
             "strategy_type": "power_cashflow",
-            "option_type": "call",
-            "dte_min": 1,
-            "dte_max": 5,
-            "delta_min": 0.40,
-            "delta_max": 0.60,
-            "commission": 0.65,
-        }
-    elif strategy_name == "CCSPY":
-        return {
-            "symbol": "SPY",
-            "buy_time": "9:35",
-            "sell_time": "15:45",
-            "stop_loss_pct": 0.50,
-            "take_profit_pct": 1.00,
-            "strategy_type": "ccspy",
             "option_type": "call",
             "dte_min": 1,
             "dte_max": 5,

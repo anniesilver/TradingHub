@@ -135,6 +135,11 @@ export const runSimulation = async (config) => {
       console.log(`No initialBalance provided, using default: 200000.0`);
     }
 
+    console.log('=== FRONTEND PARAMETER DEBUG ===');
+    console.log('Original config object:', config);
+    console.log('Monthly withdrawal from config:', config.monthlyWithdrawal);
+    console.log('Full payload being sent:', JSON.stringify(payload, null, 2));
+    console.log('=== END FRONTEND DEBUG ===');
     console.log('Sending simulation request:', payload);
     const response = await axios.post(`${API_BASE_URL}/simulate`, payload);
     

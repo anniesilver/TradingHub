@@ -135,7 +135,26 @@ class MarketData:
 
         except Exception as e:
             logger.error(f"Failed to load market data for {self.symbol}: {e}")
-            raise
+
+            # Provide detailed guidance for troubleshooting
+            error_msg = f"\n{'='*60}\n"
+            error_msg += f"ERROR: Unable to load market data for {self.symbol}\n"
+            error_msg += f"{'='*60}\n"
+            error_msg += f"Please ensure that:\n"
+            error_msg += f"1. PostgreSQL database is running and accessible\n"
+            error_msg += f"2. TWS (Trader Workstation) or IB Gateway is running\n"
+            error_msg += f"3. TWS/Gateway has API access enabled:\n"
+            error_msg += f"   - Go to Configure → API → Settings\n"
+            error_msg += f"   - Check 'Enable ActiveX and Socket Clients'\n"
+            error_msg += f"   - Ensure correct port (7496 for TWS, 4002 for Gateway)\n"
+            error_msg += f"4. Market data subscriptions are active in your IBKR account\n"
+            error_msg += f"5. Your IBKR account has sufficient permissions for market data\n"
+            error_msg += f"{'='*60}\n"
+            error_msg += f"To test the connection, try: GET /api/market-data/test-connection\n"
+            error_msg += f"Original error: {str(e)}"
+
+            print(error_msg)  # Also print to console for immediate visibility
+            raise Exception(f"Market data loading failed. Please start TWS/Gateway and ensure API access is enabled. {str(e)}")
 
     def _load_symbol_data(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
         """Load data for a specific symbol using database-first approach
@@ -201,7 +220,25 @@ class MarketData:
 
         except Exception as e:
             logger.error(f"Error loading data for {symbol}: {e}")
-            raise
+
+            # Provide detailed guidance for troubleshooting
+            error_msg = f"\n{'='*60}\n"
+            error_msg += f"ERROR: Unable to load market data for {symbol}\n"
+            error_msg += f"{'='*60}\n"
+            error_msg += f"Please ensure that:\n"
+            error_msg += f"1. PostgreSQL database is running and accessible\n"
+            error_msg += f"2. TWS (Trader Workstation) or IB Gateway is running\n"
+            error_msg += f"3. TWS/Gateway has API access enabled:\n"
+            error_msg += f"   - Go to Configure → API → Settings\n"
+            error_msg += f"   - Check 'Enable ActiveX and Socket Clients'\n"
+            error_msg += f"   - Ensure correct port (7496 for TWS, 4002 for Gateway)\n"
+            error_msg += f"4. Market data subscriptions are active in your IBKR account\n"
+            error_msg += f"5. Your IBKR account has sufficient permissions for market data\n"
+            error_msg += f"{'='*60}\n"
+            error_msg += f"Original error: {str(e)}"
+
+            logger.error(error_msg)
+            raise Exception(f"Market data loading failed. Please start TWS/Gateway and ensure API access is enabled. {str(e)}")
 
     def get_current_price(self, date: pd.Timestamp) -> float:
         """Get price for a given date"""
