@@ -76,12 +76,12 @@ class MarketData:
             # Load primary symbol data
             primary_df = self._load_symbol_data(self.symbol, start_date, end_date)
 
-            # For SPY strategies, also load VIX data
-            if self.symbol == "SPY":
+            # For SPY and QQQ strategies, also load VIX data
+            if self.symbol in ["SPY", "QQQ"]:
                 try:
                     vix_df = self._load_symbol_data("VIX", start_date, end_date)
 
-                    # Merge SPY and VIX data
+                    # Merge symbol and VIX data
                     if not vix_df.empty:
                         # Join VIX close prices as 'VIX' column
                         primary_df = primary_df.join(vix_df['close'].rename('VIX'), how='left')
@@ -90,7 +90,7 @@ class MarketData:
                         # Convert VIX to decimal if it's in percentage form
                         if primary_df['VIX'].max() > 1.0:
                             primary_df['VIX'] = primary_df['VIX'] / 100
-                        logger.info("Successfully merged VIX data with SPY")
+                        logger.info(f"Successfully merged VIX data with {self.symbol}")
                     else:
                         # Set default VIX if we can't load it
                         primary_df['VIX'] = 0.20  # 20% default volatility

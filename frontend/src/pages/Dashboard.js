@@ -1202,15 +1202,18 @@ function Dashboard() {
       <Box component="form" mb={3}>
         <Grid container spacing={1}>
           <Grid item xs={12} sm={3} md={1.5}>
-            <CompactTextField
-              fullWidth
-              size="small"
-              label="Symbol"
-              name="symbol"
-              value={config.symbol}
-              onChange={handleConfigChange}
-              disabled
-            />
+            <CompactFormControl fullWidth size="small">
+              <InputLabel>Symbol</InputLabel>
+              <CompactSelect
+                name="symbol"
+                value={config.symbol}
+                onChange={handleConfigChange}
+                label="Symbol"
+              >
+                <MenuItem value="SPY">SPY</MenuItem>
+                <MenuItem value="QQQ">QQQ</MenuItem>
+              </CompactSelect>
+            </CompactFormControl>
           </Grid>
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactFormControl fullWidth size="small">
