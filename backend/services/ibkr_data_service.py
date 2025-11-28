@@ -303,6 +303,9 @@ class IBKRDataService:
         finally:
             if self.client:
                 self.client.disconnect_from_ibkr()
+                # Wait for TWS to release the client ID before next connection
+                import time
+                time.sleep(1)
     
     def get_market_data(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
         """Get market data with DB-first approach, fallback to IBKR"""
