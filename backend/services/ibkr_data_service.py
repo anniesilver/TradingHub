@@ -275,7 +275,15 @@ class IBKRDataService:
             self.client = IBKRDataClient(IBKR_CONFIG["client_id"])
             if not self.client.connect_to_ibkr(IBKR_CONFIG["host"], IBKR_CONFIG["port"]):
                 raise Exception("Failed to connect to IBKR")
-            
+
+            # Add extra wait time to ensure connection is fully established
+            import time
+            time.sleep(2)
+
+            # Verify connection before fetching
+            if not self.client.isConnected():
+                raise Exception("Connection lost before data fetch")
+
             # Fetch data
             logger.info(f"Fetching {period} of data for {symbol}")
             data = self.client.fetch_historical_data(symbol, period)
