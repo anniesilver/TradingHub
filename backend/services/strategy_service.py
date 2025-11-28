@@ -499,18 +499,18 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
         for key, value in config.items():
             print(f"{key}: {value} (type: {type(value)})")
 
-        # Specifically check for monthly withdrawal parameters
-        print("\n=== MONTHLY WITHDRAWAL DEBUG ===")
-        if "MONTHLY_WITHDRAWAL" in config:
-            print(f"MONTHLY_WITHDRAWAL found: {config['MONTHLY_WITHDRAWAL']}")
-        else:
-            print("MONTHLY_WITHDRAWAL not found in config")
-
+        # Specifically check for monthly withdrawal rate parameter
+        print("\n=== MONTHLY WITHDRAWAL RATE DEBUG ===")
         if "MONTHLY_WITHDRAWAL_RATE" in config:
-            print(f"MONTHLY_WITHDRAWAL_RATE found: {config['MONTHLY_WITHDRAWAL_RATE']}")
+            print(f"MONTHLY_WITHDRAWAL_RATE found: {config['MONTHLY_WITHDRAWAL_RATE']}%")
         else:
             print("MONTHLY_WITHDRAWAL_RATE not found in config")
-        print("=== END BACKEND DEBUG ===")
+
+        # Check for old parameter name (should not be present)
+        if "MONTHLY_WITHDRAWAL" in config:
+            print(f"WARNING: Old MONTHLY_WITHDRAWAL parameter found: {config['MONTHLY_WITHDRAWAL']} (should use MONTHLY_WITHDRAWAL_RATE instead)")
+
+        print("=== END WITHDRAWAL RATE DEBUG ===")
 
         for key, value in config.items():
             # Set attribute directly if it matches a strategy_config attribute
@@ -661,6 +661,8 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
                 return default
 
             print("\n=== Processing daily results ===")
+            print(f"DataFrame columns: {list(cleaned_df.columns)}")
+            print(f"Sample Interests_Paid values: {cleaned_df['Interests_Paid'].head().tolist() if 'Interests_Paid' in cleaned_df.columns else 'Column not found'}")
             for idx, row in cleaned_df.iterrows():
                 # Skip dates that aren't in the original DataFrame
                 if idx not in trading_days:

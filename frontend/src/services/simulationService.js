@@ -71,7 +71,7 @@ export const getSimulations = async (limit = 10, offset = 0) => {
  * @param {number} config.minCommission - Minimum commission (default: 1.0)
  * @param {number} config.minStrikeDistance - Minimum strike distance (default: 0.015)
  * @param {number} config.minTradeSize - Minimum trade size (default: 1000)
- * @param {number} config.monthlyWithdrawal - Monthly withdrawal amount (default: 5000.0)
+ * @param {number} config.monthlyWithdrawalRate - Monthly withdrawal rate as percentage (default: 1.0)
  * @param {number} config.optionCommission - Option commission (default: 0.65)
  * @param {number} config.riskFreeRate - Risk-free rate (default: 0.05)
  * @param {number} config.stockCommission - Stock commission (default: 0.01)
@@ -102,7 +102,7 @@ export const runSimulation = async (config) => {
         MIN_COMMISSION: config.minCommission !== undefined ? config.minCommission : 1.0,
         MIN_STRIKE_DISTANCE: config.minStrikeDistance !== undefined ? config.minStrikeDistance : 0.015,
         MIN_TRADE_SIZE: config.minTradeSize !== undefined ? config.minTradeSize : 1000,
-        MONTHLY_WITHDRAWAL: config.monthlyWithdrawal !== undefined ? config.monthlyWithdrawal : 5000.0,
+        MONTHLY_WITHDRAWAL_RATE: config.monthlyWithdrawalRate !== undefined ? config.monthlyWithdrawalRate : 1.0,
         OPTION_COMMISSION: config.optionCommission !== undefined ? config.optionCommission : 0.65,
         RISK_FREE_RATE: config.riskFreeRate !== undefined ? config.riskFreeRate : 0.05,
         STOCK_COMMISSION: config.stockCommission !== undefined ? config.stockCommission : 0.01,
@@ -137,7 +137,7 @@ export const runSimulation = async (config) => {
 
     console.log('=== FRONTEND PARAMETER DEBUG ===');
     console.log('Original config object:', config);
-    console.log('Monthly withdrawal from config:', config.monthlyWithdrawal);
+    console.log('Monthly withdrawal rate from config:', config.monthlyWithdrawalRate);
     console.log('Full payload being sent:', JSON.stringify(payload, null, 2));
     console.log('=== END FRONTEND DEBUG ===');
     console.log('Sending simulation request:', payload);

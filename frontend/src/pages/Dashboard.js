@@ -245,7 +245,10 @@ function Dashboard() {
     firstMonthRawData: {},
     totalAssignedCost: 0,
     totalPremiumsReceived: 0,
-    totalInterestPaid: 0
+    totalInterestPaid: 0,
+    totalWithdrawAmount: 0,
+    annualizedReturn: 0,
+    maxDrawdown: 0
   });
   const [config, setConfig] = useState({
     symbol: 'SPY',
@@ -263,7 +266,7 @@ function Dashboard() {
     minCommission: 1.0,
     minStrikeDistance: 0.015,
     minTradeSize: 1000,
-    monthlyWithdrawal: 5000.0,
+    monthlyWithdrawalRate: 1.0,
     optionCommission: 0.65,
     riskFreeRate: 0.05,
     stockCommission: 0.01,
@@ -284,10 +287,10 @@ function Dashboard() {
     
     // Convert numeric fields to appropriate type
     const numericFields = [
-      'initialBalance', 'callCostBuffer', 'contractSize', 'coveredCallRatio', 
-      'dipBuyPercent', 'dipTrigger', 'initialPositionPercent', 'marginInterestRate', 
-      'maxMarginRatio', 'maxPositionSize', 'minCommission', 'minStrikeDistance', 
-      'minTradeSize', 'monthlyWithdrawal', 'optionCommission', 'riskFreeRate', 
+      'initialBalance', 'callCostBuffer', 'contractSize', 'coveredCallRatio',
+      'dipBuyPercent', 'dipTrigger', 'initialPositionPercent', 'marginInterestRate',
+      'maxMarginRatio', 'maxPositionSize', 'minCommission', 'minStrikeDistance',
+      'minTradeSize', 'monthlyWithdrawalRate', 'optionCommission', 'riskFreeRate',
       'stockCommission', 'volatilityScalingFactor'
     ];
     
@@ -1427,11 +1430,11 @@ function Dashboard() {
               fullWidth
               size="small"
               type="number"
-              label="Monthly Withdrawal"
-              name="monthlyWithdrawal"
-              value={config.monthlyWithdrawal}
+              label="Monthly Withdrawal Rate (%)"
+              name="monthlyWithdrawalRate"
+              value={config.monthlyWithdrawalRate}
               onChange={handleConfigChange}
-              InputProps={{ inputProps: { min: 0, step: 100 } }}
+              InputProps={{ inputProps: { min: 0, max: 10, step: 0.1 } }}
             />
           </Grid>
           
