@@ -194,6 +194,61 @@ class MarketData:
         else:
             return "20 Y"  # Maximum supported period
 
+    def _fetch_data_in_chunks(self, symbol: str, start_date: str, end_date: str) -> bool:
+        """Fetch data in chunks when date range exceeds IBKR limit (20 years)
+
+        Args:
+            symbol: Trading symbol
+            start_date: Start date in 'YYYY-MM-DD' format
+            end_date: End date in 'YYYY-MM-DD' format
+
+        Returns:
+            bool: True if all chunks fetched successfully
+        """
+        start_dt = pd.to_datetime(start_date)
+        end_dt = pd.to_datetime(end_date)
+        total_days = (end_dt - start_dt).days
+
+        # If within 20 years, fetch directly
+        if total_days <= 7300:  # 20 years
+            calculated_period = self._calculate_fetch_period(start_date, end_date)
+            return ibkr_service.fetch_and_store_data(symbol, calculated_period)
+
+        # Split into 10-year chunks for data exceeding 20 years
+        logger.info(f"Date range exceeds 20 years, fetching in chunks for {symbol}")
+        chunks = []
+        current_start = start_dt
+
+        while current_start < end_dt:
+            # Calculate chunk end (10 years from start or end_date, whichever is earlier)
+            chunk_end = min(current_start + timedelta(days=3650), end_dt)  # 10 years
+
+            chunk_start_str = current_start.strftime('%Y-%m-%d')
+            chunk_end_str = chunk_end.strftime('%Y-%m-%d')
+
+            chunks.append((chunk_start_str, chunk_end_str))
+            logger.info(f"Chunk: {chunk_start_str} to {chunk_end_str}")
+
+            # Move to next chunk (add 1 day to avoid overlap)
+            current_start = chunk_end + timedelta(days=1)
+
+        # Fetch each chunk
+        for i, (chunk_start, chunk_end) in enumerate(chunks):
+            logger.info(f"Fetching chunk {i+1}/{len(chunks)}: {chunk_start} to {chunk_end}")
+            period = self._calculate_fetch_period(chunk_start, chunk_end)
+
+            if not ibkr_service.fetch_and_store_data(symbol, period):
+                logger.error(f"Failed to fetch chunk {i+1} for {symbol}")
+                return False
+
+            # Add delay between chunks to avoid rate limiting
+            if i < len(chunks) - 1:  # Don't sleep after last chunk
+                import time
+                time.sleep(2)
+
+        logger.info(f"Successfully fetched all {len(chunks)} chunks for {symbol}")
+        return True
+
     def _load_symbol_data(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
         """Load data for a specific symbol using database-first approach
 
@@ -214,15 +269,13 @@ class MarketData:
             if df.empty:
                 logger.info(f"No data found in database for {symbol}, fetching from IBKR")
 
-                # Fetch from IBKR and save to database - calculate appropriate period from date range
-                calculated_period = self._calculate_fetch_period(start_date, end_date)
-                logger.info(f"No data in DB, fetching {calculated_period} of data for {symbol} (covers {start_date} to {end_date})")
-                if ibkr_service.fetch_and_store_data(symbol, calculated_period):
+                # Fetch from IBKR (with chunking if needed) and save to database
+                if self._fetch_data_in_chunks(symbol, start_date, end_date):
                     # Try database again after IBKR fetch
                     df = ibkr_service.get_data_from_db(symbol, start_date, end_date)
 
                     if df.empty:
-                        raise Exception(f"No data available for {symbol} after IBKR fetch of {calculated_period}")
+                        raise Exception(f"No data available for {symbol} after IBKR fetch")
                 else:
                     raise Exception(f"Failed to fetch data from IBKR for {symbol}")
 
@@ -243,10 +296,9 @@ class MarketData:
                 if start_gap > 10 or end_gap > 10:
                     logger.warning(f"Data gaps detected for {symbol}: start_gap={start_gap}, end_gap={end_gap}")
 
-                    # Try to fetch more data if gaps are significant - use same calculated period
-                    calculated_period = self._calculate_fetch_period(start_date, end_date)
-                    logger.info(f"Attempting to fetch additional data for {symbol} ({calculated_period})")
-                    if ibkr_service.fetch_and_store_data(symbol, calculated_period):
+                    # Try to fetch more data if gaps are significant - use chunked fetching if needed
+                    logger.info(f"Attempting to fetch additional data for {symbol}")
+                    if self._fetch_data_in_chunks(symbol, start_date, end_date):
                         df = ibkr_service.get_data_from_db(symbol, start_date, end_date)
                         logger.info(f"After additional fetch: {len(df)} records available")
 
