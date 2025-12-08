@@ -4,7 +4,7 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Optional, List, Dict, Any
 
 import pandas as pd
@@ -239,9 +239,28 @@ class IBKRDataService:
         try:
             with conn.cursor() as cursor:
                 for bar in data:
-                    # Convert date string to date object
-                    date_obj = datetime.strptime(bar['date'], '%Y%m%d').date()
-                    
+                    # Convert date to date object - handle multiple IBKR date formats
+                    date_value = bar['date']
+
+                    # If already a date/datetime object, use it directly
+                    if isinstance(date_value, (datetime, date)):
+                        date_obj = date_value if isinstance(date_value, date) else date_value.date()
+                    else:
+                        # String format - try multiple formats
+                        date_str = str(date_value).strip()
+
+                        # Try YYYYMMDD format (most common for daily bars)
+                        if len(date_str) == 8 and date_str.isdigit():
+                            date_obj = datetime.strptime(date_str, '%Y%m%d').date()
+                        # Try formats with separators (YYYY-MM-DD or timestamps)
+                        elif '-' in date_str or ':' in date_str:
+                            # Parse and extract date portion
+                            dt = datetime.fromisoformat(date_str.replace('  ', ' ').split()[0])
+                            date_obj = dt.date()
+                        else:
+                            # Last resort: try parsing as-is
+                            date_obj = datetime.strptime(date_str, '%Y%m%d').date()
+
                     cursor.execute("""
                         INSERT INTO market_data (symbol, date, open, high, low, close, volume)
                         VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -290,9 +309,16 @@ class IBKRDataService:
             
             if data:
                 # Save to database
-                self.save_data_to_db(symbol, data)
-                logger.info(f"Successfully fetched and stored data for {symbol}")
-                return True
+                logger.info(f"Attempting to save {len(data)} bars for {symbol}")
+                try:
+                    self.save_data_to_db(symbol, data)
+                    logger.info(f"Successfully fetched and stored data for {symbol}")
+                    return True
+                except Exception as save_error:
+                    logger.error(f"Failed to save data to database: {save_error}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+                    raise
             else:
                 logger.warning(f"No data received for {symbol}")
                 return False

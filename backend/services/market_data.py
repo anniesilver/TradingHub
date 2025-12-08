@@ -156,6 +156,44 @@ class MarketData:
             print(error_msg)  # Also print to console for immediate visibility
             raise Exception(f"Market data loading failed. Please start TWS/Gateway and ensure API access is enabled. {str(e)}")
 
+    def _calculate_fetch_period(self, start_date: str, end_date: str) -> str:
+        """Calculate appropriate IBKR period string from date range
+
+        Args:
+            start_date: Start date in 'YYYY-MM-DD' format
+            end_date: End date in 'YYYY-MM-DD' format
+
+        Returns:
+            str: IBKR period string (e.g., '1 Y', '2 Y', '6 M')
+        """
+        start_dt = pd.to_datetime(start_date)
+        end_dt = pd.to_datetime(end_date)
+
+        # Calculate time span in days
+        time_span_days = (end_dt - start_dt).days
+
+        # Add buffer (20% extra) to ensure coverage for weekends/holidays
+        buffer_days = int(time_span_days * 0.2)
+        total_days_needed = time_span_days + buffer_days
+
+        # Convert to IBKR period format
+        if total_days_needed <= 30:
+            return "1 M"  # 1 month
+        elif total_days_needed <= 90:
+            return "3 M"  # 3 months
+        elif total_days_needed <= 180:
+            return "6 M"  # 6 months
+        elif total_days_needed <= 365:
+            return "1 Y"  # 1 year
+        elif total_days_needed <= 730:
+            return "2 Y"  # 2 years
+        elif total_days_needed <= 1825:
+            return "5 Y"  # 5 years
+        elif total_days_needed <= 3650:
+            return "10 Y"  # 10 years
+        else:
+            return "20 Y"  # Maximum supported period
+
     def _load_symbol_data(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
         """Load data for a specific symbol using database-first approach
 
@@ -176,20 +214,15 @@ class MarketData:
             if df.empty:
                 logger.info(f"No data found in database for {symbol}, fetching from IBKR")
 
-                # Fetch from IBKR and save to database - use longer period to ensure coverage
-                logger.info(f"Fetching 20 years of data for {symbol} to ensure coverage")
-                if ibkr_service.fetch_and_store_data(symbol, "20 Y"):
+                # Fetch from IBKR and save to database - calculate appropriate period from date range
+                calculated_period = self._calculate_fetch_period(start_date, end_date)
+                logger.info(f"No data in DB, fetching {calculated_period} of data for {symbol} (covers {start_date} to {end_date})")
+                if ibkr_service.fetch_and_store_data(symbol, calculated_period):
                     # Try database again after IBKR fetch
                     df = ibkr_service.get_data_from_db(symbol, start_date, end_date)
 
                     if df.empty:
-                        # Try even longer period if still empty
-                        logger.info(f"Still no data, trying 25 years for {symbol}")
-                        if ibkr_service.fetch_and_store_data(symbol, "25 Y"):
-                            df = ibkr_service.get_data_from_db(symbol, start_date, end_date)
-
-                        if df.empty:
-                            raise Exception(f"Still no data available for {symbol} after extended IBKR fetch")
+                        raise Exception(f"No data available for {symbol} after IBKR fetch of {calculated_period}")
                 else:
                     raise Exception(f"Failed to fetch data from IBKR for {symbol}")
 
@@ -210,9 +243,10 @@ class MarketData:
                 if start_gap > 10 or end_gap > 10:
                     logger.warning(f"Data gaps detected for {symbol}: start_gap={start_gap}, end_gap={end_gap}")
 
-                    # Try to fetch more data if gaps are significant
-                    logger.info(f"Attempting to fetch additional data for {symbol}")
-                    if ibkr_service.fetch_and_store_data(symbol, "20 Y"):  # Fetch longer history
+                    # Try to fetch more data if gaps are significant - use same calculated period
+                    calculated_period = self._calculate_fetch_period(start_date, end_date)
+                    logger.info(f"Attempting to fetch additional data for {symbol} ({calculated_period})")
+                    if ibkr_service.fetch_and_store_data(symbol, calculated_period):
                         df = ibkr_service.get_data_from_db(symbol, start_date, end_date)
                         logger.info(f"After additional fetch: {len(df)} records available")
 
