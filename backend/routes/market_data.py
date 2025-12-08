@@ -1,6 +1,6 @@
 """Market data API routes"""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, request
 import sys
 import os

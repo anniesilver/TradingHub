@@ -5,7 +5,11 @@
       "Read(/C:\\algo\\algo_trading\\SPY_POWER_CASHFLOW/**)",
       "Read(//c/ALGO/TradingHub/backend/services/**)",
       "Read(//c/ALGO/TradingHub/backend/**)",
-      "Read(//c/ALGO/algo_trading/SPY_ENHANCED_CASHFLOW/**)"
+      "Read(//c/ALGO/algo_trading/SPY_ENHANCED_CASHFLOW/**)",
+      "Read(//c/ALGO/TradingHub/frontend/src/pages/**)",
+      "Read(//c/ALGO/TradingHub/frontend/src/services/**)",
+      "Bash(python:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []
