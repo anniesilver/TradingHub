@@ -177,6 +177,7 @@ class MarketData:
         total_days_needed = time_span_days + buffer_days
 
         # Convert to IBKR period format
+        # Note: Thresholds adjusted to account for 20% buffer
         if total_days_needed <= 30:
             return "1 M"  # 1 month
         elif total_days_needed <= 90:
@@ -187,67 +188,35 @@ class MarketData:
             return "1 Y"  # 1 year
         elif total_days_needed <= 730:
             return "2 Y"  # 2 years
-        elif total_days_needed <= 1825:
+        elif total_days_needed <= 2250:  # ~5 years (1825) + 20% buffer
             return "5 Y"  # 5 years
-        elif total_days_needed <= 3650:
+        elif total_days_needed <= 4400:  # ~10 years (3650) + 20% buffer
             return "10 Y"  # 10 years
         else:
             return "20 Y"  # Maximum supported period
 
-    def _fetch_data_in_chunks(self, symbol: str, start_date: str, end_date: str) -> bool:
-        """Fetch data in chunks when date range exceeds IBKR limit (20 years)
+    def _fetch_all_available_data(self, symbol: str) -> bool:
+        """Fetch all available historical data from IBKR using single call
+
+        Uses a large duration (30 years) with empty endDateTime to get all available data.
+        IBKR will return whatever data it has available (typically ~21 years from 2004-present).
 
         Args:
             symbol: Trading symbol
-            start_date: Start date in 'YYYY-MM-DD' format
-            end_date: End date in 'YYYY-MM-DD' format
 
         Returns:
-            bool: True if all chunks fetched successfully
+            bool: True if fetch successful
         """
-        start_dt = pd.to_datetime(start_date)
-        end_dt = pd.to_datetime(end_date)
-        total_days = (end_dt - start_dt).days
+        logger.info(f"Fetching all available historical data for {symbol}")
 
-        # If within 20 years, fetch directly
-        if total_days <= 7300:  # 20 years
-            calculated_period = self._calculate_fetch_period(start_date, end_date)
-            return ibkr_service.fetch_and_store_data(symbol, calculated_period)
-
-        # Split into 10-year chunks for data exceeding 20 years
-        logger.info(f"Date range exceeds 20 years, fetching in chunks for {symbol}")
-        chunks = []
-        current_start = start_dt
-
-        while current_start < end_dt:
-            # Calculate chunk end (10 years from start or end_date, whichever is earlier)
-            chunk_end = min(current_start + timedelta(days=3650), end_dt)  # 10 years
-
-            chunk_start_str = current_start.strftime('%Y-%m-%d')
-            chunk_end_str = chunk_end.strftime('%Y-%m-%d')
-
-            chunks.append((chunk_start_str, chunk_end_str))
-            logger.info(f"Chunk: {chunk_start_str} to {chunk_end_str}")
-
-            # Move to next chunk (add 1 day to avoid overlap)
-            current_start = chunk_end + timedelta(days=1)
-
-        # Fetch each chunk
-        for i, (chunk_start, chunk_end) in enumerate(chunks):
-            logger.info(f"Fetching chunk {i+1}/{len(chunks)}: {chunk_start} to {chunk_end}")
-            period = self._calculate_fetch_period(chunk_start, chunk_end)
-
-            if not ibkr_service.fetch_and_store_data(symbol, period):
-                logger.error(f"Failed to fetch chunk {i+1} for {symbol}")
-                return False
-
-            # Add delay between chunks to avoid rate limiting
-            if i < len(chunks) - 1:  # Don't sleep after last chunk
-                import time
-                time.sleep(2)
-
-        logger.info(f"Successfully fetched all {len(chunks)} chunks for {symbol}")
-        return True
+        # Use large duration with empty endDateTime to get all available data
+        # IBKR will return all data it has (typically 2004-present for SPY MIDPOINT)
+        return ibkr_service.fetch_and_store_data(
+            symbol=symbol,
+            period='30 Y',      # Request 30 years (IBKR returns all available)
+            end_date='',        # Empty = current/latest available
+            client_id=None      # Use default client ID
+        )
 
     def _load_symbol_data(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
         """Load data for a specific symbol using database-first approach
@@ -269,8 +238,8 @@ class MarketData:
             if df.empty:
                 logger.info(f"No data found in database for {symbol}, fetching from IBKR")
 
-                # Fetch from IBKR (with chunking if needed) and save to database
-                if self._fetch_data_in_chunks(symbol, start_date, end_date):
+                # Fetch all available data from IBKR using single call
+                if self._fetch_all_available_data(symbol):
                     # Try database again after IBKR fetch
                     df = ibkr_service.get_data_from_db(symbol, start_date, end_date)
 
@@ -296,9 +265,9 @@ class MarketData:
                 if start_gap > 10 or end_gap > 10:
                     logger.warning(f"Data gaps detected for {symbol}: start_gap={start_gap}, end_gap={end_gap}")
 
-                    # Try to fetch more data if gaps are significant - use chunked fetching if needed
+                    # Try to fetch more data if gaps are significant
                     logger.info(f"Attempting to fetch additional data for {symbol}")
-                    if self._fetch_data_in_chunks(symbol, start_date, end_date):
+                    if self._fetch_all_available_data(symbol):
                         df = ibkr_service.get_data_from_db(symbol, start_date, end_date)
                         logger.info(f"After additional fetch: {len(df)} records available")
 

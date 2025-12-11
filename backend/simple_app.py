@@ -5,6 +5,9 @@ import sys
 import traceback
 from datetime import datetime
 
+# Disable Python bytecode caching during development
+sys.dont_write_bytecode = True
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from services.strategy_service import import_strategy, run_spy_power_cashflow

@@ -101,16 +101,23 @@ class IBKRDataClient(EWrapper, EClient):
         time.sleep(1)  # Sleep interval to allow time for connection to server
         return True
     
-    def fetch_historical_data(self, symbol: str, period: str = "10 Y", bar_size: str = "1 day") -> List[Dict]:
-        """Fetch historical data for a symbol - exact approach from loading_data.py"""
+    def fetch_historical_data(self, symbol: str, period: str = "10 Y", bar_size: str = "1 day", end_date: str = '') -> List[Dict]:
+        """Fetch historical data for a symbol - exact approach from loading_data.py
+
+        Args:
+            symbol: Trading symbol (e.g., 'SPY', 'QQQ')
+            period: Duration string (e.g., '1 Y', '10 Y')
+            bar_size: Bar size (e.g., '1 day')
+            end_date: End date in 'YYYYMMDD HH:MM:SS' format, or '' for current time
+        """
         try:
             logger.info(f'getting {symbol}')
-            
+
             # Create contract object (exactly like loading_data.py)
-            contract = Contract()    
+            contract = Contract()
             contract.symbol = str(symbol)
             contract.currency = 'USD'
-            
+
             # Configure contract based on symbol type
             if symbol in ["VIX"]:
                 # this is for VIX
@@ -122,23 +129,37 @@ class IBKRDataClient(EWrapper, EClient):
                 contract.secType = 'STK'
                 contract.exchange = 'SMART'
                 data_type = "MIDPOINT"
-            
-            # Initialize variable to store candle (exactly like loading_data.py)
+
+            # Initialize variable to store candle
             self.data = []
-            
+            self.data_received.clear()  # Reset the event before request
+            self.error_occurred = False
+
+            # Determine if we need live updates
+            # keepUpToDate=True only works with empty end_date (current data)
+            # keepUpToDate=False is required when specifying historical end_date
+            keep_updated = (end_date == '')
+
             # Request historical candles
-            req_id = 0  # Use 0 like in loading_data.py (stock_list.index(i))
-            self.reqHistoricalData(req_id, contract, '', period, bar_size, data_type, 1, 1, True, [])
-            
-            # sleep to allow enough time for data to be returned (extend for larger datasets)
-            time.sleep(10)
-            
-            logger.info(f"Raw data received: {self.data}")
-            
+            req_id = 0
+            logger.info(f"Requesting historical data: symbol={symbol}, period={period}, end_date={end_date if end_date else 'current'}, keepUpToDate={keep_updated}")
+            self.reqHistoricalData(req_id, contract, end_date, period, bar_size, data_type, 1, 1, keep_updated, [])
+
+            # Wait for data to be received (or timeout after 30 seconds)
+            logger.info("Waiting for historical data...")
+            if not self.data_received.wait(timeout=30):
+                raise Exception(f'Timeout waiting for data for {symbol}')
+
+            # Check if error occurred
+            if self.error_occurred:
+                raise Exception(f'Error fetching data: {self.error_message}')
+
+            logger.info(f"Raw data received: {len(self.data)} bars")
+
             if len(self.data) < 1:
-                raise Exception(f'faliled loading data for {symbol}. try it again')  # Exact message
-            
-            logger.info(f'finish the loading data for {symbol}')
+                raise Exception(f'No data received for {symbol}')
+
+            logger.info(f'Successfully loaded {len(self.data)} bars for {symbol}')
             return self.data.copy()
                 
         except Exception as e:
@@ -287,11 +308,22 @@ class IBKRDataService:
         finally:
             conn.close()
     
-    def fetch_and_store_data(self, symbol: str, period: str = "10 Y") -> bool:
-        """Fetch data from IBKR and store in database"""
+    def fetch_and_store_data(self, symbol: str, period: str = "10 Y", end_date: str = '', client_id: int = None) -> bool:
+        """Fetch data from IBKR and store in database
+
+        Args:
+            symbol: Trading symbol
+            period: Duration string (e.g., '10 Y')
+            end_date: End date in 'YYYYMMDD HH:MM:SS' format, or '' for current time
+            client_id: Optional client ID (uses default if not provided)
+        """
         try:
+            # Use provided client_id or default
+            if client_id is None:
+                client_id = IBKR_CONFIG["client_id"]
+
             # Connect to IBKR
-            self.client = IBKRDataClient(IBKR_CONFIG["client_id"])
+            self.client = IBKRDataClient(client_id)
             if not self.client.connect_to_ibkr(IBKR_CONFIG["host"], IBKR_CONFIG["port"]):
                 raise Exception("Failed to connect to IBKR")
 
@@ -304,8 +336,8 @@ class IBKRDataService:
                 raise Exception("Connection lost before data fetch")
 
             # Fetch data
-            logger.info(f"Fetching {period} of data for {symbol}")
-            data = self.client.fetch_historical_data(symbol, period)
+            logger.info(f"Fetching {period} of data for {symbol}, end_date: {end_date if end_date else 'current'}")
+            data = self.client.fetch_historical_data(symbol, period, end_date=end_date)
             
             if data:
                 # Save to database
@@ -331,7 +363,7 @@ class IBKRDataService:
                 self.client.disconnect_from_ibkr()
                 # Wait for TWS to release the client ID before next connection
                 import time
-                time.sleep(1)
+                time.sleep(2)  # Increased from 1 to 2 seconds
     
     def get_market_data(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
         """Get market data with DB-first approach, fallback to IBKR"""

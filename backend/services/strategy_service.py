@@ -1,3 +1,7 @@
+# Disable Python bytecode caching during development
+import sys
+sys.dont_write_bytecode = True
+
 import importlib.util
 import os
 import sys
