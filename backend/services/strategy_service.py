@@ -610,10 +610,11 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
             # Calculate SPY buy & hold value using Close prices from results_df
             # New approach: Calculate shares purchased on first day, then keep that constant
             first_day_close = cleaned_df["Close"].iloc[0]
-            initial_cash = strategy_config.INITIAL_CASH
-            spy_shares_bought = initial_cash / first_day_close if first_day_close > 0 else 0
+            # Use total fund from frontend (initial_balance) if available, otherwise fall back to config
+            total_fund = initial_balance if initial_balance is not None else strategy_config.INITIAL_CASH
+            spy_shares_bought = total_fund / first_day_close if first_day_close > 0 else 0
             print(
-                f"SPY Buy & Hold: Initial cash ${initial_cash:.2f}, first day close ${first_day_close:.2f}, "
+                f"SPY Buy & Hold: Total fund ${total_fund:.2f}, first day close ${first_day_close:.2f}, "
                 f"shares bought {spy_shares_bought:.2f}"
             )
 

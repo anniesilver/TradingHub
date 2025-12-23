@@ -243,7 +243,7 @@ function Dashboard() {
     interestData: [],
     tradingLogs: [],
     firstMonthRawData: {},
-    totalAssignedCost: 0,
+    totalCallClosingCost: 0,
     totalPremiumsReceived: 0,
     totalInterestPaid: 0,
     totalWithdrawAmount: 0,
@@ -749,39 +749,33 @@ function Dashboard() {
         console.log('No buy transactions found in trading logs. No markers will be displayed.');
       }
       
-      // Analyze trading logs for "assigned" entries and calculate total cost
-      let totalAssignedCost = 0;
-      const assignedEntries = tradingLogs.filter(entry => {
+      // Calculate total cost of closing/buying back calls
+      let totalCallClosingCost = 0;
+      tradingLogs.forEach(entry => {
         const logLower = entry.log.toLowerCase();
-        return logLower.includes('assigned');
-      });
-      
-      assignedEntries.forEach(entry => {
-        const logLower = entry.log.toLowerCase();
-        if (logLower.includes('cost')) {
-          // Try to extract cost value using various patterns
+        // Look for "closed" or "bought back" entries with costs
+        if ((logLower.includes('closed') || logLower.includes('bought back')) && logLower.includes('cost')) {
+          // Extract cost value using various patterns
           const costPatterns = [
-            /cost:?\s*\$?(\d+(?:\.\d+)?)/i,
-            /cost\s+of\s+\$?(\d+(?:\.\d+)?)/i,
-            /at\s+a\s+cost\s+of\s+\$?(\d+(?:\.\d+)?)/i,
-            /\$(\d+(?:\.\d+)?)\s+cost/i
+            /cost:?\s*\$?([\d,]+\.?\d*)/i,
+            /cost\s+of\s+\$?([\d,]+\.?\d*)/i
           ];
-          
+
           for (const pattern of costPatterns) {
             const match = entry.log.match(pattern);
             if (match && match[1]) {
-              const cost = parseFloat(match[1]);
-              if (!isNaN(cost)) {
-                totalAssignedCost += cost;
-                console.log(`Found assigned cost: $${cost} on ${entry.date}`);
+              const cost = parseFloat(match[1].replace(/,/g, ''));
+              if (!isNaN(cost) && cost > 0) {
+                totalCallClosingCost += cost;
+                console.log(`Found call closing cost: $${cost} on ${entry.date}`);
                 break;
               }
             }
           }
         }
       });
-      
-      console.log(`Total cost of assigned options: $${totalAssignedCost.toFixed(2)}`);
+
+      console.log(`Total cost to close calls: $${totalCallClosingCost.toFixed(2)}`);
       
       // Step 1: Extract ALL available premium values directly from API
       const rawPremiumData = [];
@@ -981,7 +975,36 @@ function Dashboard() {
         console.log('No premium data found, creating varied test data');
       }
 
-      
+
+      // Calculate total withdrawals from trading logs
+      let totalWithdrawAmount = 0;
+      tradingLogs.forEach(entry => {
+        const logLower = entry.log.toLowerCase();
+        if (logLower.includes('withdrawal') || logLower.includes('monthly withdraw')) {
+          // Extract withdrawal amount from patterns like:
+          // "Monthly withdrawal: $X,XXX.XX (Y% of $Z)"
+          // "WITHDRAWAL-CALC: Y% of $Z = $X,XXX.XX"
+          const patterns = [
+            /withdrawal[:\s]+\$?([\d,]+\.?\d*)/i,
+            /= \$?([\d,]+\.?\d*)/
+          ];
+
+          for (const pattern of patterns) {
+            const match = entry.log.match(pattern);
+            if (match && match[1]) {
+              const amount = parseFloat(match[1].replace(/,/g, ''));
+              if (!isNaN(amount) && amount > 0) {
+                totalWithdrawAmount += amount;
+                console.log(`Found withdrawal: $${amount} on ${entry.date}`);
+                break;
+              }
+            }
+          }
+        }
+      });
+
+      console.log(`Total cash withdrawals: $${totalWithdrawAmount.toFixed(2)}`);
+
       // Update state with all processed data
       setData({
         loading: false,
@@ -994,9 +1017,10 @@ function Dashboard() {
         interestData: filteredInterestData,
         tradingLogs: tradingLogs,
         firstMonthRawData: firstMonthData,
-        totalAssignedCost,
+        totalCallClosingCost,
         totalPremiumsReceived,
-        totalInterestPaid
+        totalInterestPaid,
+        totalWithdrawAmount
       });
       
       // Indicate success
@@ -1833,10 +1857,10 @@ function Dashboard() {
               
               {/* Add summary info boxes */}
               <Box sx={{ mb: 3 }}>
-                {data.totalAssignedCost > 0 && (
-                  <Alert severity="info" sx={{ mb: 1 }}>
+                {data.totalCallClosingCost > 0 && (
+                  <Alert severity="warning" sx={{ mb: 1 }}>
                     <Typography variant="subtitle2">
-                      Total cost of assigned options during test period: ${data.totalAssignedCost.toFixed(2)}
+                      Total cost to close/buyback calls during test period: ${data.totalCallClosingCost.toFixed(2)}
                     </Typography>
                   </Alert>
                 )}
@@ -1851,6 +1875,13 @@ function Dashboard() {
                   <Alert severity="warning" sx={{ mb: 1 }}>
                     <Typography variant="subtitle2">
                       Total interest paid during test period: ${data.totalInterestPaid.toFixed(2)}
+                    </Typography>
+                  </Alert>
+                )}
+                {data.totalWithdrawAmount > 0 && (
+                  <Alert severity="info" sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2">
+                      Total cash withdrawals during test period: ${data.totalWithdrawAmount.toFixed(2)}
                     </Typography>
                   </Alert>
                 )}
