@@ -152,6 +152,9 @@ def import_strategy(strategy_type):
     Returns:
         tuple: (TradingSimulator, OptionStrategy, bool) or (None, None, False) if import fails
     """
+    import sys
+    import importlib
+
     # First check dependencies
     if not ensure_strategy_dependencies():
         return None, None, False
@@ -203,9 +206,20 @@ def import_strategy(strategy_type):
 
                 # Import with more verbose error handling
                 try:
+                    # FORCE clear module from cache (handles path case/slash differences)
+                    modules_to_clear = [key for key in sys.modules.keys() if 'trading_simulator' in key]
+                    for mod in modules_to_clear:
+                        del sys.modules[mod]
+                        print(f"✓ Cleared cached module: {mod}")
+
+                    # Now import fresh
+                    import trading_simulator
                     from trading_simulator import TradingSimulator
 
-                    print("Successfully imported TradingSimulator")
+                    print("=" * 80)
+                    print("✓✓✓ BACKEND LOADING STRATEGY - VERSION 2.0 ✓✓✓")
+                    print(f"✓✓✓ Module path: {trading_simulator.__file__}")
+                    print("=" * 80)
                 except ImportError as e:
                     print(f"Failed to import TradingSimulator: {str(e)}")
                     raise
