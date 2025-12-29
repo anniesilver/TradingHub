@@ -205,23 +205,33 @@ class IBKRDataService:
         finally:
             conn.close()
     
-    def get_data_from_db(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
-        """Get market data from database"""
+    def get_data_from_db(self, symbol: str, start_date: str, end_date: str, bar_interval: str = '1 day') -> pd.DataFrame:
+        """Get market data from database
+
+        Args:
+            symbol: Trading symbol
+            start_date: Start date in 'YYYY-MM-DD' format
+            end_date: End date in 'YYYY-MM-DD' format
+            bar_interval: Bar interval (default: '1 day', can be '30 mins', '1 hour', etc.)
+
+        Returns:
+            pd.DataFrame: Market data with date index
+        """
         conn = self.get_db_connection()
         try:
             query = """
                 SELECT symbol, date, open, high, low, close, volume
-                FROM market_data 
-                WHERE symbol = %s AND date >= %s AND date <= %s
+                FROM market_data
+                WHERE symbol = %s AND date >= %s AND date <= %s AND bar_interval = %s
                 ORDER BY date
             """
-            
-            df = pd.read_sql_query(query, conn, params=(symbol, start_date, end_date))
+
+            df = pd.read_sql_query(query, conn, params=(symbol, start_date, end_date, bar_interval))
             if not df.empty:
                 df['date'] = pd.to_datetime(df['date'])
                 df.set_index('date', inplace=True)
-            
-            logger.info(f"Retrieved {len(df)} records from DB for {symbol}")
+
+            logger.info(f"Retrieved {len(df)} records from DB for {symbol} (interval={bar_interval})")
             return df
             
         except Exception as e:
@@ -230,22 +240,42 @@ class IBKRDataService:
         finally:
             conn.close()
     
-    def save_data_to_db(self, symbol: str, data: List[Dict]):
-        """Save market data to database"""
+    def save_data_to_db(self, symbol: str, data: List[Dict], bar_interval: str = '1 day'):
+        """Save market data to database
+
+        Args:
+            symbol: Trading symbol
+            data: List of bar data dictionaries
+            bar_interval: Bar interval (default: '1 day')
+        """
         if not data:
             return
-        
+
         conn = self.get_db_connection()
         try:
             with conn.cursor() as cursor:
                 for bar in data:
-                    # Convert date string to date object
-                    date_obj = datetime.strptime(bar['date'], '%Y%m%d').date()
-                    
+                    # Convert date string to datetime object
+                    # IBKR returns different formats for daily vs intraday:
+                    # Daily: '20240101'
+                    # Intraday: '20240101  09:30:00' or '20240101 09:30:00'
+                    date_str = bar['date'].strip()
+
+                    try:
+                        # Try intraday format first (with time)
+                        if ' ' in date_str:
+                            date_obj = datetime.strptime(date_str, '%Y%m%d %H:%M:%S')
+                        else:
+                            # Daily format (date only)
+                            date_obj = datetime.strptime(date_str, '%Y%m%d')
+                    except ValueError:
+                        logger.error(f"Could not parse date: {date_str}")
+                        continue
+
                     cursor.execute("""
-                        INSERT INTO market_data (symbol, date, open, high, low, close, volume)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (symbol, date) 
+                        INSERT INTO market_data (symbol, date, open, high, low, close, volume, bar_interval)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (symbol, date, bar_interval)
                         DO UPDATE SET
                             open = EXCLUDED.open,
                             high = EXCLUDED.high,
@@ -254,12 +284,12 @@ class IBKRDataService:
                             volume = EXCLUDED.volume,
                             updated_at = CURRENT_TIMESTAMP
                     """, (
-                        symbol, date_obj, bar['open'], bar['high'], 
-                        bar['low'], bar['close'], bar['volume']
+                        symbol, date_obj, bar['open'], bar['high'],
+                        bar['low'], bar['close'], bar['volume'], bar_interval
                     ))
-                
+
                 conn.commit()
-                logger.info(f"Saved {len(data)} records to DB for {symbol}")
+                logger.info(f"Saved {len(data)} records to DB for {symbol} (interval={bar_interval})")
                 
         except Exception as e:
             conn.rollback()
@@ -268,27 +298,36 @@ class IBKRDataService:
         finally:
             conn.close()
     
-    def fetch_and_store_data(self, symbol: str, period: str = "10 Y") -> bool:
-        """Fetch data from IBKR and store in database"""
+    def fetch_and_store_data(self, symbol: str, period: str = "10 Y", bar_size: str = "1 day") -> bool:
+        """Fetch data from IBKR and store in database
+
+        Args:
+            symbol: Trading symbol
+            period: Period of data to fetch (e.g., '10 Y', '1 M', '5 D')
+            bar_size: Bar size (e.g., '1 day', '30 mins', '1 hour')
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
         try:
             # Connect to IBKR
             self.client = IBKRDataClient(IBKR_CONFIG["client_id"])
             if not self.client.connect_to_ibkr(IBKR_CONFIG["host"], IBKR_CONFIG["port"]):
                 raise Exception("Failed to connect to IBKR")
-            
+
             # Fetch data
-            logger.info(f"Fetching {period} of data for {symbol}")
-            data = self.client.fetch_historical_data(symbol, period)
-            
+            logger.info(f"Fetching {period} of data for {symbol} with bar_size={bar_size}")
+            data = self.client.fetch_historical_data(symbol, period, bar_size)
+
             if data:
                 # Save to database
-                self.save_data_to_db(symbol, data)
+                self.save_data_to_db(symbol, data, bar_size)
                 logger.info(f"Successfully fetched and stored data for {symbol}")
                 return True
             else:
                 logger.warning(f"No data received for {symbol}")
                 return False
-                
+
         except Exception as e:
             logger.error(f"Error fetching data for {symbol}: {str(e)}")
             return False

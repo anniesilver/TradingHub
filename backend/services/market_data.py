@@ -179,16 +179,16 @@ class MarketData:
                 logger.info(f"No data found in database for {symbol}, fetching from IBKR")
 
                 # Fetch from IBKR and save to database - use longer period to ensure coverage
-                logger.info(f"Fetching 20 years of data for {symbol} to ensure coverage")
-                if ibkr_service.fetch_and_store_data(symbol, "20 Y"):
+                logger.info(f"Fetching 20 years of data for {symbol} with interval={bar_interval}")
+                if ibkr_service.fetch_and_store_data(symbol, "20 Y", bar_interval):
                     # Try database again after IBKR fetch
-                    df = ibkr_service.get_data_from_db(symbol, start_date, end_date)
+                    df = ibkr_service.get_data_from_db(symbol, start_date, end_date, bar_interval)
 
                     if df.empty:
                         # Try even longer period if still empty
                         logger.info(f"Still no data, trying 25 years for {symbol}")
-                        if ibkr_service.fetch_and_store_data(symbol, "25 Y"):
-                            df = ibkr_service.get_data_from_db(symbol, start_date, end_date)
+                        if ibkr_service.fetch_and_store_data(symbol, "25 Y", bar_interval):
+                            df = ibkr_service.get_data_from_db(symbol, start_date, end_date, bar_interval)
 
                         if df.empty:
                             raise Exception(f"Still no data available for {symbol} after extended IBKR fetch")
