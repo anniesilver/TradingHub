@@ -87,9 +87,9 @@ export const runSimulation = async (config) => {
     const payload = {
       strategy_type: config.strategyId || 'SPY_POWER_CASHFLOW',
       config: {
-        SYMBOL: config.symbol || 'SPY',       
+        SYMBOL: config.symbol || 'SPY',
         OPTION_TYPE: config.optionType || 'call',
-        // Add all the new config parameters
+        // Add all the new config parameters (for SPY_POWER_CASHFLOW)
         CALL_COST_BUFFER: config.callCostBuffer !== undefined ? config.callCostBuffer : 0.05,
         CONTRACT_SIZE: config.contractSize !== undefined ? config.contractSize : 100,
         COVERED_CALL_RATIO: config.coveredCallRatio !== undefined ? config.coveredCallRatio : 1.0,
@@ -112,6 +112,28 @@ export const runSimulation = async (config) => {
       start_date: config.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       end_date: config.endDate || new Date().toISOString().split('T')[0]
     };
+
+    // OPTIONS_MARTIN specific parameters
+    if (config.strategyId === 'OPTIONS_MARTIN') {
+      payload.config.STRIKE = config.STRIKE !== undefined ? config.STRIKE : 680.0;
+      payload.config.RIGHT = config.RIGHT || 'C';
+      payload.config.EXPIRATION = config.EXPIRATION || '20260220';
+      payload.config.INC_INDEX = config.INC_INDEX !== undefined ? config.INC_INDEX : 2.0;
+      payload.config.DEC_INDEX = config.DEC_INDEX !== undefined ? config.DEC_INDEX : 0.6;
+      payload.config.MAX_ADD_LOADS = config.MAX_ADD_LOADS !== undefined ? config.MAX_ADD_LOADS : 5;
+      payload.config.OPEN_POSITION = config.OPEN_POSITION !== undefined ? config.OPEN_POSITION : 2;
+      payload.config.BAR_INTERVAL = config.BAR_INTERVAL || '30 mins';
+      console.log('OPTIONS_MARTIN parameters added to payload:', {
+        STRIKE: payload.config.STRIKE,
+        RIGHT: payload.config.RIGHT,
+        EXPIRATION: payload.config.EXPIRATION,
+        INC_INDEX: payload.config.INC_INDEX,
+        DEC_INDEX: payload.config.DEC_INDEX,
+        MAX_ADD_LOADS: payload.config.MAX_ADD_LOADS,
+        OPEN_POSITION: payload.config.OPEN_POSITION,
+        BAR_INTERVAL: payload.config.BAR_INTERVAL
+      });
+    }
     
     console.log(`Using date range: ${payload.start_date} to ${payload.end_date}`);
 

@@ -229,6 +229,11 @@ const AVAILABLE_STRATEGIES = [
     id: 'SPY_ENHANCED_CASHFLOW',
     name: 'SPY Enhanced Cashflow',
     description: 'Enhanced strategy with intelligent dip buying and defensive overlays'
+  },
+  {
+    id: 'OPTIONS_MARTIN',
+    name: 'Options Martingale',
+    description: 'Pure Martingale averaging-down strategy for option contracts'
   }
 ];
 
@@ -273,6 +278,15 @@ function Dashboard() {
     volatilityScalingFactor: 0.15,
     startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
+    // OPTIONS_MARTIN specific parameters
+    STRIKE: 680.0,
+    RIGHT: 'C',
+    EXPIRATION: '20260220',
+    INC_INDEX: 2.0,
+    DEC_INDEX: 0.6,
+    MAX_ADD_LOADS: 5,
+    OPEN_POSITION: 2,
+    BAR_INTERVAL: '30 mins',
   });
   // Add state for the active tab
   const [activeTab, setActiveTab] = useState(0);
@@ -1202,15 +1216,23 @@ function Dashboard() {
       <Box component="form" mb={3}>
         <Grid container spacing={1}>
           <Grid item xs={12} sm={3} md={1.5}>
-            <CompactTextField
-              fullWidth
-              size="small"
-              label="Symbol"
-              name="symbol"
-              value={config.symbol}
-              onChange={handleConfigChange}
-              disabled
-            />
+            <CompactFormControl fullWidth size="small">
+              <InputLabel>Symbol</InputLabel>
+              <CompactSelect
+                name="symbol"
+                value={config.symbol}
+                onChange={handleConfigChange}
+                label="Symbol"
+              >
+                <MenuItem value="SPY">SPY</MenuItem>
+                <MenuItem value="QQQ">QQQ</MenuItem>
+                <MenuItem value="TSLA">TSLA</MenuItem>
+                <MenuItem value="NVDA">NVDA</MenuItem>
+                <MenuItem value="AMZN">AMZN</MenuItem>
+                <MenuItem value="U">U</MenuItem>
+                <MenuItem value="FIG">FIG</MenuItem>
+              </CompactSelect>
+            </CompactFormControl>
           </Grid>
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactFormControl fullWidth size="small">
@@ -1489,7 +1511,135 @@ function Dashboard() {
               InputProps={{ inputProps: { min: 0, step: 0.01 } }}
             />
           </Grid>
-          
+
+          {/* OPTIONS_MARTIN Specific Parameters */}
+          {selectedStrategy === 'OPTIONS_MARTIN' && (
+            <>
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom mt={2} mb={1}>
+                  Option Contract Parameters
+                </Typography>
+              </Grid>
+
+              <Grid item xs={12} sm={3} md={1.5}>
+                <CompactTextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  label="Strike Price"
+                  name="STRIKE"
+                  value={config.STRIKE}
+                  onChange={handleConfigChange}
+                  InputProps={{ inputProps: { min: 0, step: 5 } }}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={3} md={1.5}>
+                <CompactFormControl fullWidth size="small">
+                  <InputLabel>Option Right</InputLabel>
+                  <CompactSelect
+                    name="RIGHT"
+                    value={config.RIGHT}
+                    onChange={handleConfigChange}
+                    label="Option Right"
+                  >
+                    <MenuItem value="C">Call</MenuItem>
+                    <MenuItem value="P">Put</MenuItem>
+                  </CompactSelect>
+                </CompactFormControl>
+              </Grid>
+
+              <Grid item xs={12} sm={3} md={1.5}>
+                <CompactTextField
+                  fullWidth
+                  size="small"
+                  type="text"
+                  label="Expiration (YYYYMMDD)"
+                  name="EXPIRATION"
+                  value={config.EXPIRATION}
+                  onChange={handleConfigChange}
+                  placeholder="20260220"
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom mt={2} mb={1}>
+                  Martingale Strategy Parameters
+                </Typography>
+              </Grid>
+
+              <Grid item xs={12} sm={3} md={1.5}>
+                <CompactTextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  label="Exit Multiplier"
+                  name="INC_INDEX"
+                  value={config.INC_INDEX}
+                  onChange={handleConfigChange}
+                  InputProps={{ inputProps: { min: 1, step: 0.1 } }}
+                  helperText="Exit when profit reaches this multiple"
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={3} md={1.5}>
+                <CompactTextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  label="Add-Load Trigger"
+                  name="DEC_INDEX"
+                  value={config.DEC_INDEX}
+                  onChange={handleConfigChange}
+                  InputProps={{ inputProps: { min: 0.1, max: 0.9, step: 0.1 } }}
+                  helperText="Add position when drops to this %"
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={3} md={1.5}>
+                <CompactTextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  label="Max Pyramids"
+                  name="MAX_ADD_LOADS"
+                  value={config.MAX_ADD_LOADS}
+                  onChange={handleConfigChange}
+                  InputProps={{ inputProps: { min: 1, max: 10, step: 1 } }}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={3} md={1.5}>
+                <CompactTextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  label="Entry Size (contracts)"
+                  name="OPEN_POSITION"
+                  value={config.OPEN_POSITION}
+                  onChange={handleConfigChange}
+                  InputProps={{ inputProps: { min: 1, step: 1 } }}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={3} md={1.5}>
+                <CompactFormControl fullWidth size="small">
+                  <InputLabel>Bar Interval</InputLabel>
+                  <CompactSelect
+                    name="BAR_INTERVAL"
+                    value={config.BAR_INTERVAL}
+                    onChange={handleConfigChange}
+                    label="Bar Interval"
+                  >
+                    <MenuItem value="30 mins">30 mins</MenuItem>
+                    <MenuItem value="1 hour">1 hour</MenuItem>
+                    <MenuItem value="1 day">1 day</MenuItem>
+                  </CompactSelect>
+                </CompactFormControl>
+              </Grid>
+            </>
+          )}
+
           <Grid item xs={12}>
             <Button
               variant="contained"
