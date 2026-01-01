@@ -7,7 +7,7 @@ from datetime import datetime
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from services.strategy_service import import_strategy, run_spy_power_cashflow
+from services.strategy_service import import_strategy, run_spy_power_cashflow, run_options_martin
 from routes.market_data import market_data_bp
 
 
@@ -149,6 +149,23 @@ def run_simulation():
                 if results:
                     logger.info(f"Generated results for date range {start_date} to {end_date}")
                     # Log the first data point to verify structure
+                    first_date = list(results.keys())[0]
+                    logger.info(f"First data point structure: {results[first_date]}")
+                    return jsonify(results)
+                else:
+                    return jsonify({"error": "Strategy simulation failed"}), 500
+            elif data["strategy_type"] == "OPTIONS_MARTIN":
+                logger.info("Running OPTIONS_MARTIN simulation with real option data...")
+                results = run_options_martin(
+                    TradingSimulator,
+                    OptionStrategy,
+                    data["config"],
+                    start_date,
+                    end_date,
+                    initial_balance,
+                )
+                if results:
+                    logger.info(f"Generated results for date range {start_date} to {end_date}")
                     first_date = list(results.keys())[0]
                     logger.info(f"First data point structure: {results[first_date]}")
                     return jsonify(results)

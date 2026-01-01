@@ -33,6 +33,7 @@ ALGO_BASE_PATH = os.environ.get("ALGO_BASE_PATH", "C:/ALGO/algo_trading")
 # Dictionary of available strategies
 STRATEGY_PATHS = {
     "SPY_POWER_CASHFLOW": os.path.join(ALGO_BASE_PATH, "SPY_POWER_CASHFLOW"),
+    "OPTIONS_MARTIN": os.path.join(ALGO_BASE_PATH, "OPTIONS_MARTIN"),
 }
 
 # Add all strategy paths to sys.path for importing
@@ -222,6 +223,39 @@ def import_strategy(strategy_type):
                 return TradingSimulator, OptionStrategy, True
             except Exception as e:
                 print(f"Detailed import error: {str(e)}")
+                raise
+
+        elif strategy_type == "OPTIONS_MARTIN":
+            try:
+                # Import OPTIONS_MARTIN modules
+                print(f"Importing OPTIONS_MARTIN from {path}")
+                sys.path.insert(0, path)
+
+                module_files = os.listdir(path)
+                print(f"Files in OPTIONS_MARTIN directory: {module_files}")
+
+                try:
+                    from trading_simulator import TradingSimulator
+                    print("Successfully imported TradingSimulator")
+                except ImportError as e:
+                    print(f"Failed to import TradingSimulator: {str(e)}")
+                    raise
+
+                try:
+                    from option_strategy import OptionStrategy
+                    print("Successfully imported OptionStrategy")
+                except ImportError as e:
+                    print(f"Failed to import OptionStrategy: {str(e)}")
+                    raise
+
+                strategy_modules[strategy_type] = (
+                    TradingSimulator,
+                    OptionStrategy,
+                    True,
+                )
+                return TradingSimulator, OptionStrategy, True
+            except Exception as e:
+                print(f"Detailed import error for OPTIONS_MARTIN: {str(e)}")
                 raise
 
         print(f"Could not import strategy modules for {strategy_type}")
@@ -499,18 +533,18 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
         for key, value in config.items():
             print(f"{key}: {value} (type: {type(value)})")
 
-        # Specifically check for monthly withdrawal parameters
-        print("\n=== MONTHLY WITHDRAWAL DEBUG ===")
-        if "MONTHLY_WITHDRAWAL" in config:
-            print(f"MONTHLY_WITHDRAWAL found: {config['MONTHLY_WITHDRAWAL']}")
-        else:
-            print("MONTHLY_WITHDRAWAL not found in config")
-
+        # Specifically check for monthly withdrawal rate parameter
+        print("\n=== MONTHLY WITHDRAWAL RATE DEBUG ===")
         if "MONTHLY_WITHDRAWAL_RATE" in config:
-            print(f"MONTHLY_WITHDRAWAL_RATE found: {config['MONTHLY_WITHDRAWAL_RATE']}")
+            print(f"MONTHLY_WITHDRAWAL_RATE found: {config['MONTHLY_WITHDRAWAL_RATE']}%")
         else:
             print("MONTHLY_WITHDRAWAL_RATE not found in config")
-        print("=== END BACKEND DEBUG ===")
+
+        # Check for old parameter name (should not be present)
+        if "MONTHLY_WITHDRAWAL" in config:
+            print(f"WARNING: Old MONTHLY_WITHDRAWAL parameter found: {config['MONTHLY_WITHDRAWAL']} (should use MONTHLY_WITHDRAWAL_RATE instead)")
+
+        print("=== END WITHDRAWAL RATE DEBUG ===")
 
         for key, value in config.items():
             # Set attribute directly if it matches a strategy_config attribute
@@ -661,6 +695,8 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
                 return default
 
             print("\n=== Processing daily results ===")
+            print(f"DataFrame columns: {list(cleaned_df.columns)}")
+            print(f"Sample Interests_Paid values: {cleaned_df['Interests_Paid'].head().tolist() if 'Interests_Paid' in cleaned_df.columns else 'Column not found'}")
             for idx, row in cleaned_df.iterrows():
                 # Skip dates that aren't in the original DataFrame
                 if idx not in trading_days:
@@ -725,6 +761,186 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
         sys.path = original_path
 
 
+def run_options_martin(TradingSimulator, OptionStrategy, config, start_dt, end_dt, initial_balance=None):
+    """Run the OPTIONS_MARTIN strategy simulation."""
+    strategy_path = STRATEGY_PATHS["OPTIONS_MARTIN"]
+    original_path = sys.path.copy()
+
+    try:
+        if strategy_path not in sys.path:
+            sys.path.insert(0, strategy_path)
+            print(f"Temporarily added {strategy_path} to sys.path")
+
+        # Import strategy modules using explicit path-based imports
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("position", os.path.join(strategy_path, "position.py"))
+        position_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(position_module)
+        PositionTracker = position_module.PositionTracker
+
+        spec = importlib.util.spec_from_file_location("config", os.path.join(strategy_path, "config.py"))
+        config_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(config_module)
+        Config = config_module.Config
+
+        # Import MarketData from OPTIONS_MARTIN (handles option price loading via IBKR service)
+        spec = importlib.util.spec_from_file_location("market_data", os.path.join(strategy_path, "market_data.py"))
+        market_data_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(market_data_module)
+        MarketData = market_data_module.MarketData
+
+        # Create a Config object
+        strategy_config = Config()
+
+        # Apply config values from frontend
+        strategy_config.SYMBOL = config.get("SYMBOL", "SPY")
+        strategy_config.STRATEGY_TYPE = "OPTIONS_MARTIN"
+
+        # OPTION-SPECIFIC PARAMETERS
+        strategy_config.STRIKE = float(config.get("STRIKE", 600.0))
+        strategy_config.RIGHT = config.get("RIGHT", "C")
+        strategy_config.EXPIRATION = config.get("EXPIRATION", "20260220")
+
+        # MARTINGALE PARAMETERS
+        strategy_config.INC_INDEX = float(config.get("INC_INDEX", 2.0))
+        strategy_config.DEC_INDEX = float(config.get("DEC_INDEX", 0.6))
+        strategy_config.MAX_ADD_LOADS = int(config.get("MAX_ADD_LOADS", 5))
+        strategy_config.OPEN_POSITION = int(config.get("OPEN_POSITION", 2))
+        strategy_config.BAR_INTERVAL = config.get("BAR_INTERVAL", "30 mins")
+
+        # Get initial balance from request
+        try:
+            balance_sources = [
+                ("parameter", initial_balance),
+                ("config", "initial_balance"),
+                ("config", "initialBalance"),
+                ("config", "INITIAL_CASH"),
+            ]
+
+            for source_type, source in balance_sources:
+                if source_type == "parameter" and source is not None:
+                    strategy_config.INITIAL_CASH = float(source)
+                    print(f"Using initial balance from parameter: {source}")
+                    break
+                elif source_type == "config" and source in config:
+                    strategy_config.INITIAL_CASH = float(config[source])
+                    print(f"Using {source} from config: {config[source]}")
+                    break
+        except (ValueError, TypeError) as e:
+            print(f"Error parsing initial balance: {e}, using default")
+
+        # Debug print config
+        print("\n=== OPTIONS_MARTIN CONFIG DEBUG ===")
+        print("Full config from frontend:", config)
+        print(f"\nOption Contract: {strategy_config.SYMBOL} {strategy_config.STRIKE}{strategy_config.RIGHT} exp={strategy_config.EXPIRATION}")
+        print(f"Initial Cash: ${strategy_config.INITIAL_CASH:,.2f}")
+        print(f"Entry Size: {strategy_config.OPEN_POSITION} contracts")
+        print(f"Exit Target: {strategy_config.INC_INDEX}x")
+        print(f"Add-Load Trigger: {strategy_config.DEC_INDEX}x")
+        print(f"Max Pyramids: {strategy_config.MAX_ADD_LOADS}")
+        print(f"Bar Interval: {strategy_config.BAR_INTERVAL}")
+        print("=== END CONFIG DEBUG ===")
+
+        # Initialize components
+        print("\n=== Initializing MarketData for OPTION ===")
+        market_data = MarketData(
+            symbol=strategy_config.SYMBOL,
+            strike=strategy_config.STRIKE,
+            right=strategy_config.RIGHT,
+            expiration=strategy_config.EXPIRATION,
+            config=strategy_config
+        )
+
+        # Convert datetime objects to string dates
+        start_date_str = start_dt.strftime("%Y-%m-%d")
+        end_date_str = end_dt.strftime("%Y-%m-%d")
+
+        # Load option price data
+        print(f"Loading option data for date range: {start_date_str} to {end_date_str}")
+        market_data.load_data(start_date=start_date_str, end_date=end_date_str)
+        print(f"Option data loaded successfully")
+
+        print("\n=== Initializing PositionTracker ===")
+        position = PositionTracker(strategy_config.INITIAL_CASH, strategy_config)
+        print(f"PositionTracker initial balance: {position.cash}")
+
+        print("\n=== Initializing OptionStrategy ===")
+        strategy = OptionStrategy(strategy_config)
+        print(f"OptionStrategy type: {strategy_config.STRATEGY_TYPE}")
+
+        print("\n=== Creating TradingSimulator ===")
+        simulator = TradingSimulator(market_data, position, strategy, strategy_config)
+        print("TradingSimulator created with all components")
+
+        print("\n=== Running Simulation ===")
+        print(f"Running simulation from {start_date_str} to {end_date_str}")
+
+        results_df = simulator.run(start_date=start_date_str, end_date=end_date_str)
+
+        # Process results (same structure as SPY_POWER_CASHFLOW)
+        daily_results = {}
+        if results_df is not None and not results_df.empty:
+            print(f"Results DataFrame columns: {results_df.columns.tolist()}")
+
+            # Helper function for safe float conversion
+            def safe_float(value):
+                if pd.isna(value) or value is None:
+                    return 0.0
+                if isinstance(value, (int, float)):
+                    if np.isinf(value):
+                        return 0.0
+                    return float(value)
+                try:
+                    return float(value)
+                except (ValueError, TypeError):
+                    return 0.0
+
+            def get_column_value(row, possible_names, default):
+                for name in possible_names:
+                    if name in row.index and not pd.isna(row.get(name)):
+                        return row[name]
+                return default
+
+            # Clean dataframe
+            cleaned_df = results_df.replace([np.inf, -np.inf], np.nan).fillna(0)
+            print(f"Cleaned DataFrame shape: {cleaned_df.shape}")
+
+            # Process each row into daily_results format
+            for idx in cleaned_df.index:
+                row = cleaned_df.loc[idx]
+                date_str = idx.strftime("%Y-%m-%d") if hasattr(idx, 'strftime') else str(idx)
+
+                result_dict = {
+                    "Cash_Balance": safe_float(row.get("Cash_Balance", 0.0)),
+                    "Position": int(safe_float(row.get("Position", 0))),
+                    "Position_Balance": safe_float(row.get("Position_Balance", 0.0)),
+                    "Portfolio_Value": safe_float(row.get("Portfolio_Value", 0.0)),
+                    "Total_Rounds": int(safe_float(row.get("Total_Rounds", 0))),
+                    "Total_Profit": safe_float(row.get("Total_Profit", 0.0)),
+                    "Close": safe_float(row.get("Close", 0.0)),
+                    "Open": safe_float(row.get("Open", 0.0)),
+                    "High": safe_float(row.get("High", 0.0)),
+                    "Low": safe_float(row.get("Low", 0.0)),
+                    "Trading_Log": str(get_column_value(row, ["Trading_Log", "Trading Log", "trading_log"], "")),
+                }
+
+                daily_results[date_str] = result_dict
+
+            print(f"Processed {len(daily_results)} days of data")
+
+        else:
+            print("Warning: No results data returned from strategy simulation")
+
+        return daily_results
+
+    except Exception as e:
+        print(f"Error in run_options_martin: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        raise
+    finally:
+        sys.path = original_path
 
 
 

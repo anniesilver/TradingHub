@@ -71,7 +71,7 @@ export const getSimulations = async (limit = 10, offset = 0) => {
  * @param {number} config.minCommission - Minimum commission (default: 1.0)
  * @param {number} config.minStrikeDistance - Minimum strike distance (default: 0.015)
  * @param {number} config.minTradeSize - Minimum trade size (default: 1000)
- * @param {number} config.monthlyWithdrawal - Monthly withdrawal amount (default: 5000.0)
+ * @param {number} config.monthlyWithdrawalRate - Monthly withdrawal rate as percentage (default: 1.0)
  * @param {number} config.optionCommission - Option commission (default: 0.65)
  * @param {number} config.riskFreeRate - Risk-free rate (default: 0.05)
  * @param {number} config.stockCommission - Stock commission (default: 0.01)
@@ -87,9 +87,9 @@ export const runSimulation = async (config) => {
     const payload = {
       strategy_type: config.strategyId || 'SPY_POWER_CASHFLOW',
       config: {
-        SYMBOL: config.symbol || 'SPY',       
+        SYMBOL: config.symbol || 'SPY',
         OPTION_TYPE: config.optionType || 'call',
-        // Add all the new config parameters
+        // Add all the new config parameters (for SPY_POWER_CASHFLOW)
         CALL_COST_BUFFER: config.callCostBuffer !== undefined ? config.callCostBuffer : 0.05,
         CONTRACT_SIZE: config.contractSize !== undefined ? config.contractSize : 100,
         COVERED_CALL_RATIO: config.coveredCallRatio !== undefined ? config.coveredCallRatio : 1.0,
@@ -102,7 +102,7 @@ export const runSimulation = async (config) => {
         MIN_COMMISSION: config.minCommission !== undefined ? config.minCommission : 1.0,
         MIN_STRIKE_DISTANCE: config.minStrikeDistance !== undefined ? config.minStrikeDistance : 0.015,
         MIN_TRADE_SIZE: config.minTradeSize !== undefined ? config.minTradeSize : 1000,
-        MONTHLY_WITHDRAWAL: config.monthlyWithdrawal !== undefined ? config.monthlyWithdrawal : 5000.0,
+        MONTHLY_WITHDRAWAL_RATE: config.monthlyWithdrawalRate !== undefined ? config.monthlyWithdrawalRate : 1.0,
         OPTION_COMMISSION: config.optionCommission !== undefined ? config.optionCommission : 0.65,
         RISK_FREE_RATE: config.riskFreeRate !== undefined ? config.riskFreeRate : 0.05,
         STOCK_COMMISSION: config.stockCommission !== undefined ? config.stockCommission : 0.01,
@@ -112,6 +112,28 @@ export const runSimulation = async (config) => {
       start_date: config.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       end_date: config.endDate || new Date().toISOString().split('T')[0]
     };
+
+    // OPTIONS_MARTIN specific parameters
+    if (config.strategyId === 'OPTIONS_MARTIN') {
+      payload.config.STRIKE = config.STRIKE !== undefined ? config.STRIKE : 680.0;
+      payload.config.RIGHT = config.RIGHT || 'C';
+      payload.config.EXPIRATION = config.EXPIRATION || '20260220';
+      payload.config.INC_INDEX = config.INC_INDEX !== undefined ? config.INC_INDEX : 2.0;
+      payload.config.DEC_INDEX = config.DEC_INDEX !== undefined ? config.DEC_INDEX : 0.6;
+      payload.config.MAX_ADD_LOADS = config.MAX_ADD_LOADS !== undefined ? config.MAX_ADD_LOADS : 5;
+      payload.config.OPEN_POSITION = config.OPEN_POSITION !== undefined ? config.OPEN_POSITION : 2;
+      payload.config.BAR_INTERVAL = config.BAR_INTERVAL || '30 mins';
+      console.log('OPTIONS_MARTIN parameters added to payload:', {
+        STRIKE: payload.config.STRIKE,
+        RIGHT: payload.config.RIGHT,
+        EXPIRATION: payload.config.EXPIRATION,
+        INC_INDEX: payload.config.INC_INDEX,
+        DEC_INDEX: payload.config.DEC_INDEX,
+        MAX_ADD_LOADS: payload.config.MAX_ADD_LOADS,
+        OPEN_POSITION: payload.config.OPEN_POSITION,
+        BAR_INTERVAL: payload.config.BAR_INTERVAL
+      });
+    }
     
     console.log(`Using date range: ${payload.start_date} to ${payload.end_date}`);
 
@@ -137,7 +159,7 @@ export const runSimulation = async (config) => {
 
     console.log('=== FRONTEND PARAMETER DEBUG ===');
     console.log('Original config object:', config);
-    console.log('Monthly withdrawal from config:', config.monthlyWithdrawal);
+    console.log('Monthly withdrawal rate from config:', config.monthlyWithdrawalRate);
     console.log('Full payload being sent:', JSON.stringify(payload, null, 2));
     console.log('=== END FRONTEND DEBUG ===');
     console.log('Sending simulation request:', payload);

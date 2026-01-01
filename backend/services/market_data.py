@@ -40,12 +40,13 @@ class MarketData:
         except Exception as e:
             logger.warning(f"Could not initialize database table: {e}")
 
-    def load_data(self, start_date: str = None, end_date: str = None) -> pd.DataFrame:
+    def load_data(self, start_date: str = None, end_date: str = None, bar_interval: str = '1 day') -> pd.DataFrame:
         """Load market data using database-first approach with IBKR fallback
 
         Args:
             start_date: Start date in 'YYYY-MM-DD' format (if None, loads from earliest available)
             end_date: End date in 'YYYY-MM-DD' format (if None, loads to latest available)
+            bar_interval: Bar interval (default: '1 day', can be '30 mins', '1 hour', etc.)
 
         Returns:
             pd.DataFrame: Market data with datetime index
@@ -63,23 +64,23 @@ class MarketData:
             logger.info(f"No end_date provided, using default: {end_date}")
 
         # Check if we already have data loaded for this range
-        current_range = (start_date, end_date)
+        current_range = (start_date, end_date, bar_interval)
         if (self._data_loaded and
             self.data is not None and
             self._last_loaded_range == current_range):
-            logger.info(f"Using cached data for {self.symbol} from {start_date} to {end_date}")
+            logger.info(f"Using cached data for {self.symbol} from {start_date} to {end_date}, interval={bar_interval}")
             return self.data
 
-        logger.info(f"Loading market data for {self.symbol} from {start_date} to {end_date}")
+        logger.info(f"Loading market data for {self.symbol} from {start_date} to {end_date}, interval={bar_interval}")
 
         try:
             # Load primary symbol data
-            primary_df = self._load_symbol_data(self.symbol, start_date, end_date)
+            primary_df = self._load_symbol_data(self.symbol, start_date, end_date, bar_interval)
 
-            # For SPY strategies, also load VIX data
+            # For SPY strategies, also load VIX data (always use daily for VIX)
             if self.symbol == "SPY":
                 try:
-                    vix_df = self._load_symbol_data("VIX", start_date, end_date)
+                    vix_df = self._load_symbol_data("VIX", start_date, end_date, '1 day')
 
                     # Merge SPY and VIX data
                     if not vix_df.empty:
@@ -156,37 +157,38 @@ class MarketData:
             print(error_msg)  # Also print to console for immediate visibility
             raise Exception(f"Market data loading failed. Please start TWS/Gateway and ensure API access is enabled. {str(e)}")
 
-    def _load_symbol_data(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def _load_symbol_data(self, symbol: str, start_date: str, end_date: str, bar_interval: str = '1 day') -> pd.DataFrame:
         """Load data for a specific symbol using database-first approach
 
         Args:
             symbol: Trading symbol
             start_date: Start date in 'YYYY-MM-DD' format
             end_date: End date in 'YYYY-MM-DD' format
+            bar_interval: Bar interval (default: '1 day')
 
         Returns:
             pd.DataFrame: Market data for the symbol
         """
         try:
-            logger.info(f"Loading data for {symbol} from {start_date} to {end_date}")
+            logger.info(f"Loading data for {symbol} from {start_date} to {end_date}, interval={bar_interval}")
 
             # Try database first
-            df = ibkr_service.get_data_from_db(symbol, start_date, end_date)
+            df = ibkr_service.get_data_from_db(symbol, start_date, end_date, bar_interval)
 
             if df.empty:
                 logger.info(f"No data found in database for {symbol}, fetching from IBKR")
 
                 # Fetch from IBKR and save to database - use longer period to ensure coverage
-                logger.info(f"Fetching 20 years of data for {symbol} to ensure coverage")
-                if ibkr_service.fetch_and_store_data(symbol, "20 Y"):
+                logger.info(f"Fetching 20 years of data for {symbol} with interval={bar_interval}")
+                if ibkr_service.fetch_and_store_data(symbol, "20 Y", bar_interval):
                     # Try database again after IBKR fetch
-                    df = ibkr_service.get_data_from_db(symbol, start_date, end_date)
+                    df = ibkr_service.get_data_from_db(symbol, start_date, end_date, bar_interval)
 
                     if df.empty:
                         # Try even longer period if still empty
                         logger.info(f"Still no data, trying 25 years for {symbol}")
-                        if ibkr_service.fetch_and_store_data(symbol, "25 Y"):
-                            df = ibkr_service.get_data_from_db(symbol, start_date, end_date)
+                        if ibkr_service.fetch_and_store_data(symbol, "25 Y", bar_interval):
+                            df = ibkr_service.get_data_from_db(symbol, start_date, end_date, bar_interval)
 
                         if df.empty:
                             raise Exception(f"Still no data available for {symbol} after extended IBKR fetch")
