@@ -22,6 +22,8 @@ import {
   ListItemText,
   Divider,
   Drawer,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import {
@@ -253,7 +255,8 @@ function Dashboard() {
     totalInterestPaid: 0,
     totalWithdrawAmount: 0,
     annualizedReturn: 0,
-    maxDrawdown: 0
+    maxDrawdown: 0,
+    ivStatistics: null  // IV stats for OPTIONS_MARTIN
   });
   const [config, setConfig] = useState({
     symbol: 'SPY',
@@ -287,6 +290,11 @@ function Dashboard() {
     MAX_ADD_LOADS: 5,
     OPEN_POSITION: 2,
     BAR_INTERVAL: '30 mins',
+    // IV filtering parameters
+    USE_IV_FILTER: true,
+    IV_ENTRY_THRESHOLD: 0.30,
+    USE_IV_SPIKE_EXIT: true,  // Enable IV spike exit by default
+    IV_EXIT_THRESHOLD: 0.50,
   });
   // Add state for the active tab
   const [activeTab, setActiveTab] = useState(0);
@@ -325,6 +333,7 @@ function Dashboard() {
   };
 
   const processSimulationData = (results) => {
+    console.log('🚀 processSimulationData CALLED - Code is loaded!');
     try {
       // Enhanced initial validation
       if (results === null || results === undefined) {
@@ -389,6 +398,24 @@ function Dashboard() {
       } catch (parseError) {
         console.error('Error parsing results:', parseError);
         throw new Error('Failed to parse simulation results: ' + parseError.message);
+      }
+
+      // Extract IV statistics from metadata (for OPTIONS_MARTIN)
+      let ivStatistics = null;
+      console.log('🔍 Checking for IV statistics metadata...');
+      console.log('🔍 parsedData keys:', Object.keys(parsedData));
+      console.log('🔍 parsedData sample (first 3 keys):', Object.keys(parsedData).slice(0, 3));
+      console.log('🔍 parsedData has __metadata__?', parsedData && parsedData.__metadata__);
+      console.log('🔍 Full parsedData.__metadata__:', parsedData?.__metadata__);
+
+      if (parsedData && parsedData.__metadata__) {
+        ivStatistics = parsedData.__metadata__.iv_statistics || null;
+        console.log('✅ Extracted IV statistics:', ivStatistics);
+        // Remove metadata from parsedData so it doesn't interfere with date processing
+        delete parsedData.__metadata__;
+      } else {
+        console.log('❌ No __metadata__ found in parsedData');
+        console.log('❌ Available keys in parsedData:', Object.keys(parsedData).join(', '));
       }
       
       // Special handling for 2007 data format
@@ -995,8 +1022,9 @@ function Dashboard() {
         console.log('No premium data found, creating varied test data');
       }
 
-      
+
       // Update state with all processed data
+      console.log('📊 Setting data state with ivStatistics:', ivStatistics);
       setData({
         loading: false,
         chartData: processedData,
@@ -1010,7 +1038,8 @@ function Dashboard() {
         firstMonthRawData: firstMonthData,
         totalAssignedCost,
         totalPremiumsReceived,
-        totalInterestPaid
+        totalInterestPaid,
+        ivStatistics: ivStatistics  // IV stats for OPTIONS_MARTIN
       });
       
       // Indicate success
@@ -1637,6 +1666,79 @@ function Dashboard() {
                   </CompactSelect>
                 </CompactFormControl>
               </Grid>
+
+              {/* Implied Volatility Filtering Parameters */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom mt={2} mb={1}>
+                  Implied Volatility Filtering
+                </Typography>
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={3}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={config.USE_IV_FILTER}
+                      onChange={(e) => {
+                        const newValue = e.target.checked;
+                        setConfig(prev => ({
+                          ...prev,
+                          USE_IV_FILTER: newValue
+                        }));
+                      }}
+                    />
+                  }
+                  label="Enable IV Entry Filter"
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={3}>
+                <CompactTextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  label="IV Entry Threshold"
+                  name="IV_ENTRY_THRESHOLD"
+                  value={config.IV_ENTRY_THRESHOLD}
+                  onChange={handleConfigChange}
+                  disabled={!config.USE_IV_FILTER}
+                  InputProps={{ inputProps: { min: 0, max: 1, step: 0.01 } }}
+                  helperText="Enter only if IV < threshold (e.g., 0.30 = 30%)"
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={3}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={config.USE_IV_SPIKE_EXIT}
+                      onChange={(e) => {
+                        const newValue = e.target.checked;
+                        setConfig(prev => ({
+                          ...prev,
+                          USE_IV_SPIKE_EXIT: newValue
+                        }));
+                      }}
+                    />
+                  }
+                  label="Enable IV Spike Exit"
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={3}>
+                <CompactTextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  label="IV Exit Threshold"
+                  name="IV_EXIT_THRESHOLD"
+                  value={config.IV_EXIT_THRESHOLD}
+                  onChange={handleConfigChange}
+                  disabled={!config.USE_IV_SPIKE_EXIT}
+                  InputProps={{ inputProps: { min: 0, max: 1, step: 0.01 } }}
+                  helperText="Exit if IV > threshold (e.g., 0.50 = 50%)"
+                />
+              </Grid>
             </>
           )}
 
@@ -1653,14 +1755,87 @@ function Dashboard() {
         </Grid>
       </Box>
 
+      {/* IV Statistics Card (OPTIONS_MARTIN only) */}
+      {(() => {
+        console.log('🎯 IV Card Render Check:');
+        console.log('  selectedStrategy:', selectedStrategy);
+        console.log('  data.ivStatistics:', data.ivStatistics);
+        console.log('  Should show:', selectedStrategy === 'OPTIONS_MARTIN' && data.ivStatistics);
+        return null;
+      })()}
+      {selectedStrategy === 'OPTIONS_MARTIN' && data.ivStatistics && (
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          <Grid item xs={12}>
+            <Paper elevation={2} sx={{ p: 2, bgcolor: '#f5f5f5' }}>
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+                Implied Volatility (IV) Statistics - For Threshold Tuning
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={6} sm={4} md={2}>
+                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'white', borderRadius: 1 }}>
+                    <Typography variant="body2" color="text.secondary">MIN</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
+                      {(data.ivStatistics.iv_min * 100).toFixed(1)}%
+                    </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={6} sm={4} md={2}>
+                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'white', borderRadius: 1 }}>
+                    <Typography variant="body2" color="text.secondary">MAX</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#d32f2f' }}>
+                      {(data.ivStatistics.iv_max * 100).toFixed(1)}%
+                    </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={6} sm={4} md={2}>
+                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'white', borderRadius: 1 }}>
+                    <Typography variant="body2" color="text.secondary">MEAN</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+                      {(data.ivStatistics.iv_mean * 100).toFixed(1)}%
+                    </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={6} sm={4} md={2}>
+                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'white', borderRadius: 1 }}>
+                    <Typography variant="body2" color="text.secondary">MEDIAN</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+                      {(data.ivStatistics.iv_median * 100).toFixed(1)}%
+                    </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={6} sm={4} md={2}>
+                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'white', borderRadius: 1 }}>
+                    <Typography variant="body2" color="text.secondary">STD DEV</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                      {(data.ivStatistics.iv_std * 100).toFixed(1)}%
+                    </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={12} md={2}>
+                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'white', borderRadius: 1 }}>
+                    <Typography variant="body2" color="text.secondary">RANGE</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                      {(data.ivStatistics.iv_min * 100).toFixed(1)}% - {(data.ivStatistics.iv_max * 100).toFixed(1)}%
+                    </Typography>
+                  </Box>
+                </Grid>
+              </Grid>
+              <Typography variant="caption" sx={{ mt: 1, display: 'block', fontStyle: 'italic' }}>
+                💡 Use these values to tune IV_ENTRY_THRESHOLD (entry when low) and IV_EXIT_THRESHOLD (exit when high)
+              </Typography>
+            </Paper>
+          </Grid>
+        </Grid>
+      )}
+
       {/* Performance Charts with Tabs */}
       <Grid container spacing={2}>
         <Grid item xs={12}>
           <Paper elevation={2}>
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-              <Tabs 
-                value={activeTab} 
-                onChange={handleTabChange} 
+              <Tabs
+                value={activeTab}
+                onChange={handleTabChange}
                 aria-label="chart tabs"
                 variant="scrollable"
                 scrollButtons="auto"

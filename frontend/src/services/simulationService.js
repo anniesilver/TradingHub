@@ -123,6 +123,13 @@ export const runSimulation = async (config) => {
       payload.config.MAX_ADD_LOADS = config.MAX_ADD_LOADS !== undefined ? config.MAX_ADD_LOADS : 5;
       payload.config.OPEN_POSITION = config.OPEN_POSITION !== undefined ? config.OPEN_POSITION : 2;
       payload.config.BAR_INTERVAL = config.BAR_INTERVAL || '30 mins';
+
+      // IV FILTERING PARAMETERS
+      payload.config.USE_IV_FILTER = config.USE_IV_FILTER !== undefined ? config.USE_IV_FILTER : true;
+      payload.config.IV_ENTRY_THRESHOLD = config.IV_ENTRY_THRESHOLD !== undefined ? config.IV_ENTRY_THRESHOLD : 0.30;
+      payload.config.USE_IV_SPIKE_EXIT = config.USE_IV_SPIKE_EXIT !== undefined ? config.USE_IV_SPIKE_EXIT : false;
+      payload.config.IV_EXIT_THRESHOLD = config.IV_EXIT_THRESHOLD !== undefined ? config.IV_EXIT_THRESHOLD : 0.50;
+
       console.log('OPTIONS_MARTIN parameters added to payload:', {
         STRIKE: payload.config.STRIKE,
         RIGHT: payload.config.RIGHT,
@@ -131,7 +138,11 @@ export const runSimulation = async (config) => {
         DEC_INDEX: payload.config.DEC_INDEX,
         MAX_ADD_LOADS: payload.config.MAX_ADD_LOADS,
         OPEN_POSITION: payload.config.OPEN_POSITION,
-        BAR_INTERVAL: payload.config.BAR_INTERVAL
+        BAR_INTERVAL: payload.config.BAR_INTERVAL,
+        USE_IV_FILTER: payload.config.USE_IV_FILTER,
+        IV_ENTRY_THRESHOLD: payload.config.IV_ENTRY_THRESHOLD,
+        USE_IV_SPIKE_EXIT: payload.config.USE_IV_SPIKE_EXIT,
+        IV_EXIT_THRESHOLD: payload.config.IV_EXIT_THRESHOLD
       });
     }
     
