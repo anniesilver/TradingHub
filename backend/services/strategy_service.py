@@ -809,6 +809,12 @@ def run_options_martin(TradingSimulator, OptionStrategy, config, start_dt, end_d
         strategy_config.OPEN_POSITION = int(config.get("OPEN_POSITION", 2))
         strategy_config.BAR_INTERVAL = config.get("BAR_INTERVAL", "30 mins")
 
+        # IV FILTERING PARAMETERS
+        strategy_config.USE_IV_FILTER = config.get("USE_IV_FILTER", True)
+        strategy_config.IV_ENTRY_THRESHOLD = float(config.get("IV_ENTRY_THRESHOLD", 0.30))
+        strategy_config.USE_IV_SPIKE_EXIT = config.get("USE_IV_SPIKE_EXIT", False)
+        strategy_config.IV_EXIT_THRESHOLD = float(config.get("IV_EXIT_THRESHOLD", 0.50))
+
         # Get initial balance from request
         try:
             balance_sources = [
@@ -840,6 +846,11 @@ def run_options_martin(TradingSimulator, OptionStrategy, config, start_dt, end_d
         print(f"Add-Load Trigger: {strategy_config.DEC_INDEX}x")
         print(f"Max Pyramids: {strategy_config.MAX_ADD_LOADS}")
         print(f"Bar Interval: {strategy_config.BAR_INTERVAL}")
+        print(f"\nIV Filtering:")
+        print(f"  Use IV Filter: {strategy_config.USE_IV_FILTER}")
+        print(f"  IV Entry Threshold: {strategy_config.IV_ENTRY_THRESHOLD}")
+        print(f"  Use IV Spike Exit: {strategy_config.USE_IV_SPIKE_EXIT}")
+        print(f"  IV Exit Threshold: {strategy_config.IV_EXIT_THRESHOLD}")
         print("=== END CONFIG DEBUG ===")
 
         # Initialize components
@@ -905,6 +916,28 @@ def run_options_martin(TradingSimulator, OptionStrategy, config, start_dt, end_d
             # Clean dataframe
             cleaned_df = results_df.replace([np.inf, -np.inf], np.nan).fillna(0)
             print(f"Cleaned DataFrame shape: {cleaned_df.shape}")
+            print(f"Cleaned DataFrame columns: {cleaned_df.columns.tolist()}")
+
+            # Calculate IV statistics for frontend display
+            iv_stats = None
+            print(f"🔍 Checking for ImpliedVolatility column...")
+            print(f"🔍 'ImpliedVolatility' in columns? {'ImpliedVolatility' in cleaned_df.columns}")
+            if 'ImpliedVolatility' in cleaned_df.columns:
+                iv_values = cleaned_df['ImpliedVolatility'].replace(0, np.nan).dropna()
+                if len(iv_values) > 0:
+                    iv_stats = {
+                        'iv_min': float(iv_values.min()),
+                        'iv_max': float(iv_values.max()),
+                        'iv_mean': float(iv_values.mean()),
+                        'iv_median': float(iv_values.median()),
+                        'iv_std': float(iv_values.std()),
+                    }
+                    print(f"\nIV Statistics for this backtest:")
+                    print(f"  Min: {iv_stats['iv_min']:.4f}")
+                    print(f"  Max: {iv_stats['iv_max']:.4f}")
+                    print(f"  Mean: {iv_stats['iv_mean']:.4f}")
+                    print(f"  Median: {iv_stats['iv_median']:.4f}")
+                    print(f"  Std Dev: {iv_stats['iv_std']:.4f}")
 
             # Process each row into daily_results format
             for idx in cleaned_df.index:
@@ -926,6 +959,10 @@ def run_options_martin(TradingSimulator, OptionStrategy, config, start_dt, end_d
                 }
 
                 daily_results[date_str] = result_dict
+
+            # Add IV statistics as metadata
+            if iv_stats:
+                daily_results['__metadata__'] = {'iv_statistics': iv_stats}
 
             print(f"Processed {len(daily_results)} days of data")
 
