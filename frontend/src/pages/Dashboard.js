@@ -657,7 +657,64 @@ function Dashboard() {
         tradingLogs = [];
         console.log('Continuing without trading logs due to error');
       }
-      
+
+      // Extract total withdrawals from trading logs
+      let totalWithdrawals = 0;
+      try {
+        tradingLogs.forEach(logEntry => {
+          const withdrawalPatterns = [
+            /Monthly withdrawal: \$([0-9,]+\.?[0-9]*)/,
+            /WITHDRAWAL-CALC: .*= \$([0-9,]+\.?[0-9]*)/,
+            /\[WITHDRAWAL\].*\$([0-9,]+\.?[0-9]*)/
+          ];
+
+          for (const pattern of withdrawalPatterns) {
+            const match = logEntry.log.match(pattern);
+            if (match) {
+              const amount = parseFloat(match[1].replace(/,/g, ''));
+              if (!isNaN(amount) && amount >= 0) {
+                totalWithdrawals += amount;
+              }
+              break;
+            }
+          }
+        });
+        console.log(`Total withdrawals extracted: $${totalWithdrawals.toFixed(2)}`);
+      } catch (withdrawalError) {
+        console.error('Error extracting withdrawals:', withdrawalError);
+        totalWithdrawals = 0;
+      }
+
+      // Calculate Compound Annualized Return (CAGR) - Accounting for Withdrawals
+      let annualizedReturn = 0;
+      try {
+        if (processedData.length > 1 && config.initialBalance > 0) {
+          const firstDate = new Date(processedData[0].date);
+          const lastDate = new Date(processedData[processedData.length - 1].date);
+          const initialValue = config.initialBalance;
+          const finalValue = processedData[processedData.length - 1].Portfolio_Value;
+
+          // Calculate years (including fractional years)
+          const timeDiffMs = lastDate - firstDate;
+          const years = timeDiffMs / (1000 * 60 * 60 * 24 * 365.25);
+
+          // Only calculate if time period is meaningful (at least 1 day)
+          if (years > (1/365.25)) {
+            // Adjusted final value accounts for withdrawals
+            const adjustedFinalValue = finalValue + totalWithdrawals;
+
+            // Ensure adjusted final value is positive for CAGR calculation
+            if (adjustedFinalValue > 0 && initialValue > 0) {
+              annualizedReturn = Math.pow(adjustedFinalValue / initialValue, 1 / years) - 1;
+              console.log(`CAGR calculated: ${(annualizedReturn * 100).toFixed(2)}% (Initial: $${initialValue.toLocaleString()}, Final: $${finalValue.toLocaleString()}, Withdrawals: $${totalWithdrawals.toLocaleString()}, Years: ${years.toFixed(2)})`);
+            }
+          }
+        }
+      } catch (cagrError) {
+        console.error('Error calculating CAGR:', cagrError);
+        annualizedReturn = 0;
+      }
+
       // Debug: Log detected buy transactions
       const buyTransactions = processedData.filter(item => item.isBuySharesTransaction);
       console.log('Detected buy transactions:', buyTransactions.length);
@@ -1039,6 +1096,8 @@ function Dashboard() {
         totalAssignedCost,
         totalPremiumsReceived,
         totalInterestPaid,
+        totalWithdrawAmount: totalWithdrawals,  // Total withdrawals from trading logs
+        annualizedReturn: annualizedReturn,      // CAGR accounting for withdrawals
         ivStatistics: ivStatistics  // IV stats for OPTIONS_MARTIN
       });
       
@@ -2176,8 +2235,33 @@ function Dashboard() {
                     </Typography>
                   </Alert>
                 )}
+
+                {/* Compound Annualized Return (CAGR) */}
+                {data.chartData && data.chartData.length > 0 && (
+                  <Alert
+                    severity={data.annualizedReturn >= 0 ? "success" : "error"}
+                    sx={{ mb: 2 }}
+                  >
+                    <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                      Compound Annualized Return (CAGR): {(data.annualizedReturn * 100).toFixed(2)}%
+                    </Typography>
+                    <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                      Initial Balance: ${config.initialBalance?.toLocaleString() || '0'} →
+                      Final Balance: ${data.chartData[data.chartData.length - 1]?.Portfolio_Value?.toLocaleString() || '0'}
+                    </Typography>
+                    {data.totalWithdrawAmount > 0 && (
+                      <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>
+                        Total Withdrawals: ${data.totalWithdrawAmount?.toLocaleString() || '0'}
+                        {' '}(adjusted final value: ${((data.chartData[data.chartData.length - 1]?.Portfolio_Value || 0) + data.totalWithdrawAmount)?.toLocaleString() || '0'})
+                      </Typography>
+                    )}
+                    <Typography variant="caption" sx={{ display: 'block' }}>
+                      Period: {data.chartData[0]?.date || 'N/A'} to {data.chartData[data.chartData.length - 1]?.date || 'N/A'}
+                    </Typography>
+                  </Alert>
+                )}
               </Box>
-              
+
               {data.tradingLogs && data.tradingLogs.length > 0 ? (
                 <Box sx={{ mb: 2, maxHeight: '600px', overflowY: 'auto' }}>
                   {data.tradingLogs.map(({ date, log, isTransaction }) => (
