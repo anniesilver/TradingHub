@@ -177,22 +177,27 @@ class IBKRDataService:
                     CREATE TABLE IF NOT EXISTS market_data (
                         id SERIAL PRIMARY KEY,
                         symbol VARCHAR(10) NOT NULL,
-                        date DATE NOT NULL,
+                        date TIMESTAMP NOT NULL,
                         open DECIMAL(10, 4) NOT NULL,
                         high DECIMAL(10, 4) NOT NULL,
                         low DECIMAL(10, 4) NOT NULL,
                         close DECIMAL(10, 4) NOT NULL,
                         volume BIGINT DEFAULT 0,
+                        bar_interval VARCHAR(20) DEFAULT '1 day' NOT NULL,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        UNIQUE(symbol, date)
+                        UNIQUE(symbol, date, bar_interval)
                     )
                 """)
-                
+
                 # Create indexes
                 cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_market_data_symbol_date 
+                    CREATE INDEX IF NOT EXISTS idx_market_data_symbol_date
                     ON market_data (symbol, date)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_market_data_symbol_date_interval
+                    ON market_data (symbol, date, bar_interval)
                 """)
                 
                 conn.commit()

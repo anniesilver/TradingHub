@@ -2,6 +2,27 @@ import axios from 'axios';
 
 const API_BASE_URL = 'http://127.0.0.1:8080/api';
 
+// Helper function to get default option expiration (3rd Friday ~2 months out)
+const getDefaultExpiration = () => {
+  const today = new Date();
+  let targetMonth = today.getMonth() + 2;
+  let targetYear = today.getFullYear();
+  if (targetMonth > 11) {
+    targetMonth -= 12;
+    targetYear += 1;
+  }
+  // Find 3rd Friday
+  const firstDay = new Date(targetYear, targetMonth, 1);
+  const firstFriday = new Date(targetYear, targetMonth, 1 + ((5 - firstDay.getDay() + 7) % 7));
+  const thirdFriday = new Date(firstFriday);
+  thirdFriday.setDate(firstFriday.getDate() + 14);
+  // Format as YYYYMMDD
+  const year = thirdFriday.getFullYear();
+  const month = String(thirdFriday.getMonth() + 1).padStart(2, '0');
+  const day = String(thirdFriday.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+};
+
 // Configure axios defaults
 axios.defaults.headers.common['Content-Type'] = 'application/json';
 
@@ -117,7 +138,7 @@ export const runSimulation = async (config) => {
     if (config.strategyId === 'OPTIONS_MARTIN') {
       payload.config.STRIKE = config.STRIKE !== undefined ? config.STRIKE : 680.0;
       payload.config.RIGHT = config.RIGHT || 'C';
-      payload.config.EXPIRATION = config.EXPIRATION || '20260220';
+      payload.config.EXPIRATION = config.EXPIRATION || getDefaultExpiration();
       payload.config.INC_INDEX = config.INC_INDEX !== undefined ? config.INC_INDEX : 2.0;
       payload.config.DEC_INDEX = config.DEC_INDEX !== undefined ? config.DEC_INDEX : 0.6;
       payload.config.MAX_ADD_LOADS = config.MAX_ADD_LOADS !== undefined ? config.MAX_ADD_LOADS : 5;
