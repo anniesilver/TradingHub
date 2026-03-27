@@ -761,6 +761,31 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
         sys.path = original_path
 
 
+def get_default_expiration():
+    """Calculate 3rd Friday of a month ~2 months in the future (standard options expiration)"""
+    from datetime import datetime, timedelta
+    import calendar
+
+    today = datetime.now()
+    # Target 2 months ahead
+    target_month = today.month + 2
+    target_year = today.year
+    if target_month > 12:
+        target_month -= 12
+        target_year += 1
+
+    # Find the 3rd Friday of the target month
+    # Get the first day of the month
+    first_day = datetime(target_year, target_month, 1)
+    # Find the first Friday (weekday 4 = Friday)
+    days_until_friday = (4 - first_day.weekday()) % 7
+    first_friday = first_day + timedelta(days=days_until_friday)
+    # Third Friday is 2 weeks later
+    third_friday = first_friday + timedelta(days=14)
+
+    return third_friday.strftime('%Y%m%d')
+
+
 def run_options_martin(TradingSimulator, OptionStrategy, config, start_dt, end_dt, initial_balance=None):
     """Run the OPTIONS_MARTIN strategy simulation."""
     strategy_path = STRATEGY_PATHS["OPTIONS_MARTIN"]
@@ -800,7 +825,7 @@ def run_options_martin(TradingSimulator, OptionStrategy, config, start_dt, end_d
         # OPTION-SPECIFIC PARAMETERS
         strategy_config.STRIKE = float(config.get("STRIKE", 600.0))
         strategy_config.RIGHT = config.get("RIGHT", "C")
-        strategy_config.EXPIRATION = config.get("EXPIRATION", "20260220")
+        strategy_config.EXPIRATION = config.get("EXPIRATION", get_default_expiration())
 
         # MARTINGALE PARAMETERS
         strategy_config.INC_INDEX = float(config.get("INC_INDEX", 2.0))

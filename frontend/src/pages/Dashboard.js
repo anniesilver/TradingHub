@@ -40,6 +40,33 @@ import {
 } from 'recharts';
 import { runSimulation } from '../services/simulationService';
 
+// Helper function to calculate the 3rd Friday of a month (standard options expiration)
+const getThirdFriday = (year, month) => {
+  const firstDay = new Date(year, month, 1);
+  const firstFriday = new Date(year, month, 1 + ((5 - firstDay.getDay() + 7) % 7));
+  const thirdFriday = new Date(firstFriday);
+  thirdFriday.setDate(firstFriday.getDate() + 14); // Add 2 weeks
+  return thirdFriday;
+};
+
+// Get a default expiration date ~2 months in the future (3rd Friday)
+const getDefaultExpiration = () => {
+  const today = new Date();
+  // Target 2 months ahead
+  let targetMonth = today.getMonth() + 2;
+  let targetYear = today.getFullYear();
+  if (targetMonth > 11) {
+    targetMonth -= 12;
+    targetYear += 1;
+  }
+  const thirdFriday = getThirdFriday(targetYear, targetMonth);
+  // Format as YYYYMMDD
+  const year = thirdFriday.getFullYear();
+  const month = String(thirdFriday.getMonth() + 1).padStart(2, '0');
+  const day = String(thirdFriday.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+};
+
 const Root = styled('div')(({ theme }) => ({
   display: 'flex',
   flexGrow: 1,
@@ -284,7 +311,7 @@ function Dashboard() {
     // OPTIONS_MARTIN specific parameters
     STRIKE: 680.0,
     RIGHT: 'C',
-    EXPIRATION: '20260220',
+    EXPIRATION: getDefaultExpiration(),  // Dynamic: 3rd Friday ~2 months out
     INC_INDEX: 2.0,
     DEC_INDEX: 0.6,
     MAX_ADD_LOADS: 5,
@@ -657,7 +684,96 @@ function Dashboard() {
         tradingLogs = [];
         console.log('Continuing without trading logs due to error');
       }
-      
+
+      // Extract total withdrawals from trading logs
+      let totalWithdrawals = 0;
+      try {
+        tradingLogs.forEach(logEntry => {
+          const withdrawalPatterns = [
+            /Monthly withdrawal: \$([0-9,]+\.?[0-9]*)/,
+            /WITHDRAWAL-CALC: .*= \$([0-9,]+\.?[0-9]*)/,
+            /\[WITHDRAWAL\].*\$([0-9,]+\.?[0-9]*)/
+          ];
+
+          for (const pattern of withdrawalPatterns) {
+            const match = logEntry.log.match(pattern);
+            if (match) {
+              const amount = parseFloat(match[1].replace(/,/g, ''));
+              if (!isNaN(amount) && amount >= 0) {
+                totalWithdrawals += amount;
+              }
+              break;
+            }
+          }
+        });
+        console.log(`Total withdrawals extracted: $${totalWithdrawals.toFixed(2)}`);
+      } catch (withdrawalError) {
+        console.error('Error extracting withdrawals:', withdrawalError);
+        totalWithdrawals = 0;
+      }
+
+      // Calculate Compound Annualized Return (CAGR) - Accounting for Withdrawals
+      let annualizedReturn = 0;
+      try {
+        if (processedData.length > 1 && config.initialBalance > 0) {
+          const firstDate = new Date(processedData[0].date);
+          const lastDate = new Date(processedData[processedData.length - 1].date);
+          const initialValue = config.initialBalance;
+          const finalValue = processedData[processedData.length - 1].Portfolio_Value;
+
+          // Calculate years (including fractional years)
+          const timeDiffMs = lastDate - firstDate;
+          const years = timeDiffMs / (1000 * 60 * 60 * 24 * 365.25);
+
+          // Only calculate if time period is meaningful (at least 1 day)
+          if (years > (1/365.25)) {
+            // Adjusted final value accounts for withdrawals
+            const adjustedFinalValue = finalValue + totalWithdrawals;
+
+            // Ensure adjusted final value is positive for CAGR calculation
+            if (adjustedFinalValue > 0 && initialValue > 0) {
+              annualizedReturn = Math.pow(adjustedFinalValue / initialValue, 1 / years) - 1;
+              console.log(`CAGR calculated: ${(annualizedReturn * 100).toFixed(2)}% (Initial: $${initialValue.toLocaleString()}, Final: $${finalValue.toLocaleString()}, Withdrawals: $${totalWithdrawals.toLocaleString()}, Years: ${years.toFixed(2)})`);
+            }
+          }
+        }
+      } catch (cagrError) {
+        console.error('Error calculating CAGR:', cagrError);
+        annualizedReturn = 0;
+      }
+
+      // Calculate Maximum Drawdown
+      let maxDrawdown = 0;
+      try {
+        if (processedData.length > 0) {
+          let peak = processedData[0].Portfolio_Value;
+          let maxDrawdownValue = 0;
+
+          processedData.forEach(item => {
+            const currentValue = item.Portfolio_Value;
+
+            // Update peak if current value is higher
+            if (currentValue > peak) {
+              peak = currentValue;
+            }
+
+            // Calculate drawdown from peak
+            if (peak > 0) {
+              const drawdown = (currentValue - peak) / peak;
+              if (drawdown < maxDrawdownValue) {
+                maxDrawdownValue = drawdown;
+              }
+            }
+          });
+
+          maxDrawdown = maxDrawdownValue; // This will be negative for losses
+          console.log(`Max Drawdown calculated: ${(maxDrawdown * 100).toFixed(2)}%`);
+        }
+      } catch (drawdownError) {
+        console.error('Error calculating max drawdown:', drawdownError);
+        maxDrawdown = 0;
+      }
+
       // Debug: Log detected buy transactions
       const buyTransactions = processedData.filter(item => item.isBuySharesTransaction);
       console.log('Detected buy transactions:', buyTransactions.length);
@@ -1039,6 +1155,9 @@ function Dashboard() {
         totalAssignedCost,
         totalPremiumsReceived,
         totalInterestPaid,
+        totalWithdrawAmount: totalWithdrawals,  // Total withdrawals from trading logs
+        annualizedReturn: annualizedReturn,      // CAGR accounting for withdrawals
+        maxDrawdown: maxDrawdown,                // Maximum drawdown from peak
         ivStatistics: ivStatistics  // IV stats for OPTIONS_MARTIN
       });
       
@@ -1133,48 +1252,6 @@ function Dashboard() {
     return firstMonthEntries;
   };
 
-  if (loading) {
-    return (
-      <LoadingContainer>
-        <CircularProgress />
-      </LoadingContainer>
-    );
-  }
-
-  if (error) {
-    return (
-      <ErrorContainer>
-        <Alert severity="error" 
-          action={
-            <Button 
-              color="inherit" 
-              size="small"
-              onClick={() => {
-                // Reset error and set default dates
-                setError(null);
-                setConfig(prev => ({
-                  ...prev,
-                  startDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 90 days ago
-                  endDate: new Date().toISOString().split('T')[0] // Today
-                }));
-                // Wait for state update then run simulation
-                setTimeout(() => handleRunSimulation(), 100);
-              }}
-            >
-              Try Recent Data
-            </Button>
-          }
-        >
-          <Typography variant="h6" gutterBottom>Error Processing Data</Typography>
-          <Typography variant="body1">{error}</Typography>
-          <Typography variant="body2" sx={{ mt: 1 }}>
-            Try adjusting parameters or selecting a different date range.
-          </Typography>
-        </Alert>
-      </ErrorContainer>
-    );
-  }
-
   const handleStrategyChange = (strategyId) => {
     setSelectedStrategy(strategyId);
     setLoading(true);
@@ -1241,7 +1318,45 @@ function Dashboard() {
           </Typography>
         </Box>
 
-      {/* Configuration Form */}
+        {/* Show loading state */}
+        {loading && (
+          <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+            <CircularProgress size={60} />
+          </Box>
+        )}
+
+        {/* Show error state */}
+        {error && !loading && (
+          <Alert
+            severity="error"
+            sx={{ mb: 3 }}
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => {
+                  setError(null);
+                  setConfig(prev => ({
+                    ...prev,
+                    startDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    endDate: new Date().toISOString().split('T')[0]
+                  }));
+                  setTimeout(() => handleRunSimulation(), 100);
+                }}
+              >
+                Try Recent Data
+              </Button>
+            }
+          >
+            <Typography variant="h6" gutterBottom>Error Processing Data</Typography>
+            <Typography variant="body1">{error}</Typography>
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              Try adjusting parameters or selecting a different date range.
+            </Typography>
+          </Alert>
+        )}
+
+      {/* Configuration Form - always visible */}
       <Box component="form" mb={3}>
         <Grid container spacing={1}>
           <Grid item xs={12} sm={3} md={1.5}>
@@ -1828,7 +1943,8 @@ function Dashboard() {
         </Grid>
       )}
 
-      {/* Performance Charts with Tabs */}
+      {/* Performance Charts with Tabs - only show when we have data and no error */}
+      {!loading && !error && data && (
       <Grid container spacing={2}>
         <Grid item xs={12}>
           <Paper elevation={2}>
@@ -2176,8 +2292,57 @@ function Dashboard() {
                     </Typography>
                   </Alert>
                 )}
+                {data.totalWithdrawAmount > 0 && (
+                  <Alert severity="info" sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2">
+                      Total withdrawals during test period: ${data.totalWithdrawAmount.toFixed(2)}
+                    </Typography>
+                  </Alert>
+                )}
+
+                {/* Compound Annualized Return (CAGR) */}
+                {data.chartData && data.chartData.length > 0 && (
+                  <Alert
+                    severity={data.annualizedReturn >= 0 ? "success" : "error"}
+                    sx={{ mb: 1 }}
+                  >
+                    <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                      Compound Annualized Return (CAGR): {(data.annualizedReturn * 100).toFixed(2)}%
+                    </Typography>
+                    <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                      Initial Balance: ${config.initialBalance?.toLocaleString() || '0'} →
+                      Final Balance: ${data.chartData[data.chartData.length - 1]?.Portfolio_Value?.toLocaleString() || '0'}
+                    </Typography>
+                    {data.totalWithdrawAmount > 0 && (
+                      <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>
+                        Total Withdrawals: ${data.totalWithdrawAmount?.toLocaleString() || '0'}
+                        {' '}(adjusted final value: ${((data.chartData[data.chartData.length - 1]?.Portfolio_Value || 0) + data.totalWithdrawAmount)?.toLocaleString() || '0'})
+                      </Typography>
+                    )}
+                    <Typography variant="caption" sx={{ display: 'block' }}>
+                      Period: {data.chartData[0]?.date || 'N/A'} to {data.chartData[data.chartData.length - 1]?.date || 'N/A'}
+                    </Typography>
+                  </Alert>
+                )}
+
+                {/* Maximum Drawdown */}
+                {data.chartData && data.chartData.length > 0 && (
+                  <Alert
+                    severity={data.maxDrawdown < -0.20 ? "error" : data.maxDrawdown < -0.10 ? "warning" : "info"}
+                    sx={{ mb: 2 }}
+                  >
+                    <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                      Maximum Drawdown: {(data.maxDrawdown * 100).toFixed(2)}%
+                    </Typography>
+                    <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                      {data.maxDrawdown < -0.20 ? '⚠️ High risk - significant portfolio decline from peak' :
+                       data.maxDrawdown < -0.10 ? '⚠️ Moderate drawdown from peak' :
+                       '✓ Low drawdown - stable portfolio performance'}
+                    </Typography>
+                  </Alert>
+                )}
               </Box>
-              
+
               {data.tradingLogs && data.tradingLogs.length > 0 ? (
                 <Box sx={{ mb: 2, maxHeight: '600px', overflowY: 'auto' }}>
                   {data.tradingLogs.map(({ date, log, isTransaction }) => (
@@ -2218,6 +2383,7 @@ function Dashboard() {
           </Paper>
         </Grid>
       </Grid>
+      )}
       </MainContent>
     </Root>
   );
