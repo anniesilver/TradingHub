@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Card,
-  CardContent,
   Typography,
   CircularProgress,
   Alert,
@@ -85,32 +83,6 @@ const StrategyDrawer = styled(Drawer)(({ theme }) => ({
 const MainContent = styled('div')(({ theme }) => ({
   flexGrow: 1,
   padding: theme.spacing(3),
-}));
-
-const LoadingContainer = styled('div')(({ theme }) => ({
-  display: 'flex',
-  justifyContent: 'center',
-  alignItems: 'center',
-  minHeight: '400px',
-}));
-
-const ErrorContainer = styled('div')(({ theme }) => ({
-  margin: theme.spacing(2),
-}));
-
-const StyledCard = styled(Card)(({ theme }) => ({
-  height: '100%',
-  display: 'flex',
-  flexDirection: 'column',
-  margin: theme.spacing(1),
-}));
-
-const LogContainer = styled(Box)(({ theme }) => ({
-  maxHeight: '300px',
-  overflowY: 'auto',
-  padding: theme.spacing(2),
-  backgroundColor: theme.palette.grey[100],
-  borderRadius: theme.shape.borderRadius,
 }));
 
 // Add this near the top of the file, after other styled components
@@ -263,6 +235,11 @@ const AVAILABLE_STRATEGIES = [
     id: 'OPTIONS_MARTIN',
     name: 'Options Martingale',
     description: 'Pure Martingale averaging-down strategy for option contracts'
+  },
+  {
+    id: 'SPY500_LEADER',
+    name: 'S&P 500 Leader',
+    description: 'Invest in the #1 market cap company, switch when leadership changes'
   }
 ];
 
@@ -322,6 +299,10 @@ function Dashboard() {
     IV_ENTRY_THRESHOLD: 0.30,
     USE_IV_SPIKE_EXIT: true,  // Enable IV spike exit by default
     IV_EXIT_THRESHOLD: 0.50,
+    // SPY500_LEADER specific parameters
+    CONFIRMATION_DAYS: 5,
+    INITIAL_POSITION_PERCENT: 0.6,
+    SLIPPAGE_PERCENT: 0.001,
   });
   // Add state for the active tab
   const [activeTab, setActiveTab] = useState(0);
@@ -1852,6 +1833,59 @@ function Dashboard() {
                   disabled={!config.USE_IV_SPIKE_EXIT}
                   InputProps={{ inputProps: { min: 0, max: 1, step: 0.01 } }}
                   helperText="Exit if IV > threshold (e.g., 0.50 = 50%)"
+                />
+              </Grid>
+            </>
+          )}
+
+          {/* SPY500_LEADER specific parameters */}
+          {selectedStrategy === 'SPY500_LEADER' && (
+            <>
+              <Grid item xs={12}>
+                <Typography variant="subtitle2" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
+                  S&P 500 Leader Strategy Parameters
+                </Typography>
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={3}>
+                <CompactTextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  label="Confirmation Days"
+                  name="CONFIRMATION_DAYS"
+                  value={config.CONFIRMATION_DAYS}
+                  onChange={handleConfigChange}
+                  InputProps={{ inputProps: { min: 1, max: 20, step: 1 } }}
+                  helperText="Days new leader must hold #1 before switching"
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={3}>
+                <CompactTextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  label="Initial Position %"
+                  name="INITIAL_POSITION_PERCENT"
+                  value={config.INITIAL_POSITION_PERCENT}
+                  onChange={handleConfigChange}
+                  InputProps={{ inputProps: { min: 0.1, max: 1.0, step: 0.05 } }}
+                  helperText="% of cash for initial buy (e.g., 0.6 = 60%)"
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={3}>
+                <CompactTextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  label="Slippage %"
+                  name="SLIPPAGE_PERCENT"
+                  value={config.SLIPPAGE_PERCENT}
+                  onChange={handleConfigChange}
+                  InputProps={{ inputProps: { min: 0, max: 0.01, step: 0.0001 } }}
+                  helperText="Transaction slippage (e.g., 0.001 = 0.1%)"
                 />
               </Grid>
             </>
