@@ -1113,9 +1113,16 @@ def run_spy500_leader(TradingSimulator, LeaderStrategy, config, start_dt, end_dt
         print("\n=== Initializing MarketData for SPY500_LEADER ===")
         market_data = MarketData(config=strategy_config)
 
-        # Convert datetime objects to string dates
-        start_date_str = start_dt.strftime("%Y-%m-%d")
-        end_date_str = end_dt.strftime("%Y-%m-%d")
+        # Convert datetime objects to string dates (handle both datetime and string input)
+        if isinstance(start_dt, str):
+            start_date_str = start_dt
+        else:
+            start_date_str = start_dt.strftime("%Y-%m-%d")
+
+        if isinstance(end_dt, str):
+            end_date_str = end_dt
+        else:
+            end_date_str = end_dt.strftime("%Y-%m-%d")
 
         # Load market cap and price data
         print(f"Loading market data for date range: {start_date_str} to {end_date_str}")
