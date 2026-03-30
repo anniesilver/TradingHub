@@ -1173,10 +1173,35 @@ def run_spy500_leader(TradingSimulator, LeaderStrategy, config, start_dt, end_dt
             # Clean dataframe
             cleaned_df = results_df.replace([np.inf, -np.inf], np.nan).fillna(0)
 
-            # Calculate SPY buy & hold for comparison
-            first_day_close = cleaned_df["Close"].iloc[0] if "Close" in cleaned_df.columns else 0
+            # Load SPY price data for buy & hold comparison
             initial_cash = strategy_config.INITIAL_CASH
-            spy_shares_bought = initial_cash / first_day_close if first_day_close > 0 else 0
+            spy_prices = {}
+            spy_shares_bought = 0
+
+            try:
+                conn = get_db_connection()
+                if conn:
+                    with conn.cursor() as cursor:
+                        cursor.execute("""
+                            SELECT date, close FROM market_data
+                            WHERE symbol = 'SPY' AND date >= %s AND date <= %s
+                            ORDER BY date
+                        """, (start_date_str, end_date_str))
+                        rows = cursor.fetchall()
+                        for row in rows:
+                            date_key = row[0].strftime("%Y-%m-%d") if hasattr(row[0], 'strftime') else str(row[0])[:10]
+                            spy_prices[date_key] = float(row[1])
+
+                    conn.close()
+
+                    if spy_prices:
+                        first_spy_price = list(spy_prices.values())[0]
+                        spy_shares_bought = initial_cash / first_spy_price if first_spy_price > 0 else 0
+                        print(f"Loaded {len(spy_prices)} SPY prices for comparison")
+                    else:
+                        print("Warning: No SPY price data found, using fallback")
+            except Exception as e:
+                print(f"Warning: Could not load SPY prices: {e}")
 
             # Process each row into daily_results format
             for idx in cleaned_df.index:
@@ -1202,7 +1227,7 @@ def run_spy500_leader(TradingSimulator, LeaderStrategy, config, start_dt, end_dt
                     "High": safe_float(row.get("High", 0.0)),
                     "Low": safe_float(row.get("Low", 0.0)),
                     "Trading_Log": str(get_column_value(row, ["Trading_Log", "Trading Log", "trading_log"], "")),
-                    "spy_value": safe_float(row.get("Close", 0.0)) * spy_shares_bought,
+                    "spy_value": spy_prices.get(date_str, 0.0) * spy_shares_bought if spy_prices else safe_float(row.get("Close", 0.0)) * spy_shares_bought,
                 }
 
                 daily_results[date_str] = result_dict
