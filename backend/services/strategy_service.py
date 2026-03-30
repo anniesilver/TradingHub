@@ -607,9 +607,16 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
         market_data = MarketData(symbol=strategy_config.SYMBOL)
         print(f"MarketData symbol: {market_data.symbol}")
 
-        # Convert datetime objects to string dates first
-        start_date_str = start_dt.strftime("%Y-%m-%d")
-        end_date_str = end_dt.strftime("%Y-%m-%d")
+        # Convert datetime objects to string dates (handle both datetime and string input)
+        if isinstance(start_dt, str):
+            start_date_str = start_dt
+        else:
+            start_date_str = start_dt.strftime("%Y-%m-%d")
+
+        if isinstance(end_dt, str):
+            end_date_str = end_dt
+        else:
+            end_date_str = end_dt.strftime("%Y-%m-%d")
 
         # Load data with user-specified date range
         print(f"Loading market data for date range: {start_date_str} to {end_date_str}")
@@ -922,9 +929,16 @@ def run_options_martin(TradingSimulator, OptionStrategy, config, start_dt, end_d
             config=strategy_config
         )
 
-        # Convert datetime objects to string dates
-        start_date_str = start_dt.strftime("%Y-%m-%d")
-        end_date_str = end_dt.strftime("%Y-%m-%d")
+        # Convert datetime objects to string dates (handle both datetime and string input)
+        if isinstance(start_dt, str):
+            start_date_str = start_dt
+        else:
+            start_date_str = start_dt.strftime("%Y-%m-%d")
+
+        if isinstance(end_dt, str):
+            end_date_str = end_dt
+        else:
+            end_date_str = end_dt.strftime("%Y-%m-%d")
 
         # Load option price data
         print(f"Loading option data for date range: {start_date_str} to {end_date_str}")
