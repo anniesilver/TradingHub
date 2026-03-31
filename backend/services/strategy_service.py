@@ -1242,6 +1242,7 @@ def run_spy500_leader(TradingSimulator, LeaderStrategy, config, start_dt, end_dt
                     "Low": safe_float(row.get("Low", 0.0)),
                     "Trading_Log": str(get_column_value(row, ["Trading_Log", "Trading Log", "trading_log"], "")),
                     "spy_value": spy_prices.get(date_str, 0.0) * spy_shares_bought if spy_prices else safe_float(row.get("Close", 0.0)) * spy_shares_bought,
+                    "isSwapTransaction": str(get_column_value(row, ["Trading_Log", "Trading Log", "trading_log"], "")).startswith(("SWAP:", "INITIAL BUY:")),
                 }
 
                 daily_results[date_str] = result_dict

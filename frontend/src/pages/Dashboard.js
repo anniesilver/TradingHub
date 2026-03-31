@@ -147,7 +147,8 @@ const CustomTooltip = ({ active, payload, label }) => {
   // Get the first item to check if it's a buy transaction
   const firstItem = payload[0]?.payload;
   const isBuyTransaction = firstItem && firstItem.isBuySharesTransaction;
-  
+  const isSwapTransaction = firstItem && firstItem.isSwapTransaction;
+
   return (
     <div style={{ 
       backgroundColor: 'rgba(255, 255, 255, 0.95)', 
@@ -189,6 +190,20 @@ const CustomTooltip = ({ active, payload, label }) => {
               </p>
             </>
           )}
+        </div>
+      )}
+      {isSwapTransaction && (
+        <div style={{
+          margin: '5px 0',
+          padding: '5px',
+          backgroundColor: firstItem.Trading_Log?.startsWith('INITIAL BUY:') ? 'rgba(25,118,210,0.08)' : 'rgba(255,165,0,0.1)',
+          borderLeft: `3px solid ${firstItem.Trading_Log?.startsWith('INITIAL BUY:') ? '#1976d2' : 'orange'}`,
+          borderRadius: '2px'
+        }}>
+          <p style={{ margin: '0', fontWeight: 'bold', color: firstItem.Trading_Log?.startsWith('INITIAL BUY:') ? '#1976d2' : 'orange' }}>
+            {firstItem.Trading_Log?.startsWith('INITIAL BUY:') ? 'Initial Buy' : 'Leader Switch'}
+          </p>
+          <p style={{ margin: '2px 0', fontSize: '13px' }}>{firstItem.Trading_Log}</p>
         </div>
       )}
       {payload.map((entry, index) => {
@@ -2005,25 +2020,32 @@ function Dashboard() {
                 Strategy vs SPY Performance
               </Typography>
               
-              {/* Custom legend for buy transaction markers */}
-              <Box 
-                sx={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  mb: 2, 
-                  p: 1, 
-                  border: '1px solid #eee', 
-                  borderRadius: 1,
-                  bgcolor: 'rgba(0, 128, 0, 0.05)'
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                  <polygon points="8,0 16,16 0,16" fill="green" />
-                </svg>
-                <Typography variant="body2">
-                  Green triangles mark days when shares were purchased or options were written (extracted from Trading Log)
-                </Typography>
-              </Box>
+              {/* Custom legend for transaction markers */}
+              {selectedStrategy === 'SPY500_LEADER' ? (
+                <Box sx={{ display: 'flex', gap: 2, mb: 2, p: 1, border: '1px solid #eee', borderRadius: 1, bgcolor: 'rgba(255, 140, 0, 0.05)' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '6px' }}>
+                      <polygon points="8,0 16,16 0,16" fill="orange" />
+                    </svg>
+                    <Typography variant="body2">Orange triangles mark days when the strategy switches to a new #1 market cap stock</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '6px' }}>
+                      <polygon points="8,0 16,16 0,16" fill="#1976d2" />
+                    </svg>
+                    <Typography variant="body2">Blue triangle marks the initial buy</Typography>
+                  </Box>
+                </Box>
+              ) : (
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, p: 1, border: '1px solid #eee', borderRadius: 1, bgcolor: 'rgba(0, 128, 0, 0.05)' }}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                    <polygon points="8,0 16,16 0,16" fill="green" />
+                  </svg>
+                  <Typography variant="body2">
+                    Green triangles mark days when shares were purchased or options were written (extracted from Trading Log)
+                  </Typography>
+                </Box>
+              )}
               
               <ResponsiveContainer width="100%" height={600}>
                 <LineChart
@@ -2048,12 +2070,24 @@ function Dashboard() {
                     height={36}
                     wrapperStyle={{paddingBottom: '10px'}}
                   />
-                  <Line 
-                    type="monotone" 
-                    dataKey="Portfolio_Value" 
-                    name="Strategy" 
-                    stroke="#82ca9d" 
-                    dot={false}
+                  <Line
+                    type="monotone"
+                    dataKey="Portfolio_Value"
+                    name="Strategy"
+                    stroke="#82ca9d"
+                    dot={selectedStrategy === 'SPY500_LEADER' ? (props) => {
+                      const { payload } = props;
+                      if (payload && payload.isSwapTransaction) {
+                        const isInitial = payload.Trading_Log && payload.Trading_Log.startsWith('INITIAL BUY:');
+                        const color = isInitial ? '#1976d2' : 'orange';
+                        return (
+                          <svg x={props.cx - 8} y={props.cy - 16} width={16} height={16} viewBox="0 0 16 16" fill={color}>
+                            <polygon points="8,0 16,16 0,16" />
+                          </svg>
+                        );
+                      }
+                      return null;
+                    } : false}
                     activeDot={{ r: 8 }}
                     strokeWidth={2}
                   />
