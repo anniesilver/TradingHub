@@ -52,7 +52,11 @@ def get_top_symbols_by_market_cap(limit: int = 50) -> List[str]:
     try:
         with conn.cursor() as cursor:
             cursor.execute("""
-                SELECT symbol FROM market_cap_daily
+                SELECT symbol FROM (
+                    SELECT symbol, market_cap,
+                           ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) as rn
+                    FROM market_cap_daily
+                ) t WHERE rn = 1
                 ORDER BY market_cap DESC
                 LIMIT %s
             """, (limit,))
