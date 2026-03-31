@@ -578,12 +578,14 @@ function Dashboard() {
             Margin_Ratio: Number(values.Margin_Ratio || 0),
             Cash_Balance: Number(values.Cash_Balance || 0),
             Premiums_Received: Number(values.Premiums_Received || 0),
-            Interest_Paid: Number(values.Interest_Paid || values.Interests_Paid || 0), // Handle both spellings
+            Interest_Paid: Number(values.Interest_Paid || values.Interests_Paid || 0),
             isBuySharesTransaction,
             buyShares: buyShares,
             buyPrice: buyPrice,
             tradingLogSummary: tradingLog,
-            isOlderFormat: isOlderFormat  // Flag older format for UI
+            isOlderFormat: isOlderFormat,
+            isSwapTransaction: values.isSwapTransaction === true,
+            Trading_Log: tradingLog,
           };
         }).sort((a, b) => new Date(a.date) - new Date(b.date));
         console.log('Successfully processed main data:', processedData.length, 'entries');
