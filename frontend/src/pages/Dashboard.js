@@ -643,6 +643,11 @@ function Dashboard() {
               );
             }
             
+            // For SPY500_LEADER, only show swap and initial buy events
+            if (selectedStrategy === 'SPY500_LEADER') {
+              return log.startsWith('SWAP:') || log.startsWith('INITIAL BUY:');
+            }
+
             // Default behavior for newer data
             return log.trim() !== '';
           })
