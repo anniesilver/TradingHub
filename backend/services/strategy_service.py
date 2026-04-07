@@ -34,6 +34,7 @@ ALGO_BASE_PATH = os.environ.get("ALGO_BASE_PATH", "C:/ALGO/algo_trading")
 STRATEGY_PATHS = {
     "SPY_POWER_CASHFLOW": os.path.join(ALGO_BASE_PATH, "SPY_POWER_CASHFLOW"),
     "OPTIONS_MARTIN": os.path.join(ALGO_BASE_PATH, "OPTIONS_MARTIN"),
+    "SPY500_LEADER": os.path.join(ALGO_BASE_PATH, "SPY500_LEADER"),
 }
 
 # Add all strategy paths to sys.path for importing
@@ -256,6 +257,39 @@ def import_strategy(strategy_type):
                 return TradingSimulator, OptionStrategy, True
             except Exception as e:
                 print(f"Detailed import error for OPTIONS_MARTIN: {str(e)}")
+                raise
+
+        elif strategy_type == "SPY500_LEADER":
+            try:
+                # Import SPY500_LEADER modules
+                print(f"Importing SPY500_LEADER from {path}")
+                sys.path.insert(0, path)
+
+                module_files = os.listdir(path)
+                print(f"Files in SPY500_LEADER directory: {module_files}")
+
+                try:
+                    from trading_simulator import TradingSimulator
+                    print("Successfully imported TradingSimulator")
+                except ImportError as e:
+                    print(f"Failed to import TradingSimulator: {str(e)}")
+                    raise
+
+                try:
+                    from leader_strategy import LeaderStrategy
+                    print("Successfully imported LeaderStrategy")
+                except ImportError as e:
+                    print(f"Failed to import LeaderStrategy: {str(e)}")
+                    raise
+
+                strategy_modules[strategy_type] = (
+                    TradingSimulator,
+                    LeaderStrategy,
+                    True,
+                )
+                return TradingSimulator, LeaderStrategy, True
+            except Exception as e:
+                print(f"Detailed import error for SPY500_LEADER: {str(e)}")
                 raise
 
         print(f"Could not import strategy modules for {strategy_type}")
@@ -573,9 +607,16 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
         market_data = MarketData(symbol=strategy_config.SYMBOL)
         print(f"MarketData symbol: {market_data.symbol}")
 
-        # Convert datetime objects to string dates first
-        start_date_str = start_dt.strftime("%Y-%m-%d")
-        end_date_str = end_dt.strftime("%Y-%m-%d")
+        # Convert datetime objects to string dates (handle both datetime and string input)
+        if isinstance(start_dt, str):
+            start_date_str = start_dt
+        else:
+            start_date_str = start_dt.strftime("%Y-%m-%d")
+
+        if isinstance(end_dt, str):
+            end_date_str = end_dt
+        else:
+            end_date_str = end_dt.strftime("%Y-%m-%d")
 
         # Load data with user-specified date range
         print(f"Loading market data for date range: {start_date_str} to {end_date_str}")
@@ -888,9 +929,16 @@ def run_options_martin(TradingSimulator, OptionStrategy, config, start_dt, end_d
             config=strategy_config
         )
 
-        # Convert datetime objects to string dates
-        start_date_str = start_dt.strftime("%Y-%m-%d")
-        end_date_str = end_dt.strftime("%Y-%m-%d")
+        # Convert datetime objects to string dates (handle both datetime and string input)
+        if isinstance(start_dt, str):
+            start_date_str = start_dt
+        else:
+            start_date_str = start_dt.strftime("%Y-%m-%d")
+
+        if isinstance(end_dt, str):
+            end_date_str = end_dt
+        else:
+            end_date_str = end_dt.strftime("%Y-%m-%d")
 
         # Load option price data
         print(f"Loading option data for date range: {start_date_str} to {end_date_str}")
@@ -1004,6 +1052,215 @@ def run_options_martin(TradingSimulator, OptionStrategy, config, start_dt, end_d
     finally:
         sys.path = original_path
 
+
+def run_spy500_leader(TradingSimulator, LeaderStrategy, config, start_dt, end_dt, initial_balance=None):
+    """Run the SPY500_LEADER strategy simulation."""
+    strategy_path = STRATEGY_PATHS["SPY500_LEADER"]
+    original_path = sys.path.copy()
+
+    try:
+        if strategy_path not in sys.path:
+            sys.path.insert(0, strategy_path)
+            print(f"Temporarily added {strategy_path} to sys.path")
+
+        # Import strategy modules using explicit path-based imports
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("position", os.path.join(strategy_path, "position.py"))
+        position_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(position_module)
+        PositionTracker = position_module.PositionTracker
+
+        spec = importlib.util.spec_from_file_location("config", os.path.join(strategy_path, "config.py"))
+        config_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(config_module)
+        Config = config_module.Config
+
+        spec = importlib.util.spec_from_file_location("market_data", os.path.join(strategy_path, "market_data.py"))
+        market_data_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(market_data_module)
+        MarketData = market_data_module.MarketData
+
+        # Create a Config object
+        strategy_config = Config()
+
+        # Apply config values from frontend
+        strategy_config.SYMBOL = config.get("SYMBOL", "SPY")
+        strategy_config.STRATEGY_TYPE = "SPY500_LEADER"
+
+        # SPY500_LEADER specific parameters
+        strategy_config.CONFIRMATION_DAYS = int(config.get("CONFIRMATION_DAYS", 5))
+        strategy_config.INITIAL_POSITION_PERCENT = float(config.get("INITIAL_POSITION_PERCENT", 0.6))
+        strategy_config.SLIPPAGE_PERCENT = float(config.get("SLIPPAGE_PERCENT", 0.001))
+
+        # Get initial balance from request
+        try:
+            balance_sources = [
+                ("parameter", initial_balance),
+                ("config", "initial_balance"),
+                ("config", "initialBalance"),
+                ("config", "INITIAL_CASH"),
+            ]
+
+            for source_type, source in balance_sources:
+                if source_type == "parameter" and source is not None:
+                    strategy_config.INITIAL_CASH = float(source)
+                    print(f"Using initial balance from parameter: {source}")
+                    break
+                elif source_type == "config" and source in config:
+                    strategy_config.INITIAL_CASH = float(config[source])
+                    print(f"Using {source} from config: {config[source]}")
+                    break
+        except (ValueError, TypeError) as e:
+            print(f"Error parsing initial balance: {e}, using default")
+
+        # Debug print config
+        print("\n=== SPY500_LEADER CONFIG DEBUG ===")
+        print("Full config from frontend:", config)
+        print(f"Initial Cash: ${strategy_config.INITIAL_CASH:,.2f}")
+        print(f"Confirmation Days: {strategy_config.CONFIRMATION_DAYS}")
+        print(f"Initial Position %: {strategy_config.INITIAL_POSITION_PERCENT * 100}%")
+        print(f"Slippage %: {strategy_config.SLIPPAGE_PERCENT * 100}%")
+        print("=== END CONFIG DEBUG ===")
+
+        # Initialize components
+        print("\n=== Initializing MarketData for SPY500_LEADER ===")
+        market_data = MarketData(config=strategy_config)
+
+        # Convert datetime objects to string dates (handle both datetime and string input)
+        if isinstance(start_dt, str):
+            start_date_str = start_dt
+        else:
+            start_date_str = start_dt.strftime("%Y-%m-%d")
+
+        if isinstance(end_dt, str):
+            end_date_str = end_dt
+        else:
+            end_date_str = end_dt.strftime("%Y-%m-%d")
+
+        # Load market cap and price data
+        print(f"Loading market data for date range: {start_date_str} to {end_date_str}")
+        market_data.load_data(start_date=start_date_str, end_date=end_date_str)
+        print(f"Market data loaded successfully")
+
+        print("\n=== Initializing PositionTracker ===")
+        position = PositionTracker(strategy_config.INITIAL_CASH, strategy_config)
+        print(f"PositionTracker initial balance: {position.cash}")
+
+        print("\n=== Initializing LeaderStrategy ===")
+        strategy = LeaderStrategy(strategy_config)
+        print(f"LeaderStrategy type: {strategy_config.STRATEGY_TYPE}")
+
+        print("\n=== Creating TradingSimulator ===")
+        simulator = TradingSimulator(market_data, position, strategy, strategy_config)
+        print("TradingSimulator created with all components")
+
+        print("\n=== Running Simulation ===")
+        print(f"Running simulation from {start_date_str} to {end_date_str}")
+
+        results_df = simulator.run(start_date=start_date_str, end_date=end_date_str)
+
+        # Process results
+        daily_results = {}
+        if results_df is not None and not results_df.empty:
+            print(f"Results DataFrame columns: {results_df.columns.tolist()}")
+
+            # Helper function for safe float conversion
+            def safe_float(value):
+                if pd.isna(value) or value is None:
+                    return 0.0
+                if isinstance(value, (int, float)):
+                    if np.isinf(value):
+                        return 0.0
+                    return float(value)
+                try:
+                    return float(value)
+                except (ValueError, TypeError):
+                    return 0.0
+
+            def get_column_value(row, possible_names, default):
+                for name in possible_names:
+                    if name in row.index and not pd.isna(row.get(name)):
+                        return row[name]
+                return default
+
+            # Clean dataframe
+            cleaned_df = results_df.replace([np.inf, -np.inf], np.nan).fillna(0)
+
+            # Load SPY price data for buy & hold comparison
+            initial_cash = strategy_config.INITIAL_CASH
+            spy_prices = {}
+            spy_shares_bought = 0
+
+            try:
+                conn = get_db_connection()
+                if conn:
+                    with conn.cursor() as cursor:
+                        cursor.execute("""
+                            SELECT date, close FROM market_data
+                            WHERE symbol = 'SPY' AND date >= %s AND date <= %s
+                            ORDER BY date
+                        """, (start_date_str, end_date_str))
+                        rows = cursor.fetchall()
+                        for row in rows:
+                            date_key = row[0].strftime("%Y-%m-%d") if hasattr(row[0], 'strftime') else str(row[0])[:10]
+                            spy_prices[date_key] = float(row[1])
+
+                    conn.close()
+
+                    if spy_prices:
+                        first_spy_price = list(spy_prices.values())[0]
+                        spy_shares_bought = initial_cash / first_spy_price if first_spy_price > 0 else 0
+                        print(f"Loaded {len(spy_prices)} SPY prices for comparison")
+                    else:
+                        print("Warning: No SPY price data found, using fallback")
+            except Exception as e:
+                print(f"Warning: Could not load SPY prices: {e}")
+
+            # Process each row into daily_results format
+            for idx in cleaned_df.index:
+                row = cleaned_df.loc[idx]
+                date_str = idx.strftime("%Y-%m-%d") if hasattr(idx, 'strftime') else str(idx)
+
+                result_dict = {
+                    "Portfolio_Value": safe_float(row.get("Portfolio_Value", 0.0)),
+                    "Cash_Balance": safe_float(row.get("Cash_Balance", 0.0)),
+                    "Position_Value": safe_float(row.get("Position_Value", 0.0)),
+                    "Current_Holding": str(row.get("Current_Holding", "")),
+                    "Holding_Shares": int(safe_float(row.get("Holding_Shares", 0))),
+                    "Current_Leader": str(row.get("Current_Leader", "")),
+                    "Pending_Leader": str(row.get("Pending_Leader", "")),
+                    "Pending_Days": int(safe_float(row.get("Pending_Days", 0))),
+                    "Margin_Ratio": safe_float(row.get("Margin_Ratio", 0.0)),
+                    "Unrealized_PnL": safe_float(row.get("Unrealized_PnL", 0.0)),
+                    "Total_Trades": int(safe_float(row.get("Total_Trades", 0))),
+                    "Total_Slippage": safe_float(row.get("Total_Slippage", 0.0)),
+                    "Total_Commissions": safe_float(row.get("Total_Commissions", 0.0)),
+                    "Close": safe_float(row.get("Close", 0.0)),
+                    "Open": safe_float(row.get("Open", 0.0)),
+                    "High": safe_float(row.get("High", 0.0)),
+                    "Low": safe_float(row.get("Low", 0.0)),
+                    "Trading_Log": str(get_column_value(row, ["Trading_Log", "Trading Log", "trading_log"], "")),
+                    "spy_value": spy_prices.get(date_str, 0.0) * spy_shares_bought if spy_prices else safe_float(row.get("Close", 0.0)) * spy_shares_bought,
+                    "isSwapTransaction": str(get_column_value(row, ["Trading_Log", "Trading Log", "trading_log"], "")).startswith(("SWAP:", "INITIAL BUY:")),
+                }
+
+                daily_results[date_str] = result_dict
+
+            print(f"Processed {len(daily_results)} days of data")
+
+        else:
+            print("Warning: No results data returned from strategy simulation")
+
+        return daily_results
+
+    except Exception as e:
+        print(f"Error in run_spy500_leader: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        raise
+    finally:
+        sys.path = original_path
 
 
 def get_simulations(limit=10, offset=0):

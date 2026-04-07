@@ -166,7 +166,20 @@ export const runSimulation = async (config) => {
         IV_EXIT_THRESHOLD: payload.config.IV_EXIT_THRESHOLD
       });
     }
-    
+
+    // SPY500_LEADER specific parameters
+    if (config.strategyId === 'SPY500_LEADER') {
+      payload.config.CONFIRMATION_DAYS = config.CONFIRMATION_DAYS !== undefined ? config.CONFIRMATION_DAYS : 5;
+      payload.config.INITIAL_POSITION_PERCENT = config.INITIAL_POSITION_PERCENT !== undefined ? config.INITIAL_POSITION_PERCENT : 0.6;
+      payload.config.SLIPPAGE_PERCENT = config.SLIPPAGE_PERCENT !== undefined ? config.SLIPPAGE_PERCENT : 0.001;
+
+      console.log('SPY500_LEADER parameters added to payload:', {
+        CONFIRMATION_DAYS: payload.config.CONFIRMATION_DAYS,
+        INITIAL_POSITION_PERCENT: payload.config.INITIAL_POSITION_PERCENT,
+        SLIPPAGE_PERCENT: payload.config.SLIPPAGE_PERCENT
+      });
+    }
+
     console.log(`Using date range: ${payload.start_date} to ${payload.end_date}`);
 
     // Add initial balance with consistent naming
