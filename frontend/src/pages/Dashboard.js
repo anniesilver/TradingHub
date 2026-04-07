@@ -669,10 +669,11 @@ function Dashboard() {
             }
             
             // Check if this log contains a transaction for display highlighting
-            const isTransaction = log.toLowerCase().includes('buy') || 
-                               log.toLowerCase().includes('sell') || 
-                               log.toLowerCase().includes('wrote') || 
-                               log.toLowerCase().includes('call');
+            const isTransaction = log.toLowerCase().includes('buy') ||
+                               log.toLowerCase().includes('sell') ||
+                               log.toLowerCase().includes('wrote') ||
+                               log.toLowerCase().includes('call') ||
+                               log.toLowerCase().includes('dividend');
             
             return {
               date,
@@ -2454,9 +2455,10 @@ function Dashboard() {
                       )}
                       {isTransaction && !log.toLowerCase().includes('assigned') && (
                         <Typography variant="body2" color="success.main" sx={{ mt: 0.5, fontWeight: 'bold' }}>
-                          {log.toLowerCase().includes('wrote') ? '📝 Option Written' : 
-                           log.toLowerCase().includes('buy') ? '🔼 Buy Transaction' : 
-                           log.toLowerCase().includes('sell') ? '🔽 Sell Transaction' : 
+                          {log.toLowerCase().includes('wrote') ? '📝 Option Written' :
+                           log.toLowerCase().includes('dividend') ? '💰 Dividend Received' :
+                           log.toLowerCase().includes('buy') ? '🔼 Buy Transaction' :
+                           log.toLowerCase().includes('sell') ? '🔽 Sell Transaction' :
                            '💼 Trading Activity'}
                         </Typography>
                       )}

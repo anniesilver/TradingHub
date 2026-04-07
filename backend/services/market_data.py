@@ -118,7 +118,7 @@ class MarketData:
 
                     if needs_refresh:
                         logger.info("Fetching SPY dividend history from TWS")
-                        ibkr_service.fetch_and_store_data("SPY_DIVIDENDS", "20 Y", 'dividends')
+                        ibkr_service.fetch_and_store_data("SPY_DIVIDENDS", "20 Y", "1 day")
                         div_df = ibkr_service.get_data_from_db("SPY_DIVIDENDS", start_date, end_date, 'dividends')
 
                     if not div_df.empty:
