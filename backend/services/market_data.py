@@ -101,35 +101,43 @@ class MarketData:
                     logger.warning(f"Error loading VIX data: {e}, using default volatility")
                     primary_df['VIX'] = 0.20  # 20% default volatility
 
-                # Load SPY dividend data
+                # Load SPY dividend data via yfinance (DB-cached, refreshed when stale)
                 try:
-                    div_df = ibkr_service.get_data_from_db("SPY_DIVIDENDS", start_date, end_date, 'dividends')
+                    import yfinance as yf
+                    div_df = ibkr_service.get_data_from_db("SPY_DIV", start_date, end_date, 'dividends')
 
-                    # Check if dividend data is stale: SPY pays quarterly (~90 days).
-                    # If end_date is more than 90 days past the last dividend in DB, re-fetch.
+                    # Refresh if empty or stale (SPY pays quarterly, so >90 days gap means new dividend)
                     needs_refresh = div_df.empty
                     if not div_df.empty:
                         end_dt = pd.to_datetime(end_date)
-                        last_div_date = div_df.index.max()
-                        days_since_last = (end_dt - last_div_date).days
+                        days_since_last = (end_dt - div_df.index.max()).days
                         if days_since_last > 90:
-                            logger.info(f"Dividend data stale ({days_since_last} days since last record), re-fetching from TWS")
+                            logger.info(f"Dividend data stale ({days_since_last} days), re-fetching from Yahoo Finance")
                             needs_refresh = True
 
                     if needs_refresh:
-                        logger.info("Fetching SPY dividend history from TWS")
-                        ibkr_service.fetch_and_store_data("SPY_DIVIDENDS", "20 Y", "1 day")
-                        div_df = ibkr_service.get_data_from_db("SPY_DIVIDENDS", start_date, end_date, 'dividends')
+                        logger.info("Fetching SPY dividend history from Yahoo Finance")
+                        raw_divs = yf.Ticker("SPY").dividends
+                        if not raw_divs.empty:
+                            # Normalize timezone-aware index to naive dates
+                            raw_divs.index = raw_divs.index.tz_localize(None)
+                            div_records = [
+                                {'date': ts.strftime('%Y%m%d'), 'open': 0, 'high': 0,
+                                 'low': 0, 'close': float(amt), 'volume': 0}
+                                for ts, amt in raw_divs.items() if float(amt) > 0
+                            ]
+                            ibkr_service.save_data_to_db("SPY_DIV", div_records, 'dividends')
+                            logger.info(f"Saved {len(div_records)} dividend records to DB")
+                            div_df = ibkr_service.get_data_from_db("SPY_DIV", start_date, end_date, 'dividends')
 
                     if not div_df.empty:
-                        # Only keep rows where close > 0 (actual dividend payments)
                         div_df = div_df[div_df['close'] > 0]
                         primary_df = primary_df.join(div_df['close'].rename('Dividend'), how='left')
                         primary_df['Dividend'] = primary_df['Dividend'].fillna(0.0)
-                        logger.info(f"Successfully merged dividend data with SPY ({div_df.shape[0]} payments found)")
+                        logger.info(f"Merged {div_df.shape[0]} dividend payments into SPY data")
                     else:
                         primary_df['Dividend'] = 0.0
-                        logger.warning("No dividend data in DB for SPY, dividends will not be applied")
+                        logger.warning("No dividend data available for SPY, dividends will not be applied")
                 except Exception as e:
                     logger.warning(f"Error loading SPY dividend data: {e}, dividends will not be applied")
                     primary_df['Dividend'] = 0.0
