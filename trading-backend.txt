@@ -1,0 +1,179 @@
+PS C:\algo\TradingHub> .\.venv\Scripts\python backend\simple_app.py
+Set PYTHONPATH to include: C:\algo\TradingHub
+Loaded .env from services directory
+Added strategy path: C:/ALGO/algo_trading\SPY_POWER_CASHFLOW
+Added strategy path: C:/ALGO/algo_trading\OPTIONS_MARTIN
+Added strategy parent directory to sys.path: C:/ALGO
+Added current directory to sys.path: C:\algo\TradingHub
+sys.path now contains: ['C:\\algo\\TradingHub', 'C:/ALGO', 'C:\\algo\\TradingHub\\backend', 'C:\\Users\\yangy\\AppData\\Local\\Programs\\Python\\Python39\\python39.zip', 'C:\\Users\\yangy\\AppData\\Local\\Programs\\Python\\Python39\\DLLs', 'C:\\Users\\yangy\\AppData\\Local\\Programs\\Python\\Python39\\lib', 'C:\\Users\\yangy\\AppData\\Local\\Programs\\Python\\Python39', 'C:\\algo\\TradingHub\\.venv', 'C:\\algo\\TradingHub\\.venv\\lib\\site-packages', 'C:/ALGO/algo_trading\\SPY_POWER_CASHFLOW', 'C:/ALGO/algo_trading\\OPTIONS_MARTIN']
+2026-01-07 21:08:44,358 - INFO - Python version: 3.9.1 (tags/v3.9.1:1e5d33e, Dec  7 2020, 17:08:21) [MSC v.1927 64 bit (AMD64)]
+2026-01-07 21:08:44,359 - INFO - Current working directory: C:\algo\TradingHub
+2026-01-07 21:08:44,361 - INFO - Starting Flask server on port 8080...
+ * Serving Flask app 'simple_app'
+ * Debug mode: off
+2026-01-07 21:08:44,388 - INFO - WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:8080
+2026-01-07 21:08:44,388 - INFO - Press CTRL+C to quit
+2026-01-07 21:08:50,819 - DEBUG - Received request: OPTIONS http://127.0.0.1:8080/api/simulate
+2026-01-07 21:08:50,820 - DEBUG - Headers: Host: 127.0.0.1:8080
+Connection: keep-alive
+Accept: */*
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: content-type
+Origin: http://localhost:3000
+User-Agent: Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36
+Sec-Fetch-Mode: cors
+Sec-Fetch-Site: cross-site
+Sec-Fetch-Dest: empty
+Referer: http://localhost:3000/
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: en-CA,en-GB;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh;q=0.5
+
+
+2026-01-07 21:08:50,825 - INFO - 127.0.0.1 - - [07/Jan/2026 21:08:50] "OPTIONS /api/simulate HTTP/1.1" 200 -
+2026-01-07 21:08:50,840 - DEBUG - Received request: POST http://127.0.0.1:8080/api/simulate
+2026-01-07 21:08:50,842 - DEBUG - Headers: Host: 127.0.0.1:8080
+Connection: keep-alive
+Content-Length: 828
+Sec-Ch-Ua-Platform: "Android"
+User-Agent: Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36
+Accept: application/json, text/plain, */*
+Sec-Ch-Ua: "Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"
+Content-Type: application/json
+Sec-Ch-Ua-Mobile: ?1
+Origin: http://localhost:3000
+Sec-Fetch-Site: cross-site
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Referer: http://localhost:3000/
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: en-CA,en-GB;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh;q=0.5
+
+
+2026-01-07 21:08:50,843 - INFO - Simulation endpoint called
+2026-01-07 21:08:50,844 - INFO - Received simulation request: {'strategy_type': 'OPTIONS_MARTIN', 'config': {'SYMBOL': 'SPY', 'OPTION_TYPE': 'call', 'CALL_COST_BUFFER': 0.05, 'CONTRACT_SIZE': 100, 'COVERED_CALL_RATIO': 1, 'DIP_BUY_PERCENT': 0.4, 'DIP_TRIGGER': 0.92, 'INITIAL_POSITION_PERCENT': 0.6, 'MARGIN_INTEREST_RATE': 0.06, 'MAX_MARGIN_RATIO': 2, 'MAX_POSITION_SIZE': 10000, 'MIN_COMMISSION': 1, 'MIN_STRIKE_DISTANCE': 0.015, 'MIN_TRADE_SIZE': 1000, 'MONTHLY_WITHDRAWAL_RATE': 1, 'OPTION_COMMISSION': 0.65, 'RISK_FREE_RATE': 0.05, 'STOCK_COMMISSION': 0.01, 'VOLATILITY_SCALING_FACTOR': 0.15, 'STRIKE': 680, 'RIGHT': 'C', 'EXPIRATION': '20260220', 'INC_INDEX': 2, 'DEC_INDEX': 0.6, 'MAX_ADD_LOADS': 5, 'OPEN_POSITION': 2, 'BAR_INTERVAL': '30 mins', 'USE_IV_FILTER': True, 'IV_ENTRY_THRESHOLD': 0.3, 'USE_IV_SPIKE_EXIT': True, 'IV_EXIT_THRESHOLD': 0.5, 'INITIAL_CASH': 200000}, 'start_date': '2025-12-08', 'end_date': '2026-01-07', 'initial_balance': 200000}
+2026-01-07 21:08:50,845 - INFO - Request keys: ['strategy_type', 'config', 'start_date', 'end_date', 'initial_balance']
+2026-01-07 21:08:50,845 - INFO - Config: {'SYMBOL': 'SPY', 'OPTION_TYPE': 'call', 'CALL_COST_BUFFER': 0.05, 'CONTRACT_SIZE': 100, 'COVERED_CALL_RATIO': 1, 'DIP_BUY_PERCENT': 0.4, 'DIP_TRIGGER': 0.92, 'INITIAL_POSITION_PERCENT': 0.6, 'MARGIN_INTEREST_RATE': 0.06, 'MAX_MARGIN_RATIO': 2, 'MAX_POSITION_SIZE': 10000, 'MIN_COMMISSION': 1, 'MIN_STRIKE_DISTANCE': 0.015, 'MIN_TRADE_SIZE': 1000, 'MONTHLY_WITHDRAWAL_RATE': 1, 'OPTION_COMMISSION': 0.65, 'RISK_FREE_RATE': 0.05, 'STOCK_COMMISSION': 0.01, 'VOLATILITY_SCALING_FACTOR': 0.15, 'STRIKE': 680, 'RIGHT': 'C', 'EXPIRATION': '20260220', 'INC_INDEX': 2, 'DEC_INDEX': 0.6, 'MAX_ADD_LOADS': 5, 'OPEN_POSITION': 2, 'BAR_INTERVAL': '30 mins', 'USE_IV_FILTER': True, 'IV_ENTRY_THRESHOLD': 0.3, 'USE_IV_SPIKE_EXIT': True, 'IV_EXIT_THRESHOLD': 0.5, 'INITIAL_CASH': 200000}
+2026-01-07 21:08:50,846 - INFO - initialBalance: None
+2026-01-07 21:08:50,847 - INFO - initial_balance: 200000
+2026-01-07 21:08:50,848 - INFO - Using initial_balance from request: 200000.0
+Attempting to import strategy modules from C:/ALGO/algo_trading\OPTIONS_MARTIN
+Current sys.path: ['C:\\algo\\TradingHub\\backend\\routes\\..\\services', 'C:\\algo\\TradingHub', 'C:/ALGO', 'C:\\algo\\TradingHub\\backend', 'C:\\Users\\yangy\\AppData\\Local\\Programs\\Python\\Python39\\python39.zip', 'C:\\Users\\yangy\\AppData\\Local\\Programs\\Python\\Python39\\DLLs', 'C:\\Users\\yangy\\AppData\\Local\\Programs\\Python\\Python39\\lib', 'C:\\Users\\yangy\\AppData\\Local\\Programs\\Python\\Python39', 'C:\\algo\\TradingHub\\.venv', 'C:\\algo\\TradingHub\\.venv\\lib\\site-packages', 'C:/ALGO/algo_trading\\SPY_POWER_CASHFLOW', 'C:/ALGO/algo_trading\\OPTIONS_MARTIN']
+Importing OPTIONS_MARTIN from C:/ALGO/algo_trading\OPTIONS_MARTIN
+Files in OPTIONS_MARTIN directory: ['config.py', 'market_data.py', 'option_strategy.py', 'position.py', 'test_contract_details.py', 'test_strategy.py', 'test_with_real_data.py', 'trading_simulator.py', 'utils.py', '__pycache__']
+Successfully imported TradingSimulator
+Successfully imported OptionStrategy
+2026-01-07 21:08:50,861 - INFO - Running OPTIONS_MARTIN simulation with real option data...
+Using initial balance from parameter: 200000.0
+
+=== OPTIONS_MARTIN CONFIG DEBUG ===
+Full config from frontend: {'SYMBOL': 'SPY', 'OPTION_TYPE': 'call', 'CALL_COST_BUFFER': 0.05, 'CONTRACT_SIZE': 100, 'COVERED_CALL_RATIO': 1, 'DIP_BUY_PERCENT': 0.4, 'DIP_TRIGGER': 0.92, 'INITIAL_POSITION_PERCENT': 0.6, 'MARGIN_INTEREST_RATE': 0.06, 'MAX_MARGIN_RATIO': 2, 'MAX_POSITION_SIZE': 10000, 'MIN_COMMISSION': 1, 'MIN_STRIKE_DISTANCE': 0.015, 'MIN_TRADE_SIZE': 1000, 'MONTHLY_WITHDRAWAL_RATE': 1, 'OPTION_COMMISSION': 0.65, 'RISK_FREE_RATE': 0.05, 'STOCK_COMMISSION': 0.01, 'VOLATILITY_SCALING_FACTOR': 0.15, 'STRIKE': 680, 'RIGHT': 'C', 'EXPIRATION': '20260220', 'INC_INDEX': 2, 'DEC_INDEX': 0.6, 'MAX_ADD_LOADS': 5, 'OPEN_POSITION': 2, 'BAR_INTERVAL': '30 mins', 'USE_IV_FILTER': True, 'IV_ENTRY_THRESHOLD': 0.3, 'USE_IV_SPIKE_EXIT': True, 'IV_EXIT_THRESHOLD': 0.5, 'INITIAL_CASH': 200000}
+
+Option Contract: SPY 680.0C exp=20260220
+Initial Cash: $200,000.00
+Entry Size: 2 contracts
+Exit Target: 2.0x
+Add-Load Trigger: 0.6x
+Max Pyramids: 5
+Bar Interval: 30 mins
+
+IV Filtering:
+  Use IV Filter: True
+  IV Entry Threshold: 0.3
+  Use IV Spike Exit: True
+  IV Exit Threshold: 0.5
+=== END CONFIG DEBUG ===
+
+=== Initializing MarketData for OPTION ===
+✓ Using IBKR option service for SPY 680.0C exp=20260220
+Loading option data for date range: 2025-12-08 to 2026-01-07
+Loading option data: SPY 680.0C exp=20260220
+  Period: 2025-12-08 to 2026-01-07
+  Interval: 30 mins
+
+================================================================================
+CHECKING DATABASE CACHE: SPY 680.0C exp=20260220
+Requested: 2025-12-08 to 2026-01-07, interval=30 mins
+================================================================================
+C:/ALGO\TradingHub\backend\services\ibkr_option_service.py:496: UserWarning: pandas only supports SQLAlchemy connectable (engine/connection) or database string URI or sqlite3 DBAPI2 connection. Other DBAPI2 objects are not tested. Please consider using SQLAlchemy.
+  df = pd.read_sql_query(
+2026-01-07 21:08:51,608 - INFO - Retrieved 254 option bars from DB: SPY 680.0C exp=2026-02-20
+Database query returned: 254 bars
+2026-01-07 21:08:51,618 - INFO - ✓ DB has 254 bars in database
+2026-01-07 21:08:51,619 - INFO -   DB coverage - Range: 2025-12-08 09:30:00 to 2026-01-06 15:30:00
+2026-01-07 21:08:51,619 - INFO -   Requested range: 2025-12-08 00:00:00 to 2026-01-07 00:00:00
+2026-01-07 21:08:51,620 - INFO -   Gap check - Start gap: 0 days, End gap: 0 days
+2026-01-07 21:08:51,621 - INFO - ✓ Complete option data found in DB - USING CACHED DATA (no IBKR fetch)
+✓ Using cached data from database (254 bars) - No IBKR connection needed
+✓ Loaded 254 option price bars
+✓ IV data available: 254/254 bars have IV values
+Option data loaded successfully
+
+=== Initializing PositionTracker ===
+PositionTracker initial balance: 200000.0
+
+=== Initializing OptionStrategy ===
+OptionStrategy type: OPTIONS_MARTIN
+
+=== Creating TradingSimulator ===
+TradingSimulator created with all components
+
+=== Running Simulation ===
+Running simulation from 2025-12-08 to 2026-01-07
+
+================================================================================
+OPTIONS_MARTIN Simulation - Pure Martingale
+================================================================================
+Option Contract: SPY 680.0C exp=20260220
+Initial Cash: $200,000.00
+Bar Interval: 30 mins
+Date Range: 2025-12-08 to 2026-01-07
+Entry Size: 2 contracts (fixed)
+Exit Target: 2.0x (100% profit)
+Add-Load Trigger: 0.6x (40% loss)
+Max Pyramids: 5
+================================================================================
+
+Processing 254 option price bars (2025-12-08 09:30:00 to 2026-01-06 15:30:00)
+IV Statistics: mean=0.1230, std=0.0096
+IV Entry/Add-Load Filter: ENABLED (IV < 0.3)
+IV Spike Exit: ENABLED (IV > 0.5 + any profit)
+Martingale Exit: 2x profit target + high IV
+
+Processed 100/254 bars... Portfolio: $197,899.70, Rounds: 0, Position: 3 contracts
+Processed 200/254 bars... Portfolio: $199,897.70, Rounds: 0, Position: 3 contracts
+
+✓ Processed all 254 option price bars
+
+⚠️  Closing remaining position (3 contracts) at end of simulation
+
+================================================================================
+Simulation Summary
+================================================================================
+
+Performance:
+  Initial Portfolio: $200,000.00
+  Final Portfolio: $200,498.75
+  Total Return: 0.25%
+  Profit/Loss: $498.75
+
+Trading Activity:
+  Total Rounds Completed: 1
+  Total Profit from Rounds: $498.75
+  Final Position: 0 contracts
+  Final Cash: $200,498.75
+
+Trading Activity (3 days with trades):
+  2025-12-08: [OPEN] Opened 2 contracts @ $24.19, IV=0.1333
+  2025-12-17: [ADD-LOAD #1] Added 1 contracts @ $14.51, IV=0.1388, total position=3
+  2026-01-06: [FORCE CLOSE - END OF SIMULATION] Closed 3 contracts @ $22.64, IV=0.1201, profit=$498.75 (7.3%)
+================================================================================
+Results DataFrame columns: ['Open', 'High', 'Low', 'Close', 'Volume', 'Cash_Balance', 'Position', 'Position_Balance', 'Portfolio_Value', 'Total_Rounds', 'Total_Profit', 'Trading_Log']
+Cleaned DataFrame shape: (20, 12)
+Cleaned DataFrame columns: ['Open', 'High', 'Low', 'Close', 'Volume', 'Cash_Balance', 'Position', 'Position_Balance', 'Portfolio_Value', 'Total_Rounds', 'Total_Profit', 'Trading_Log']
+🔍 Checking for ImpliedVolatility column...
+🔍 'ImpliedVolatility' in columns? False
+Processed 20 days of data
+2026-01-07 21:08:51,699 - INFO - Generated results for date range 2025-12-08 00:00:00 to 2026-01-07 00:00:00
+2026-01-07 21:08:51,699 - INFO - First data point structure: {'Cash_Balance': 195160.7, 'Position': 2, 'Position_Balance': 4594.0, 'Portfolio_Value': 199754.7, 'Total_Rounds': 0, 'Total_Profit': 0.0, 'Close': 22.97, 'Open': 24.5, 'High': 24.5, 'Low': 22.0, 'Trading_Log': '[OPEN] Opened 2 contracts @ $24.19, IV=0.1333'}
+2026-01-07 21:08:51,701 - INFO - 127.0.0.1 - - [07/Jan/2026 21:08:51] "POST /api/simulate HTTP/1.1" 200 -
