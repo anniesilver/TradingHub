@@ -77,7 +77,7 @@ class MarketData:
             # Load primary symbol data
             primary_df = self._load_symbol_data(self.symbol, start_date, end_date, bar_interval)
 
-            # For SPY strategies, also load VIX data (always use daily for VIX)
+            # For SPY strategies, also load VIX and dividend data
             if self.symbol == "SPY":
                 try:
                     vix_df = self._load_symbol_data("VIX", start_date, end_date, '1 day')
@@ -100,6 +100,22 @@ class MarketData:
                 except Exception as e:
                     logger.warning(f"Error loading VIX data: {e}, using default volatility")
                     primary_df['VIX'] = 0.20  # 20% default volatility
+
+                # Load SPY dividend data
+                try:
+                    div_df = self._load_symbol_data("SPY_DIVIDENDS", start_date, end_date, 'dividends')
+                    if not div_df.empty:
+                        # Only keep rows where close > 0 (actual dividend payments)
+                        div_df = div_df[div_df['close'] > 0]
+                        primary_df = primary_df.join(div_df['close'].rename('Dividend'), how='left')
+                        primary_df['Dividend'] = primary_df['Dividend'].fillna(0.0)
+                        logger.info(f"Successfully merged dividend data with SPY ({div_df.shape[0]} payments found)")
+                    else:
+                        primary_df['Dividend'] = 0.0
+                        logger.warning("No dividend data in DB for SPY, dividends will not be applied")
+                except Exception as e:
+                    logger.warning(f"Error loading SPY dividend data: {e}, dividends will not be applied")
+                    primary_df['Dividend'] = 0.0
 
             # Rename columns to match strategy expectations
             if 'close' in primary_df.columns:

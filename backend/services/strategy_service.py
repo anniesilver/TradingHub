@@ -755,6 +755,7 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
                     "spy_value": safe_float(spy_values.get(idx, 0.0)),
                     "Interest_Paid": safe_float(get_column_value(row, ["Interest_Paid", "Interests_Paid", "Interests Paid", "interests_paid"]), 0.0),
                     "Premiums_Received": safe_float(get_column_value(row, ["Premiums_Received", "Premiums Received", "premiums_received"]), 0.0),
+                    "Dividends_Received": safe_float(get_column_value(row, ["Dividends_Received", "dividends_received"]), 0.0),
                     "Commissions_Paid": safe_float(get_column_value(row, ["Commissions_Paid", "Commissions Paid", "commissions_paid"]), 0.0),
                     "Open_Positions": safe_int(get_column_value(row, ["Open_Positions", "Open Positions", "open_positions"]), 0),
                     "Closed_Positions": safe_int(get_column_value(row, ["Closed_Positions", "Closed Positions", "closed_positions"]), 0),

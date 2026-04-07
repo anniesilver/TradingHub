@@ -117,6 +117,12 @@ class IBKRDataClient(EWrapper, EClient):
                 contract.secType = 'IND'
                 contract.exchange = 'CBOE'
                 data_type = "TRADES"
+            elif symbol == "SPY_DIVIDENDS":
+                # Dividend history for SPY
+                contract.symbol = "SPY"
+                contract.secType = 'STK'
+                contract.exchange = 'SMART'
+                data_type = "DIVIDENDS"
             else:
                 # For normal tickers like SPY - use MIDPOINT for STK securities
                 contract.secType = 'STK'
