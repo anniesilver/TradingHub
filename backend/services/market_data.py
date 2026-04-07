@@ -103,7 +103,24 @@ class MarketData:
 
                 # Load SPY dividend data
                 try:
-                    div_df = self._load_symbol_data("SPY_DIVIDENDS", start_date, end_date, 'dividends')
+                    div_df = ibkr_service.get_data_from_db("SPY_DIVIDENDS", start_date, end_date, 'dividends')
+
+                    # Check if dividend data is stale: SPY pays quarterly (~90 days).
+                    # If end_date is more than 90 days past the last dividend in DB, re-fetch.
+                    needs_refresh = div_df.empty
+                    if not div_df.empty:
+                        end_dt = pd.to_datetime(end_date)
+                        last_div_date = div_df.index.max()
+                        days_since_last = (end_dt - last_div_date).days
+                        if days_since_last > 90:
+                            logger.info(f"Dividend data stale ({days_since_last} days since last record), re-fetching from TWS")
+                            needs_refresh = True
+
+                    if needs_refresh:
+                        logger.info("Fetching SPY dividend history from TWS")
+                        ibkr_service.fetch_and_store_data("SPY_DIVIDENDS", "20 Y", 'dividends')
+                        div_df = ibkr_service.get_data_from_db("SPY_DIVIDENDS", start_date, end_date, 'dividends')
+
                     if not div_df.empty:
                         # Only keep rows where close > 0 (actual dividend payments)
                         div_df = div_df[div_df['close'] > 0]
