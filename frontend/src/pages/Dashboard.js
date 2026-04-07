@@ -696,7 +696,6 @@ function Dashboard() {
         tradingLogs.forEach(logEntry => {
           const withdrawalPatterns = [
             /Monthly withdrawal: \$([0-9,]+\.?[0-9]*)/,
-            /WITHDRAWAL-CALC: .*= \$([0-9,]+\.?[0-9]*)/,
             /\[WITHDRAWAL\].*\$([0-9,]+\.?[0-9]*)/
           ];
 
