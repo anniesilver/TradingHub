@@ -117,6 +117,13 @@ class IBKRDataClient(EWrapper, EClient):
                 contract.secType = 'IND'
                 contract.exchange = 'CBOE'
                 data_type = "TRADES"
+            elif symbol == "SPY_DIV":
+                # Dividend history for SPY
+                contract.symbol = "SPY"
+                contract.secType = 'STK'
+                contract.exchange = 'SMART'
+                data_type = "DIVIDENDS"
+                bar_size = "1 day"  # TWS requires a valid bar size; data_type controls what is returned
             else:
                 # For normal tickers like SPY - use MIDPOINT for STK securities
                 contract.secType = 'STK'
@@ -325,8 +332,10 @@ class IBKRDataService:
             data = self.client.fetch_historical_data(symbol, period, bar_size)
 
             if data:
-                # Save to database
-                self.save_data_to_db(symbol, data, bar_size)
+                # Save to database — SPY_DIV always stored with interval='dividends'
+                # regardless of bar_size used for the TWS request
+                db_interval = "dividends" if symbol == "SPY_DIV" else bar_size
+                self.save_data_to_db(symbol, data, db_interval)
                 logger.info(f"Successfully fetched and stored data for {symbol}")
                 return True
             else:

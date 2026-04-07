@@ -272,6 +272,7 @@ function Dashboard() {
     totalAssignedCost: 0,
     totalPremiumsReceived: 0,
     totalInterestPaid: 0,
+    totalDividendsReceived: 0,
     totalWithdrawAmount: 0,
     annualizedReturn: 0,
     maxDrawdown: 0,
@@ -668,10 +669,11 @@ function Dashboard() {
             }
             
             // Check if this log contains a transaction for display highlighting
-            const isTransaction = log.toLowerCase().includes('buy') || 
-                               log.toLowerCase().includes('sell') || 
-                               log.toLowerCase().includes('wrote') || 
-                               log.toLowerCase().includes('call');
+            const isTransaction = log.toLowerCase().includes('buy') ||
+                               log.toLowerCase().includes('sell') ||
+                               log.toLowerCase().includes('wrote') ||
+                               log.toLowerCase().includes('call') ||
+                               log.toLowerCase().includes('dividend');
             
             return {
               date,
@@ -694,7 +696,6 @@ function Dashboard() {
         tradingLogs.forEach(logEntry => {
           const withdrawalPatterns = [
             /Monthly withdrawal: \$([0-9,]+\.?[0-9]*)/,
-            /WITHDRAWAL-CALC: .*= \$([0-9,]+\.?[0-9]*)/,
             /\[WITHDRAWAL\].*\$([0-9,]+\.?[0-9]*)/
           ];
 
@@ -1128,13 +1129,18 @@ function Dashboard() {
         totalInterestPaid = filteredInterestData.reduce((total, item) => {
           return total + (item.Interest_Paid || 0);
         }, 0);
-        
+
         console.log(`Total interest paid: $${totalInterestPaid.toFixed(2)}`);
       } catch (interestError) {
         console.error('Error processing interest data:', interestError);
         // Leave filteredInterestData as empty array and totalInterestPaid as 0
         console.log('Continuing without interest data due to error');
       }
+
+      // Calculate total dividends received
+      const totalDividendsReceived = Object.values(parsedData).reduce((total, values) => {
+        return total + (Number(values.Dividends_Received) || 0);
+      }, 0);
       
       // If we still have no premium data, create test data
       if (filteredPremiumData.length === 0) {
@@ -1158,6 +1164,7 @@ function Dashboard() {
         totalAssignedCost,
         totalPremiumsReceived,
         totalInterestPaid,
+        totalDividendsReceived,
         totalWithdrawAmount: totalWithdrawals,  // Total withdrawals from trading logs
         annualizedReturn: annualizedReturn,      // CAGR accounting for withdrawals
         maxDrawdown: maxDrawdown,                // Maximum drawdown from peak
@@ -2367,6 +2374,13 @@ function Dashboard() {
                     </Typography>
                   </Alert>
                 )}
+                {data.totalDividendsReceived > 0 && (
+                  <Alert severity="success" sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2">
+                      Total dividends received during test period: ${data.totalDividendsReceived.toFixed(2)}
+                    </Typography>
+                  </Alert>
+                )}
                 {data.totalWithdrawAmount > 0 && (
                   <Alert severity="info" sx={{ mb: 1 }}>
                     <Typography variant="subtitle2">
@@ -2440,9 +2454,10 @@ function Dashboard() {
                       )}
                       {isTransaction && !log.toLowerCase().includes('assigned') && (
                         <Typography variant="body2" color="success.main" sx={{ mt: 0.5, fontWeight: 'bold' }}>
-                          {log.toLowerCase().includes('wrote') ? '📝 Option Written' : 
-                           log.toLowerCase().includes('buy') ? '🔼 Buy Transaction' : 
-                           log.toLowerCase().includes('sell') ? '🔽 Sell Transaction' : 
+                          {log.toLowerCase().includes('wrote') ? '📝 Option Written' :
+                           log.toLowerCase().includes('dividend') ? '💰 Dividend Received' :
+                           log.toLowerCase().includes('buy') ? '🔼 Buy Transaction' :
+                           log.toLowerCase().includes('sell') ? '🔽 Sell Transaction' :
                            '💼 Trading Activity'}
                         </Typography>
                       )}
