@@ -287,6 +287,9 @@ function Dashboard() {
     coveredCallRatio: 1.0,
     dipBuyPercent: 0.4,
     dipTrigger: 0.92,
+    vixHighThreshold: 0.25,
+    highVixDipTrigger: 0.80,
+    highVixDipBuyPercent: 0.15,
     initialPositionPercent: 0.6,
     marginInterestRate: 0.06,
     maxMarginRatio: 2,
@@ -334,7 +337,8 @@ function Dashboard() {
     // Convert numeric fields to appropriate type
     const numericFields = [
       'initialBalance', 'callCostBuffer', 'contractSize', 'coveredCallRatio',
-      'dipBuyPercent', 'dipTrigger', 'initialPositionPercent', 'marginInterestRate',
+      'dipBuyPercent', 'dipTrigger', 'vixHighThreshold', 'highVixDipTrigger', 'highVixDipBuyPercent',
+      'initialPositionPercent', 'marginInterestRate',
       'maxMarginRatio', 'maxPositionSize', 'minCommission', 'minStrikeDistance',
       'minTradeSize', 'monthlyWithdrawalRate', 'optionCommission', 'riskFreeRate',
       'stockCommission', 'volatilityScalingFactor'
@@ -1510,6 +1514,45 @@ function Dashboard() {
             />
           </Grid>
           
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="VIX High Threshold"
+              name="vixHighThreshold"
+              value={config.vixHighThreshold}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0.1, max: 0.8, step: 0.05 } }}
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="High-VIX Dip Trigger"
+              name="highVixDipTrigger"
+              value={config.highVixDipTrigger}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0.5, max: 0.99, step: 0.01 } }}
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="High-VIX Buy %"
+              name="highVixDipBuyPercent"
+              value={config.highVixDipBuyPercent}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0.01, max: 1, step: 0.01 } }}
+            />
+          </Grid>
+
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactTextField
               fullWidth
