@@ -119,6 +119,8 @@ export const runSimulation = async (config) => {
         VIX_HIGH_THRESHOLD: config.vixHighThreshold !== undefined ? config.vixHighThreshold : 0.25,
         HIGH_VIX_DIP_TRIGGER: config.highVixDipTrigger !== undefined ? config.highVixDipTrigger : 0.80,
         HIGH_VIX_DIP_BUY_PERCENT: config.highVixDipBuyPercent !== undefined ? config.highVixDipBuyPercent : 0.15,
+        VIX_DELEVERAGE_THRESHOLD: config.vixDeleverageThreshold !== undefined ? config.vixDeleverageThreshold : 0.25,
+        VIX_DELEVERAGE_TARGET_RATIO: config.vixDeleverageTargetRatio !== undefined ? config.vixDeleverageTargetRatio : 1.5,
         INITIAL_POSITION_PERCENT: config.initialPositionPercent !== undefined ? config.initialPositionPercent : 0.6,
         MARGIN_INTEREST_RATE: config.marginInterestRate !== undefined ? config.marginInterestRate : 0.06,
         MAX_MARGIN_RATIO: config.maxMarginRatio !== undefined ? config.maxMarginRatio : 2,

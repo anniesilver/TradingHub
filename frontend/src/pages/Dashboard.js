@@ -290,6 +290,8 @@ function Dashboard() {
     vixHighThreshold: 0.25,
     highVixDipTrigger: 0.80,
     highVixDipBuyPercent: 0.15,
+    vixDeleverageThreshold: 0.25,
+    vixDeleverageTargetRatio: 1.5,
     initialPositionPercent: 0.6,
     marginInterestRate: 0.06,
     maxMarginRatio: 2,
@@ -338,6 +340,7 @@ function Dashboard() {
     const numericFields = [
       'initialBalance', 'callCostBuffer', 'contractSize', 'coveredCallRatio',
       'dipBuyPercent', 'dipTrigger', 'vixHighThreshold', 'highVixDipTrigger', 'highVixDipBuyPercent',
+      'vixDeleverageThreshold', 'vixDeleverageTargetRatio',
       'initialPositionPercent', 'marginInterestRate',
       'maxMarginRatio', 'maxPositionSize', 'minCommission', 'minStrikeDistance',
       'minTradeSize', 'monthlyWithdrawalRate', 'optionCommission', 'riskFreeRate',
@@ -914,39 +917,35 @@ function Dashboard() {
         console.log('No buy transactions found in trading logs. No markers will be displayed.');
       }
       
-      // Analyze trading logs for "assigned" entries and calculate total cost
+      // Analyze trading logs for ITM call closure costs (buybacks + assignments)
       let totalAssignedCost = 0;
-      const assignedEntries = tradingLogs.filter(entry => {
+      const costPatterns = [
+        /cost:?\s*\$?([\d,]+(?:\.\d+)?)/i,
+        /cost\s+of\s+\$?([\d,]+(?:\.\d+)?)/i,
+        /at\s+a\s+cost\s+of\s+\$?([\d,]+(?:\.\d+)?)/i,
+        /\$?([\d,]+(?:\.\d+)?)\s+cost/i
+      ];
+
+      tradingLogs.forEach(entry => {
         const logLower = entry.log.toLowerCase();
-        return logLower.includes('assigned');
-      });
-      
-      assignedEntries.forEach(entry => {
-        const logLower = entry.log.toLowerCase();
-        if (logLower.includes('cost')) {
-          // Try to extract cost value using various patterns
-          const costPatterns = [
-            /cost:?\s*\$?(\d+(?:\.\d+)?)/i,
-            /cost\s+of\s+\$?(\d+(?:\.\d+)?)/i,
-            /at\s+a\s+cost\s+of\s+\$?(\d+(?:\.\d+)?)/i,
-            /\$(\d+(?:\.\d+)?)\s+cost/i
-          ];
-          
-          for (const pattern of costPatterns) {
-            const match = entry.log.match(pattern);
-            if (match && match[1]) {
-              const cost = parseFloat(match[1]);
-              if (!isNaN(cost)) {
-                totalAssignedCost += cost;
-                console.log(`Found assigned cost: $${cost} on ${entry.date}`);
-                break;
-              }
+        const isBuyback = logLower.includes('bought back') && logLower.includes('cost');
+        const isAssignment = logLower.includes('assigned') && logLower.includes('cost');
+        if (!isBuyback && !isAssignment) return;
+
+        for (const pattern of costPatterns) {
+          const match = entry.log.match(pattern);
+          if (match && match[1]) {
+            const cost = parseFloat(match[1].replace(/,/g, ''));
+            if (!isNaN(cost) && cost > 0) {
+              totalAssignedCost += cost;
+              console.log(`Found ITM call closure cost: $${cost} on ${entry.date} (${isBuyback ? 'buyback' : 'assignment'})`);
+              break;
             }
           }
         }
       });
-      
-      console.log(`Total cost of assigned options: $${totalAssignedCost.toFixed(2)}`);
+
+      console.log(`Total ITM call closure cost: $${totalAssignedCost.toFixed(2)}`);
       
       // Step 1: Extract ALL available premium values directly from API
       const rawPremiumData = [];
@@ -1550,6 +1549,32 @@ function Dashboard() {
               value={config.highVixDipBuyPercent}
               onChange={handleConfigChange}
               InputProps={{ inputProps: { min: 0.01, max: 1, step: 0.01 } }}
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="VIX Deleverage Threshold"
+              name="vixDeleverageThreshold"
+              value={config.vixDeleverageThreshold}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 0.1, max: 0.8, step: 0.05 } }}
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Deleverage Target Ratio"
+              name="vixDeleverageTargetRatio"
+              value={config.vixDeleverageTargetRatio}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 1.0, max: 2.0, step: 0.1 } }}
             />
           </Grid>
 
@@ -2399,7 +2424,7 @@ function Dashboard() {
                 {data.totalAssignedCost > 0 && (
                   <Alert severity="info" sx={{ mb: 1 }}>
                     <Typography variant="subtitle2">
-                      Total cost of assigned options during test period: ${data.totalAssignedCost.toFixed(2)}
+                      Total ITM call closure cost (buybacks + assignments): ${data.totalAssignedCost.toFixed(2)}
                     </Typography>
                   </Alert>
                 )}
