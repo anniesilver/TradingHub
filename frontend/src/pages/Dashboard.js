@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Typography,
   CircularProgress,
@@ -27,7 +27,6 @@ import { styled } from '@mui/material/styles';
 import {
   LineChart,
   Line,
-  BarChart,
   Bar,
   XAxis,
   YAxis,
@@ -35,6 +34,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  ComposedChart,
 } from 'recharts';
 import { runSimulation } from '../services/simulationService';
 
@@ -85,7 +85,6 @@ const MainContent = styled('div')(({ theme }) => ({
   padding: theme.spacing(3),
 }));
 
-// Add this near the top of the file, after other styled components
 const CompactTextField = styled(TextField)(({ theme }) => ({
   '& .MuiInputBase-input': {
     padding: '8px 10px',
@@ -1125,8 +1124,28 @@ function Dashboard() {
           }
         }
         
+        // Group interest data by month
+        const monthlyInterestData = {};
+        
+        filteredInterestData.forEach(item => {
+          // Extract year and month from the date (format: YYYY-MM-DD)
+          const yearMonth = item.date.substring(0, 7); // Gets "YYYY-MM"
+          
+          if (!monthlyInterestData[yearMonth]) {
+            monthlyInterestData[yearMonth] = {
+              month: yearMonth,
+              Interest_Paid: 0
+            };
+          }
+          
+          monthlyInterestData[yearMonth].Interest_Paid += item.Interest_Paid;
+        });
+        
+        // Convert back to array and sort by month
+        filteredInterestData = Object.values(monthlyInterestData).sort((a, b) => a.month.localeCompare(b.month));
+        
         // Sort by date
-        filteredInterestData.sort((a, b) => new Date(a.date) - new Date(b.date));
+        filteredInterestData.sort((a, b) => new Date(a.month) - new Date(b.month));
         
         // Calculate total interest paid
         totalInterestPaid = filteredInterestData.reduce((total, item) => {
@@ -1145,6 +1164,55 @@ function Dashboard() {
         return total + (Number(values.Dividends_Received) || 0);
       }, 0);
       
+      // Group premium data by month if not already grouped
+      const monthlyPremiumData = {};
+      
+      filteredPremiumData.forEach(item => {
+        // Extract year and month from the date (format: YYYY-MM-DD)
+        const yearMonth = item.date.substring(0, 7); // Gets "YYYY-MM"
+        
+        if (!monthlyPremiumData[yearMonth]) {
+          monthlyPremiumData[yearMonth] = {
+            month: yearMonth,
+            Premiums_Received: 0
+          };
+        }
+        
+        monthlyPremiumData[yearMonth].Premiums_Received += item.Premiums_Received;
+      });
+      
+      // Convert back to array and sort by month
+      const monthlyPremiumArray = Object.values(monthlyPremiumData).sort((a, b) => a.month.localeCompare(b.month));
+      
+      // Merge premium and interest data for the combined chart
+      const combinedMonthlyData = {};
+      
+      // Add all premium data
+      monthlyPremiumArray.forEach(item => {
+        combinedMonthlyData[item.month] = {
+          month: item.month,
+          Premiums_Received: item.Premiums_Received,
+          Interest_Paid: 0 // Default value if no interest for this month
+        };
+      });
+      
+      // Add all interest data
+      filteredInterestData.forEach(item => {
+        const month = item.month || item.date.substring(0, 7);
+        if (!combinedMonthlyData[month]) {
+          combinedMonthlyData[month] = {
+            month: month,
+            Premiums_Received: 0, // Default value if no premium for this month
+            Interest_Paid: item.Interest_Paid
+          };
+        } else {
+          combinedMonthlyData[month].Interest_Paid = item.Interest_Paid;
+        }
+      });
+      
+      // Convert to array and sort by month
+      const combinedData = Object.values(combinedMonthlyData).sort((a, b) => a.month.localeCompare(b.month));
+      
       // If we still have no premium data, create test data
       if (filteredPremiumData.length === 0) {
         console.log('No premium data found, creating varied test data');
@@ -1162,6 +1230,7 @@ function Dashboard() {
         })),
         premiumData: filteredPremiumData,
         interestData: filteredInterestData,
+        combinedData: combinedData,
         tradingLogs: tradingLogs,
         firstMonthRawData: firstMonthData,
         totalAssignedCost,
@@ -1265,7 +1334,16 @@ function Dashboard() {
     return firstMonthEntries;
   };
 
+  // Each strategy keeps its own symbol, so e.g. TSLA set for Options Martingale
+  // doesn't carry over into SPY Power Cashflow when switching back
+  const symbolByStrategy = useRef({});
+
   const handleStrategyChange = (strategyId) => {
+    symbolByStrategy.current[selectedStrategy] = config.symbol;
+    const nextSymbol = symbolByStrategy.current[strategyId] || 'SPY';
+    if (nextSymbol !== config.symbol) {
+      setConfig(prev => ({ ...prev, symbol: nextSymbol }));
+    }
     setSelectedStrategy(strategyId);
     setLoading(true);
     setError(null);
@@ -2090,9 +2168,8 @@ function Dashboard() {
                 <Tab label="Performance" {...a11yProps(0)} />
                 <Tab label="Margin Ratio" {...a11yProps(1)} />
                 <Tab label="Cash Balance" {...a11yProps(2)} />
-                <Tab label="Premium Received" {...a11yProps(3)} />
-                <Tab label="Interests Paid" {...a11yProps(4)} />
-                <Tab label="Trading Logs" {...a11yProps(5)} />
+                <Tab label="Premium & Interest" {...a11yProps(3)} />
+                <Tab label="Trading Logs" {...a11yProps(4)} />
               </Tabs>
             </Box>
             
@@ -2282,27 +2359,49 @@ function Dashboard() {
               </ResponsiveContainer>
             </TabPanel>
             
-            {/* Tab content for Premium Received Bar Chart */}
+            {/* Combined tab content for Premium Received and Interest Paid */}
             <TabPanel value={activeTab} index={3}>
               <Typography variant="h6" gutterBottom>
-                Premium Received
+                Monthly Premium Received vs Interest Paid
               </Typography>
-              {data.totalPremiumsReceived > 0 && (
-                <Alert severity="success" sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">
-                    Total premiums received during test period: ${data.totalPremiumsReceived.toFixed(2)}
-                  </Typography>
-                </Alert>
-              )}
-              {data.premiumData && data.premiumData.length > 0 ? (
+              
+              <Box sx={{ mb: 2 }}>
+                {data.totalPremiumsReceived > 0 && (
+                  <Alert severity="success" sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2">
+                      Total premiums received: ${data.totalPremiumsReceived.toFixed(2)}
+                    </Typography>
+                  </Alert>
+                )}
+                
+                {data.totalInterestPaid > 0 && (
+                  <Alert severity="info" sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2">
+                      Total interest paid: ${data.totalInterestPaid.toFixed(2)}
+                    </Typography>
+                  </Alert>
+                )}
+                
+                {data.totalPremiumsReceived > 0 && data.totalInterestPaid > 0 && (
+                  <Alert severity={data.totalPremiumsReceived > data.totalInterestPaid ? "success" : "warning"} sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2">
+                      Net premium after interest: ${(data.totalPremiumsReceived - data.totalInterestPaid).toFixed(2)}
+                    </Typography>
+                  </Alert>
+                )}
+              </Box>
+              
+              {data.combinedData && data.combinedData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={600}>
-                  <BarChart
-                    data={data.premiumData}
+                  <ComposedChart
+                    data={data.combinedData}
                     margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
+                    barGap={0}
+                    barCategoryGap="20%"
                   >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis 
-                      dataKey="date"
+                      dataKey="month"
                       angle={-45}
                       textAnchor="end"
                       height={60}
@@ -2310,6 +2409,7 @@ function Dashboard() {
                     <YAxis 
                       domain={[0, 'auto']}
                       tickFormatter={(value) => `$${value.toLocaleString()}`}
+                      label={{ value: 'Amount ($)', angle: -90, position: 'insideLeft' }}
                     />
                     <Tooltip content={<CustomTooltip />} />
                     <Legend 
@@ -2323,98 +2423,25 @@ function Dashboard() {
                       fill="#8884d8"
                       barSize={30} 
                     />
-                  </BarChart>
+                    <Bar 
+                      dataKey="Interest_Paid" 
+                      name="Interest Paid" 
+                      fill="#FF8042" 
+                      barSize={30}
+                    />
+                  </ComposedChart>
                 </ResponsiveContainer>
               ) : (
                 <Box mt={2} textAlign="center" height={600} display="flex" alignItems="center" justifyContent="center">
                   <Typography variant="body1" color="textSecondary">
-                    No premium data available for the selected period
+                    No premium or interest data available for the selected period
                   </Typography>
                 </Box>
               )}
-              <Box mt={2}>
-                <Typography variant="subtitle2">Data used for chart:</Typography>
-                <pre style={{ maxHeight: '200px', overflow: 'auto', background: '#f5f5f5', padding: '8px', fontSize: '12px' }}>
-                  {JSON.stringify(data.premiumData, null, 2)}
-                </pre>
-              </Box>
             </TabPanel>
             
-            {/* Tab content for Interests Paid Bar Chart */}
+            {/* Tab content for Trading Logs (now index 4) */}
             <TabPanel value={activeTab} index={4}>
-              <Typography variant="h6" gutterBottom>
-                Interests Paid
-              </Typography>
-              {data.totalInterestPaid > 0 && (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">
-                    Total interest paid during test period: ${data.totalInterestPaid.toFixed(2)}
-                  </Typography>
-                </Alert>
-              )}
-              {data.interestData && data.interestData.length > 0 ? (
-                <React.Fragment>
-                  <ResponsiveContainer width="100%" height={600}>
-                    <BarChart
-                      data={data.interestData}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis 
-                        dataKey="date"
-                        angle={-45}
-                        textAnchor="end"
-                        height={60}
-                      />
-                      <YAxis 
-                        domain={[0, 'auto']}
-                        tickFormatter={(value) => `$${value.toLocaleString()}`}
-                      />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Legend 
-                        verticalAlign="top"
-                        height={36}
-                        wrapperStyle={{paddingBottom: '10px'}}
-                      />
-                      <Bar 
-                        dataKey="Interest_Paid" 
-                        name="Interest Paid" 
-                        fill="#FF8042" 
-                        barSize={30} 
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                  
-                  <Box mt={2}>
-                    <Typography variant="body2" color="textSecondary">
-                      Note: This chart shows interest costs from margin usage in the strategy.
-                    </Typography>
-                  </Box>
-                </React.Fragment>
-              ) : (
-                <Box mt={2} textAlign="center" height={600} display="flex" alignItems="center" justifyContent="center">
-                  <Typography variant="body1" color="textSecondary">
-                    No interest paid data available. This could mean either:
-                    <ul>
-                      <li>The strategy doesn't use margin</li>
-                      <li>There were no margin interest charges during this period</li>
-                      <li>The interest data is not available in the simulation results</li>
-                    </ul>
-                  </Typography>
-                </Box>
-              )}
-              
-              {/* Add debug information box */}
-              <Box mt={2}>
-                <Typography variant="subtitle2">Data used for chart:</Typography>
-                <pre style={{ maxHeight: '200px', overflow: 'auto', background: '#f5f5f5', padding: '8px', fontSize: '12px' }}>
-                  {JSON.stringify(data.interestData, null, 2)}
-                </pre>
-              </Box>
-            </TabPanel>
-            
-            {/* Debug tab for Trading Logs (hidden in production) */}
-            <TabPanel value={activeTab} index={5}>
               <Typography variant="h6" gutterBottom>
                 Trading Logs (Debug View)
               </Typography>
