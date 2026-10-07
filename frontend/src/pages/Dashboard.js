@@ -38,6 +38,7 @@ import {
 } from 'recharts';
 import { runSimulation } from '../services/simulationService';
 import ParameterField from '../components/ParameterField';
+import { parameterUnits, toDisplayValue, toStoredValue, toDisplayInputProps } from './parameterUnits';
 
 // Helper function to calculate the 3rd Friday of a month (standard options expiration)
 const getThirdFriday = (year, month) => {
@@ -99,20 +100,26 @@ const StyledCompactTextField = styled(TextField)(({ theme }) => ({
   },
 }));
 
-const CompactTextField = ({ name, label, inputProps, InputProps, ...props }) => (
-  <ParameterField name={name} label={label}>
-    <StyledCompactTextField
-      {...props}
-      id={`parameter-${name}`}
-      name={name}
-      label={label}
-      InputProps={{
-        ...InputProps,
-        inputProps: { ...InputProps?.inputProps, ...inputProps, 'aria-describedby': `${name}-help` },
-      }}
-    />
-  </ParameterField>
-);
+const CompactTextField = ({ name, label, value, inputProps, InputProps, ...props }) => {
+  const displayLabel = parameterUnits[name]?.label ?? label;
+  return (
+    <ParameterField name={name} label={displayLabel}>
+      <StyledCompactTextField
+        {...props}
+        id={`parameter-${name}`}
+        name={name}
+        label={displayLabel}
+        value={toDisplayValue(name, value)}
+        InputProps={{
+          ...InputProps,
+          inputProps: toDisplayInputProps(name, {
+            ...InputProps?.inputProps, ...inputProps, 'aria-describedby': `${name}-help`,
+          }),
+        }}
+      />
+    </ParameterField>
+  );
+};
 
 const CompactSelect = styled(Select)(({ theme }) => ({
   '& .MuiSelect-select': {
@@ -166,7 +173,7 @@ function a11yProps(index) {
   };
 }
 
-const CustomTooltip = ({ active, payload, label }) => {
+export const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
   
   // Get the first item to check if it's a buy transaction
@@ -247,12 +254,16 @@ const CustomTooltip = ({ active, payload, label }) => {
           return null;
         }
                          
+        const formattedValue = entry.dataKey === 'Margin_Ratio'
+          ? `${(Number(entry.value) * 100).toFixed(2)}%`
+          : `$${Number(entry.value).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`;
+
         return (
           <p key={index} style={{ margin: '5px 0', color: entry.color }}>
-            {seriesName}: ${Number(entry.value).toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            })}
+            {seriesName}: {formattedValue}
           </p>
         );
       }).filter(Boolean)}
@@ -372,12 +383,14 @@ function Dashboard() {
       'stockCommission', 'volatilityScalingFactor'
     ];
     
-    if (numericFields.includes(name)) {
+    if (numericFields.includes(name) || parameterUnits[name]?.displayScale !== undefined) {
       // Ensure value is always a valid number
       processedValue = parseFloat(value);
       if (isNaN(processedValue)) {
         // Default to original value if invalid
         processedValue = config[name];
+      } else {
+        processedValue = toStoredValue(name, processedValue);
       }
       console.log(`Setting ${name} to: ${processedValue}`);
     }

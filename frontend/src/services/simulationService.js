@@ -74,29 +74,42 @@ export const getSimulations = async (limit = 10, offset = 0) => {
 
 /**
  * Runs a trading strategy simulation with custom parameters
- * @param {Object} config - Simulation configuration
+ * Percentage inputs are converted by the dashboard before reaching this service.
+ * Config/API rates use decimal fractions (0.4 = 40%), except monthlyWithdrawalRate,
+ * which uses percentage points (1.0 = 1%). Ratios and normalized VIX values stay raw.
+ * @param {Object} config - Simulation configuration in internal/API units, not display percentages
  * @param {string} config.strategyId - Strategy type (default: 'SPY_POWER_CASHFLOW')
  * @param {string} config.symbol - Trading symbol (default: 'SPY')
  * @param {string} config.startDate - Start date for simulation
  * @param {string} config.endDate - End date for simulation
- * @param {number} config.initialBalance - Initial balance (default: 10000.0)
- * @param {number} config.callCostBuffer - Buffer for call cost (default: 0.05)
- * @param {number} config.contractSize - Option contract size (default: 100)
- * @param {number} config.coveredCallRatio - Covered call ratio (default: 1.0)
- * @param {number} config.dipBuyPercent - Dip buy percentage (default: 0.4)
- * @param {number} config.dipTrigger - Dip trigger threshold (default: 0.92)
- * @param {number} config.initialPositionPercent - Initial position percentage (default: 0.6)
- * @param {number} config.marginInterestRate - Margin interest rate (default: 0.06)
+ * @param {number} config.initialBalance - Initial balance in dollars (default: 200000.0)
+ * @param {number} config.callCostBuffer - Call cost buffer fraction (default: 0.05 = 5%)
+ * @param {number} config.contractSize - Shares per option contract (default: 100)
+ * @param {number} config.coveredCallRatio - Covered stock-position fraction (default: 1.0 = 100%)
+ * @param {number} config.dipBuyPercent - Dip-buy allocation fraction (default: 0.4 = 40%)
+ * @param {number} config.dipTrigger - Dip-trigger price ratio (default: 0.92 = 92% of reference price)
+ * @param {number} config.vixHighThreshold - Normalized VIX threshold (default: 0.25 = VIX 25)
+ * @param {number} config.highVixDipTrigger - High-VIX dip-trigger price ratio (default: 0.80)
+ * @param {number} config.highVixDipBuyPercent - High-VIX dip-buy allocation fraction (default: 0.15 = 15%)
+ * @param {number} config.vixDeleverageThreshold - Normalized deleverage VIX threshold (default: 0.25 = VIX 25)
+ * @param {number} config.vixDeleverageTargetRatio - Target leverage ratio (default: 1.5 = 1.5:1)
+ * @param {number} config.initialPositionPercent - Initial allocation fraction (default: 0.6 = 60%)
+ * @param {number} config.marginInterestRate - Annual margin interest fraction (default: 0.06 = 6%)
  * @param {number} config.maxMarginRatio - Maximum leverage ratio (position_value/account_value) (default: 2)
- * @param {number} config.maxPositionSize - Maximum position size (default: 10000)
- * @param {number} config.minCommission - Minimum commission (default: 1.0)
- * @param {number} config.minStrikeDistance - Minimum strike distance (default: 0.015)
- * @param {number} config.minTradeSize - Minimum trade size (default: 1000)
- * @param {number} config.monthlyWithdrawalRate - Monthly withdrawal rate as percentage (default: 1.0)
- * @param {number} config.optionCommission - Option commission (default: 0.65)
- * @param {number} config.riskFreeRate - Risk-free rate (default: 0.05)
- * @param {number} config.stockCommission - Stock commission (default: 0.01)
- * @param {number} config.volatilityScalingFactor - Volatility scaling factor (default: 0.15)
+ * @param {number} config.maxPositionSize - Maximum stock shares held (default: 10000)
+ * @param {number} config.minCommission - Minimum commission in dollars per trade (default: 1.0)
+ * @param {number} config.minStrikeDistance - Minimum strike-distance fraction (default: 0.015 = 1.5%)
+ * @param {number} config.minTradeSize - Minimum trade value in dollars (default: 1000)
+ * @param {number} config.monthlyWithdrawalRate - Monthly withdrawal percentage points (default: 1.0 = 1%)
+ * @param {number} config.optionCommission - Dollars per option contract (default: 0.65)
+ * @param {number} config.riskFreeRate - Annual risk-free fraction (default: 0.05 = 5%)
+ * @param {number} config.stockCommission - Dollars per stock share (default: 0.01)
+ * @param {number} config.volatilityScalingFactor - VIX-volatility multiplier, not a percentage input (default: 0.15)
+ * @param {number} config.DEC_INDEX - OPTIONS_MARTIN purchase-threshold price ratio (default: 0.6)
+ * @param {number} config.IV_ENTRY_THRESHOLD - OPTIONS_MARTIN entry IV fraction (default: 0.30 = 30%)
+ * @param {number} config.IV_EXIT_THRESHOLD - OPTIONS_MARTIN exit IV fraction (default: 0.50 = 50%)
+ * @param {number} config.INITIAL_POSITION_PERCENT - SPY500_LEADER initial allocation fraction (default: 0.6 = 60%)
+ * @param {number} config.SLIPPAGE_PERCENT - SPY500_LEADER slippage fraction (default: 0.001 = 0.1%)
  * @returns {Promise<Object>} Simulation results
  */
 export const runSimulation = async (config) => {
@@ -256,4 +269,4 @@ export const runSimulation = async (config) => {
     });
     throw error;
   }
-}; 
+};

@@ -2,7 +2,7 @@
 
 TradingHub is a web-based platform for running trading strategy simulations, visualizing performance metrics, and analyzing trading results. It provides a simple interface for backtesting trading strategies across different time periods.
 
-![TradingHub Screenshot](https://placeholder-for-screenshot.png)
+![TradingHub dashboard showing strategy settings and backtest performance](docs/images/tradinghub-dashboard.png)
 
 ## Features
 
@@ -120,40 +120,53 @@ TradingHub is a web-based platform for running trading strategy simulations, vis
 
 TradingHub provides extensive customization through advanced strategy parameters. Below is a comprehensive guide to all available parameters:
 
+### Unit Conventions
+
+Percentage inputs on the dashboard use familiar percentage values: enter `40` for 40%, `60` for 60%, or `1.5` for 1.5%. The frontend configuration and API keep these values as decimal fractions (`0.4`, `0.6`, and `0.015`, respectively). This applies to allocation percentages, interest rates, option-cost buffers, strike distance, IV thresholds, and slippage.
+
+**Monthly Withdrawal Rate is an exception:** both the input and API use percentage points, so `1.0` means 1%, not 100%. Price thresholds and leverage remain ratios; normalized VIX thresholds remain index values divided by 100. These fields are not percentage inputs.
+
 ### Basic Configuration
 - **Symbol** (default: 'SPY') - The trading symbol/ticker for the underlying asset
 - **Option Type** (default: 'call') - Type of options to trade (call or put)
 - **Initial Balance** (default: $200,000) - Starting cash amount for the simulation
 
 ### Position Management Parameters
-- **Initial Position Percent** (default: 0.6 = 60%) - Percentage of available cash to use for initial stock position
-- **Dip Buy Percent** (default: 0.4 = 40%) - Additional percentage of cash to deploy when buying dips
-- **Dip Trigger** (default: 0.92 = 92%) - Price threshold (as ratio of recent high) that triggers dip buying
+- **Initial Position Percent** (default: 60%; API: 0.6) - Percentage of available cash to use for initial stock position
+- **Dip Buy Percent** (default: 40%; API: 0.4) - Additional percentage of cash to deploy when buying dips
+- **Dip Trigger** (default ratio: 0.92) - Price threshold as a fraction of the recent high: 92% of that price, or an 8% drop
+- **High-VIX Dip Buy Percent** (default: 15%; API: 0.15) - Percentage of available cash to deploy during a high-VIX dip
+- **High-VIX Dip Trigger** (default ratio: 0.80) - Price threshold during high VIX: 80% of the recent high, or a 20% drop
 - **Max Position Size** (default: 10,000) - Maximum number of shares that can be held
 - **Min Trade Size** (default: 1,000) - Minimum dollar amount for a trade to be executed
 
 ### Options Parameters
-- **Call Cost Buffer** (default: 0.05 = 5%) - Safety buffer added to call option cost calculations
+- **Call Cost Buffer** (default: 5%; API: 0.05) - Safety buffer added to call option cost calculations
 - **Contract Size** (default: 100) - Number of shares per options contract (standard is 100)
-- **Covered Call Ratio** (default: 1.0 = 100%) - Ratio of covered calls to write relative to stock position
-- **Min Strike Distance** (default: 0.015 = 1.5%) - Minimum distance between current price and option strike price
+- **Covered Call Ratio** (default: 100%; API: 1.0) - Percentage of the stock position used for covered calls
+- **Min Strike Distance** (default: 1.5%; API: 0.015) - Minimum percentage distance between current price and option strike price
+- **Decrease Index / DEC_INDEX** (default ratio: 0.6) - OPTIONS_MARTIN purchase threshold at 60% of the reference option price, or a 40% drop; enter the ratio, not the drop percentage
 
 ### Risk Management Parameters
 - **Max Leverage Ratio** (default: 2.0 = 2:1) - Maximum leverage ratio (position_value/account_value)
   - 2.0 = 2:1 leverage = 50% margin requirement (Reg T compliant)
   - IBKR allows up to 4:1 leverage (25% margin) for liquid stocks like SPY
-- **Margin Interest Rate** (default: 0.06 = 6%) - Annual interest rate charged on borrowed funds
-- **Risk Free Rate** (default: 0.05 = 5%) - Risk-free interest rate for option pricing models
+- **Margin Interest Rate** (default: 6%; API: 0.06) - Annual interest rate charged on borrowed funds
+- **Risk Free Rate** (default: 5%; API: 0.05) - Annual risk-free interest rate for option pricing models
 
 ### Trading Costs
 - **Stock Commission** (default: $0.01) - Commission per share for stock trades
 - **Option Commission** (default: $0.65) - Commission per options contract
 - **Min Commission** (default: $1.00) - Minimum commission charged per trade
+- **Slippage Percent** (SPY500_LEADER default: 0.1%; API: 0.001) - Simulated execution-price slippage
 
 ### Cash Management
-- **Monthly Withdrawal** (default: $5,000) - Fixed monthly cash withdrawal amount
+- **Monthly Withdrawal Rate** (default: 1.0%) - Monthly cash withdrawal percentage; the input and API both use `1.0` for 1%, or `0` for no withdrawals
 
 ### Volatility Parameters
-- **Volatility Scaling Factor** (default: 0.15 = 15%) - Factor used to scale VIX volatility for option pricing
+- **Volatility Scaling Factor** (default multiplier: 0.15) - Factor used to scale VIX-derived volatility for option pricing; this is a multiplier, not a 15% volatility input
+- **VIX High / Deleverage Thresholds** (default normalized value: 0.25) - Each represents a VIX index level of 25, not an input of 0.25%
+- **IV Entry Threshold** (OPTIONS_MARTIN default: 30%; API: 0.30) - Maximum implied volatility for entry when the IV filter is enabled
+- **IV Exit Threshold** (OPTIONS_MARTIN default: 50%; API: 0.50) - Implied volatility level that triggers an exit when enabled
 
 ## Project Structure
