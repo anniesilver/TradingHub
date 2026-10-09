@@ -37,6 +37,8 @@ import {
   ComposedChart,
 } from 'recharts';
 import { runSimulation } from '../services/simulationService';
+import ParameterField from '../components/ParameterField';
+import { parameterUnits, toDisplayValue, toStoredValue, toDisplayInputProps } from './parameterUnits';
 
 // Helper function to calculate the 3rd Friday of a month (standard options expiration)
 const getThirdFriday = (year, month) => {
@@ -85,7 +87,8 @@ const MainContent = styled('div')(({ theme }) => ({
   padding: theme.spacing(3),
 }));
 
-const CompactTextField = styled(TextField)(({ theme }) => ({
+// Add this near the top of the file, after other styled components
+const StyledCompactTextField = styled(TextField)(({ theme }) => ({
   '& .MuiInputBase-input': {
     padding: '8px 10px',
   },
@@ -97,13 +100,34 @@ const CompactTextField = styled(TextField)(({ theme }) => ({
   },
 }));
 
+const CompactTextField = ({ name, label, value, inputProps, InputProps, ...props }) => {
+  const displayLabel = parameterUnits[name]?.label ?? label;
+  return (
+    <ParameterField name={name} label={displayLabel}>
+      <StyledCompactTextField
+        {...props}
+        id={`parameter-${name}`}
+        name={name}
+        label={displayLabel}
+        value={toDisplayValue(name, value)}
+        InputProps={{
+          ...InputProps,
+          inputProps: toDisplayInputProps(name, {
+            ...InputProps?.inputProps, ...inputProps, 'aria-describedby': `${name}-help`,
+          }),
+        }}
+      />
+    </ParameterField>
+  );
+};
+
 const CompactSelect = styled(Select)(({ theme }) => ({
   '& .MuiSelect-select': {
     padding: '8px 10px',
   },
 }));
 
-const CompactFormControl = styled(FormControl)(({ theme }) => ({
+const StyledCompactFormControl = styled(FormControl)(({ theme }) => ({
   '& .MuiInputLabel-root': {
     transform: 'translate(10px, 9px) scale(1)',
     '&.MuiInputLabel-shrink': {
@@ -111,6 +135,15 @@ const CompactFormControl = styled(FormControl)(({ theme }) => ({
     },
   },
 }));
+
+const CompactFormControl = ({ children, ...props }) => {
+  const select = React.Children.toArray(children).find((child) => child.props?.name);
+  return (
+    <ParameterField name={select.props.name} label={select.props.label}>
+      <StyledCompactFormControl {...props}>{children}</StyledCompactFormControl>
+    </ParameterField>
+  );
+};
 
 // Tab Panel component
 function TabPanel(props) {
@@ -140,7 +173,7 @@ function a11yProps(index) {
   };
 }
 
-const CustomTooltip = ({ active, payload, label }) => {
+export const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
   
   // Get the first item to check if it's a buy transaction
@@ -221,12 +254,16 @@ const CustomTooltip = ({ active, payload, label }) => {
           return null;
         }
                          
+        const formattedValue = entry.dataKey === 'Margin_Ratio'
+          ? `${(Number(entry.value) * 100).toFixed(2)}%`
+          : `$${Number(entry.value).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`;
+
         return (
           <p key={index} style={{ margin: '5px 0', color: entry.color }}>
-            {seriesName}: ${Number(entry.value).toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            })}
+            {seriesName}: {formattedValue}
           </p>
         );
       }).filter(Boolean)}
@@ -346,12 +383,14 @@ function Dashboard() {
       'stockCommission', 'volatilityScalingFactor'
     ];
     
-    if (numericFields.includes(name)) {
+    if (numericFields.includes(name) || parameterUnits[name]?.displayScale !== undefined) {
       // Ensure value is always a valid number
       processedValue = parseFloat(value);
       if (isNaN(processedValue)) {
         // Default to original value if invalid
         processedValue = config[name];
+      } else {
+        processedValue = toStoredValue(name, processedValue);
       }
       console.log(`Setting ${name} to: ${processedValue}`);
     }
@@ -1452,8 +1491,10 @@ function Dashboard() {
         <Grid container spacing={1}>
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactFormControl fullWidth size="small">
-              <InputLabel>Symbol</InputLabel>
+              <InputLabel id="symbol-label">Symbol</InputLabel>
               <CompactSelect
+                labelId="symbol-label"
+                inputProps={{ 'aria-describedby': 'symbol-help' }}
                 name="symbol"
                 value={config.symbol}
                 onChange={handleConfigChange}
@@ -1471,8 +1512,10 @@ function Dashboard() {
           </Grid>
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactFormControl fullWidth size="small">
-              <InputLabel>Option Type</InputLabel>
+              <InputLabel id="optionType-label">Option Type</InputLabel>
               <CompactSelect
+                labelId="optionType-label"
+                inputProps={{ 'aria-describedby': 'optionType-help' }}
                 name="optionType"
                 value={config.optionType}
                 onChange={handleConfigChange}
@@ -1836,8 +1879,10 @@ function Dashboard() {
 
               <Grid item xs={12} sm={3} md={1.5}>
                 <CompactFormControl fullWidth size="small">
-                  <InputLabel>Option Right</InputLabel>
+                  <InputLabel id="RIGHT-label">Option Right</InputLabel>
                   <CompactSelect
+                    labelId="RIGHT-label"
+                    inputProps={{ 'aria-describedby': 'RIGHT-help' }}
                     name="RIGHT"
                     value={config.RIGHT}
                     onChange={handleConfigChange}
@@ -1878,7 +1923,6 @@ function Dashboard() {
                   value={config.INC_INDEX}
                   onChange={handleConfigChange}
                   InputProps={{ inputProps: { min: 1, step: 0.1 } }}
-                  helperText="Exit when profit reaches this multiple"
                 />
               </Grid>
 
@@ -1892,7 +1936,6 @@ function Dashboard() {
                   value={config.DEC_INDEX}
                   onChange={handleConfigChange}
                   InputProps={{ inputProps: { min: 0.1, max: 0.9, step: 0.1 } }}
-                  helperText="Add position when drops to this %"
                 />
               </Grid>
 
@@ -1924,8 +1967,10 @@ function Dashboard() {
 
               <Grid item xs={12} sm={3} md={1.5}>
                 <CompactFormControl fullWidth size="small">
-                  <InputLabel>Bar Interval</InputLabel>
+                  <InputLabel id="BAR_INTERVAL-label">Bar Interval</InputLabel>
                   <CompactSelect
+                    labelId="BAR_INTERVAL-label"
+                    inputProps={{ 'aria-describedby': 'BAR_INTERVAL-help' }}
                     name="BAR_INTERVAL"
                     value={config.BAR_INTERVAL}
                     onChange={handleConfigChange}
@@ -1946,10 +1991,12 @@ function Dashboard() {
               </Grid>
 
               <Grid item xs={12} sm={6} md={3}>
+                <ParameterField name="USE_IV_FILTER" label="Enable IV Entry Filter">
                 <FormControlLabel
                   control={
                     <Checkbox
                       checked={config.USE_IV_FILTER}
+                      inputProps={{ 'aria-describedby': 'USE_IV_FILTER-help' }}
                       onChange={(e) => {
                         const newValue = e.target.checked;
                         setConfig(prev => ({
@@ -1961,6 +2008,7 @@ function Dashboard() {
                   }
                   label="Enable IV Entry Filter"
                 />
+                </ParameterField>
               </Grid>
 
               <Grid item xs={12} sm={6} md={3}>
@@ -1974,15 +2022,16 @@ function Dashboard() {
                   onChange={handleConfigChange}
                   disabled={!config.USE_IV_FILTER}
                   InputProps={{ inputProps: { min: 0, max: 1, step: 0.01 } }}
-                  helperText="Enter only if IV < threshold (e.g., 0.30 = 30%)"
                 />
               </Grid>
 
               <Grid item xs={12} sm={6} md={3}>
+                <ParameterField name="USE_IV_SPIKE_EXIT" label="Enable IV Spike Exit">
                 <FormControlLabel
                   control={
                     <Checkbox
                       checked={config.USE_IV_SPIKE_EXIT}
+                      inputProps={{ 'aria-describedby': 'USE_IV_SPIKE_EXIT-help' }}
                       onChange={(e) => {
                         const newValue = e.target.checked;
                         setConfig(prev => ({
@@ -1994,6 +2043,7 @@ function Dashboard() {
                   }
                   label="Enable IV Spike Exit"
                 />
+                </ParameterField>
               </Grid>
 
               <Grid item xs={12} sm={6} md={3}>
@@ -2007,7 +2057,6 @@ function Dashboard() {
                   onChange={handleConfigChange}
                   disabled={!config.USE_IV_SPIKE_EXIT}
                   InputProps={{ inputProps: { min: 0, max: 1, step: 0.01 } }}
-                  helperText="Exit if IV > threshold (e.g., 0.50 = 50%)"
                 />
               </Grid>
             </>
@@ -2032,7 +2081,6 @@ function Dashboard() {
                   value={config.CONFIRMATION_DAYS}
                   onChange={handleConfigChange}
                   InputProps={{ inputProps: { min: 1, max: 20, step: 1 } }}
-                  helperText="Days new leader must hold #1 before switching"
                 />
               </Grid>
 
@@ -2046,7 +2094,6 @@ function Dashboard() {
                   value={config.INITIAL_POSITION_PERCENT}
                   onChange={handleConfigChange}
                   InputProps={{ inputProps: { min: 0.1, max: 1.0, step: 0.05 } }}
-                  helperText="% of cash for initial buy (e.g., 0.6 = 60%)"
                 />
               </Grid>
 
@@ -2060,7 +2107,6 @@ function Dashboard() {
                   value={config.SLIPPAGE_PERCENT}
                   onChange={handleConfigChange}
                   InputProps={{ inputProps: { min: 0, max: 0.01, step: 0.0001 } }}
-                  helperText="Transaction slippage (e.g., 0.001 = 0.1%)"
                 />
               </Grid>
             </>
@@ -2574,4 +2620,4 @@ function Dashboard() {
   );
 }
 
-export default Dashboard; 
+export default Dashboard;
