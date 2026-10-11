@@ -9,7 +9,7 @@ export default function ParameterField({ name, label, children }) {
   const help = parameterHelp[name];
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', gap: 0.25 }}>
+    <Box className="parameter-field" sx={{ display: 'flex', alignItems: 'center', width: '100%', gap: 0.25 }}>
       <Box sx={{ flex: 1, minWidth: 0 }}>{children}</Box>
       <Box component="span" id={`${name}-help`} sx={visuallyHidden}>{help}</Box>
       <Tooltip
@@ -30,7 +30,7 @@ export default function ParameterField({ name, label, children }) {
           onKeyDown={(event) => {
             if (event.key === 'Escape') setOpen(false);
           }}
-          sx={{ p: 0.5, color: 'text.secondary', flexShrink: 0 }}
+          sx={{ width: 28, height: 32, color: 'text.secondary', flexShrink: 0, '@media (pointer: coarse)': { width: 36, height: 36 } }}
         >
           <HelpOutlineIcon sx={{ fontSize: 16 }} />
         </IconButton>

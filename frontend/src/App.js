@@ -1,30 +1,24 @@
-import React from 'react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import React, { useMemo, useState } from 'react';
+import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Dashboard from './pages/Dashboard';
 import './App.css';
-
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: {
-      main: '#1976d2',
-    },
-    secondary: {
-      main: '#dc004e',
-    },
-  },
-});
+import { createWorkspaceTheme } from './theme';
+import AppearanceContext from './AppearanceContext';
 
 function App() {
+  const [mode, setMode] = useState('dark');
+  const theme = useMemo(() => createWorkspaceTheme(mode), [mode]);
   return (
+    <AppearanceContext.Provider value={{ mode, setMode }}>
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <div className="app">
+      <div className="app" data-theme={mode}>
         <Dashboard />
       </div>
     </ThemeProvider>
+    </AppearanceContext.Provider>
   );
 }
 
-export default App; 
+export default App;

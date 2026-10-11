@@ -4,15 +4,166 @@ import '@testing-library/jest-dom';
 import userEvent from '@testing-library/user-event';
 import ParameterField from '../components/ParameterField';
 import Dashboard, { CustomTooltip } from './Dashboard';
+import App from '../App';
+import { createWorkspaceTheme } from '../theme';
+import { chartColors } from '../components/chartColors';
 import { runSimulation } from '../services/simulationService';
 
 jest.mock('../services/simulationService', () => ({ runSimulation: jest.fn() }));
+
+const originalResizeObserver = global.ResizeObserver;
+test('light mode changes the app theme without resetting parameters or requesting a simulation', async () => {
+  const { container } = render(<App />);
+  await screen.findByText('Backtest service unavailable');
+  fireEvent.change(screen.getByLabelText('Initial Balance'), { target: { value: '321000' } });
+  const calls = runSimulation.mock.calls.length;
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Light mode' }));
+  expect(container.querySelector('.app')).toHaveAttribute('data-theme', 'light');
+  expect(screen.getByLabelText('Initial Balance')).toHaveValue(321000);
+  expect(runSimulation).toHaveBeenCalledTimes(calls);
+  expect(createWorkspaceTheme('light').palette.mode).toBe('light');
+  expect(createWorkspaceTheme('light').shape.borderRadius).toBe(3);
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Light mode' }));
+  expect(container.querySelector('.app')).toHaveAttribute('data-theme', 'dark');
+});
+
+test('sample tabs morph distinct contours without a fullscreen navigation wave', async () => {
+  const { container } = render(<Dashboard />);
+  await screen.findByText('Backtest service unavailable');
+  fireEvent.click(screen.getByRole('button', { name: 'Show sample chart' }));
+  const first = screen.getByTestId('background-contour').getAttribute('d');
+  fireEvent.click(screen.getByRole('tab', { name: 'Margin', exact: true }));
+  expect(screen.getByTestId('background-contour').getAttribute('d')).not.toBe(first);
+  expect(container.querySelector('.workspace-wave-backdrop')).toHaveAttribute('data-scene', '1');
+  expect(screen.queryByTestId('simulation-transition')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: 'Cash', exact: true }));
+  expect(container.querySelector('.workspace-wave-backdrop')).toHaveAttribute('data-scene', '2');
+  fireEvent.click(screen.getByRole('button', { name: 'Close preview' }));
+  expect(container.querySelector('.workspace-wave-backdrop')).toHaveAttribute('data-scene', '0');
+});
+beforeAll(() => {
+  // jsdom has no layout observer. These tests verify result labels/state,
+  // not chart geometry; browser validation is separate.
+  global.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+});
+afterAll(() => {
+  if (originalResizeObserver) global.ResizeObserver = originalResizeObserver;
+  else delete global.ResizeObserver;
+});
+
+test('labels the historical workspace and exposes session-only accessibility preferences', async () => {
+  const { container } = render(<Dashboard />);
+  await screen.findByText('Backtest service unavailable');
+  expect(screen.getByRole('heading', { level: 1, name: 'Strategy analysis' })).toBeInTheDocument();
+  expect(screen.getByText('Historical backtest')).toBeInTheDocument();
+  expect(screen.getByRole('navigation', { name: 'Trading strategies' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /^SPY Power Cashflow/ })).toHaveAttribute('aria-current', 'page');
+  expect(screen.getByRole('link', { name: 'Skip to analysis' })).toHaveAttribute('href', '#analysis-workspace');
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Solid surfaces' }));
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Reduce motion' }));
+  expect(container.querySelector('.workspace')).toHaveAttribute('data-solid', 'true');
+  expect(container.querySelector('.workspace')).toHaveAttribute('data-motion', 'reduced');
+});
+
+test('successful results keep their run context when configuration changes', async () => {
+  // Test-only historical fixture, never substituted for market data in the app.
+  runSimulation.mockResolvedValue({
+    '2026-09-11': { Portfolio_Value: 200000, spy_value: 200000, Cash_Balance: 20000, Margin_Ratio: 0.1, Trading_Log: '' },
+    '2026-10-09': { Portfolio_Value: 201000, spy_value: 200500, Cash_Balance: 21000, Margin_Ratio: 0.1, Trading_Log: '' },
+  });
+  const { container } = render(<Dashboard />);
+  await screen.findByRole('heading', { name: 'Historical simulation results' });
+  expect(screen.getByText(/Market-data freshness, session and source time zone are not supplied/)).toBeInTheDocument();
+  const context = container.querySelector('[aria-label="Result context"]');
+  const originalContext = context.textContent;
+  fireEvent.change(screen.getByLabelText('Initial Balance'), { target: { value: '300000' } });
+  expect(screen.getByText('Settings have changed. Rerun to update these results.')).toBeInTheDocument();
+  expect(context.textContent).toContain(originalContext);
+  fireEvent.click(screen.getByRole('tab', { name: 'Trading Logs' }));
+  expect(screen.getByText(/Initial Balance: \$200,000/)).toBeInTheDocument();
+});
+
+test('glass is the default and solid surfaces is the only material override', async () => {
+  const { container } = render(<Dashboard />);
+  await screen.findByText('Backtest service unavailable');
+  const firstInputs = runSimulation.mock.calls[0][0];
+  expect(screen.queryByRole('checkbox', { name: 'Glass mode' })).not.toBeInTheDocument();
+  expect(screen.queryByTestId('simulation-transition')).not.toBeInTheDocument();
+  expect(container.querySelector('.workspace')).toHaveAttribute('data-glass', 'true');
+  expect(container.querySelector('.workspace-wave-backdrop')).toHaveAttribute('aria-hidden', 'true');
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Solid surfaces' }));
+  expect(container.querySelector('.workspace')).toHaveAttribute('data-glass', 'false');
+  expect(container.querySelector('.workspace-wave-backdrop')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Solid surfaces' }));
+  expect(container.querySelector('.workspace')).toHaveAttribute('data-glass', 'true');
+  expect(screen.getByRole('checkbox', { name: 'Solid surfaces' })).not.toBeChecked();
+  const previousWipe = screen.queryByTestId('simulation-transition');
+  fireEvent.click(screen.getByRole('button', { name: /run simulation/i }));
+  expect(screen.getByTestId('simulation-transition')).not.toBe(previousWipe);
+  await screen.findByText('Backtest service unavailable');
+  expect(runSimulation).toHaveBeenLastCalledWith(firstInputs);
+});
 
 beforeEach(() => {
   // Exercise the form without a database, broker, or external strategy engine.
   runSimulation.mockRejectedValue(new Error('Backtest service unavailable'));
   jest.spyOn(console, 'log').mockImplementation(() => {});
   jest.spyOn(console, 'error').mockImplementation(() => {});
+});
+
+test('sample preview is explicit, isolated from the API, and slides in both directions', async () => {
+  const { container } = render(<Dashboard />);
+  await screen.findByText('Backtest service unavailable');
+  const callsBeforePreview = runSimulation.mock.calls.length;
+  const originalBalance = screen.getByLabelText('Initial Balance').value;
+  fireEvent.click(screen.getByRole('button', { name: 'Show sample chart' }));
+  expect(screen.getByRole('region', { name: 'Sample chart preview' })).toBeInTheDocument();
+  expect(screen.getByText(/Fictional data for UI review only/)).toBeInTheDocument();
+  expect(screen.getByText('Testing feature only')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Sample chart preview · Testing only' })).toBeInTheDocument();
+  expect(container.querySelector('main').lastElementChild).toBe(container.querySelector('.testing-tools'));
+  expect(chartColors.strategy).toContain('--chart-strategy');
+  expect(chartColors.benchmark).toContain('--chart-benchmark');
+  expect(screen.getByText('$115,100')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: 'Cash' }));
+  expect(screen.getByRole('tabpanel')).toHaveStyle({ '--panel-offset': '24px' });
+  expect(screen.queryByTestId('simulation-transition')).not.toBeInTheDocument();
+  expect(screen.getByText('Illustrative cash balance')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: 'Performance' }));
+  expect(screen.getByRole('tabpanel')).toHaveStyle({ '--panel-offset': '-24px' });
+  expect(runSimulation).toHaveBeenCalledTimes(callsBeforePreview);
+  expect(screen.getByLabelText('Initial Balance')).toHaveValue(Number(originalBalance));
+  expect(container.querySelector('.analysis-results')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Close preview' }));
+  expect(screen.queryByRole('region', { name: 'Sample chart preview' })).not.toBeInTheDocument();
+});
+
+test('strategy descriptions remain available in an initially collapsed guide', async () => {
+  const { container } = render(<Dashboard />);
+  await screen.findByText('Backtest service unavailable');
+  const guide = screen.getByText('Strategy guide').closest('details');
+  expect(guide).not.toHaveAttribute('open');
+  expect(guide).toHaveTextContent('Original covered call strategy with leveraged positions');
+  expect(container.querySelector('nav .MuiListItemText-secondary')).not.toBeInTheDocument();
+});
+
+test('only explicit runs launch a fullscreen wave; navigation cancels it', async () => {
+  render(<Dashboard />);
+  await screen.findByText('Backtest service unavailable');
+  expect(screen.queryByTestId('simulation-transition')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Options Martingale' }));
+  expect(screen.queryByTestId('simulation-transition')).not.toBeInTheDocument();
+  await screen.findByText('Backtest service unavailable');
+  fireEvent.click(screen.getByRole('button', { name: /run simulation/i }));
+  expect(screen.getByTestId('simulation-transition')).toBeInTheDocument();
+  await screen.findByText('Backtest service unavailable');
+  fireEvent.click(screen.getByRole('button', { name: 'Show sample chart' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Cash' }));
+  expect(screen.queryByTestId('simulation-transition')).not.toBeInTheDocument();
 });
 
 afterEach(() => {

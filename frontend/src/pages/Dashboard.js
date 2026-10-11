@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
+import AppearanceContext from '../AppearanceContext';
+import useWorkspaceTransition from '../components/useWorkspaceTransition';
 import {
   Typography,
   CircularProgress,
@@ -18,7 +20,6 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
-  Divider,
   Drawer,
   Checkbox,
   FormControlLabel,
@@ -38,6 +39,10 @@ import {
 } from 'recharts';
 import { runSimulation } from '../services/simulationService';
 import ParameterField from '../components/ParameterField';
+import SimulationTransition, { WaveBackdrop } from '../components/WaveSurface';
+import PerformanceChart from '../components/PerformanceChart';
+import SampleChartPreview from '../components/SampleChartPreview';
+import { chartColors } from '../components/chartColors';
 import { parameterUnits, toDisplayValue, toStoredValue, toDisplayInputProps } from './parameterUnits';
 
 // Helper function to calculate the 3rd Friday of a month (standard options expiration)
@@ -70,32 +75,63 @@ const getDefaultExpiration = () => {
 const Root = styled('div')(({ theme }) => ({
   display: 'flex',
   flexGrow: 1,
+  minHeight: '100vh',
+  [theme.breakpoints.down('md')]: { flexDirection: 'column' },
 }));
 
 const StrategyDrawer = styled(Drawer)(({ theme }) => ({
-  width: 280,
+  width: 220,
   flexShrink: 0,
   '& .MuiDrawer-paper': {
-    width: 280,
+    width: 220,
     boxSizing: 'border-box',
     position: 'relative',
+    background: 'transparent',
+    backdropFilter: 'none',
+    border: 0,
+    borderRight: 0,
+    boxShadow: 'none',
+  },
+  [theme.breakpoints.down('md')]: {
+    width: '100%',
+    '& .MuiDrawer-paper': { width: '100%', minHeight: 'auto', border: 0 },
   },
 }));
 
 const MainContent = styled('div')(({ theme }) => ({
   flexGrow: 1,
-  padding: theme.spacing(3),
+  minWidth: 0,
+  width: '100%',
+  maxWidth: 2400,
+  margin: '0 auto',
+  padding: theme.spacing(4),
+  paddingBottom: 'max(32px, env(safe-area-inset-bottom))',
+  [theme.breakpoints.down('sm')]: { padding: theme.spacing(2) },
+}));
+
+// Use an actual responsive grid, instead of squeezing eight financial fields
+// into one row. Retain existing MUI item markup and parameter bindings.
+const ParameterGrid = styled(Grid)(({ theme }) => ({
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
+  gap: theme.spacing(2),
+  width: '100%',
+  margin: 0,
+  '& > .MuiGrid-item': { padding: 0, minWidth: 0, width: 'auto', maxWidth: 'none' },
+  '& > .MuiGrid-grid-xs-12:not(.MuiGrid-grid-sm-3):not(.MuiGrid-grid-sm-6)': { gridColumn: '1 / -1' },
+  '@media (min-width: 1800px)': { gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: theme.spacing(1.5) },
+  [theme.breakpoints.down('sm')]: { gridTemplateColumns: 'minmax(0, 1fr)' },
 }));
 
 // Add this near the top of the file, after other styled components
 const StyledCompactTextField = styled(TextField)(({ theme }) => ({
   '& .MuiInputBase-input': {
-    padding: '8px 10px',
+    padding: '10px 10px',
   },
   '& .MuiInputLabel-root': {
-    transform: 'translate(10px, 9px) scale(1)',
+    transform: 'translate(12px, 13px) scale(1)',
     '&.MuiInputLabel-shrink': {
-      transform: 'translate(10px, -6px) scale(0.75)',
+      transform: 'translate(12px, -6px) scale(0.75)',
     },
   },
 }));
@@ -123,15 +159,15 @@ const CompactTextField = ({ name, label, value, inputProps, InputProps, ...props
 
 const CompactSelect = styled(Select)(({ theme }) => ({
   '& .MuiSelect-select': {
-    padding: '8px 10px',
+    padding: '12px 12px',
   },
 }));
 
 const StyledCompactFormControl = styled(FormControl)(({ theme }) => ({
   '& .MuiInputLabel-root': {
-    transform: 'translate(10px, 9px) scale(1)',
+    transform: 'translate(12px, 13px) scale(1)',
     '&.MuiInputLabel-shrink': {
-      transform: 'translate(10px, -6px) scale(0.75)',
+      transform: 'translate(12px, -6px) scale(0.75)',
     },
   },
 }));
@@ -158,7 +194,7 @@ function TabPanel(props) {
       {...other}
     >
       {value === index && (
-        <Box p={3}>
+        <Box className="result-panel" sx={{ p: { xs: 2, sm: 3 } }}>
           {children}
         </Box>
       )}
@@ -183,9 +219,10 @@ export const CustomTooltip = ({ active, payload, label }) => {
 
   return (
     <div style={{ 
-      backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+      backgroundColor: 'var(--tooltip-bg, #181818)',
+      color: 'var(--workspace-text, #f4f4f4)',
       padding: '8px 12px', 
-      border: '1px solid #ccc',
+      border: '1px solid var(--workspace-border, #484848)',
       borderRadius: '4px',
       boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
     }}>
@@ -194,13 +231,13 @@ export const CustomTooltip = ({ active, payload, label }) => {
         <div style={{ 
           margin: '5px 0', 
           padding: '5px', 
-          backgroundColor: 'rgba(0, 255, 0, 0.1)', 
-          borderLeft: '3px solid green',
+          backgroundColor: 'rgba(255, 255, 255, 0.06)',
+          borderLeft: '3px solid var(--workspace-muted, #dddddd)',
           borderRadius: '2px'
         }}>
           {firstItem.tradingLogSummary ? (
             <>
-              <p style={{ margin: '0', fontWeight: 'bold', color: 'green' }}>
+              <p style={{ margin: '0', fontWeight: 'bold', color: 'var(--workspace-text, #dddddd)' }}>
                 Transaction Details:
               </p>
               <p style={{ margin: '2px 0', fontSize: '13px' }}>
@@ -209,7 +246,7 @@ export const CustomTooltip = ({ active, payload, label }) => {
             </>
           ) : (
             <>
-              <p style={{ margin: '0', fontWeight: 'bold', color: 'green' }}>
+              <p style={{ margin: '0', fontWeight: 'bold', color: 'var(--workspace-text, #dddddd)' }}>
                 {firstItem.isOlderFormat ? 
                   `Transaction: ${firstItem.buyShares} @ $${firstItem.buyPrice}` :
                   firstItem.tradingLogSummary && firstItem.tradingLogSummary.toLowerCase().includes('wrote') ? 
@@ -228,11 +265,11 @@ export const CustomTooltip = ({ active, payload, label }) => {
         <div style={{
           margin: '5px 0',
           padding: '5px',
-          backgroundColor: firstItem.Trading_Log?.startsWith('INITIAL BUY:') ? 'rgba(25,118,210,0.08)' : 'rgba(255,165,0,0.1)',
-          borderLeft: `3px solid ${firstItem.Trading_Log?.startsWith('INITIAL BUY:') ? '#1976d2' : 'orange'}`,
+          backgroundColor: firstItem.Trading_Log?.startsWith('INITIAL BUY:') ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.06)',
+          borderLeft: '3px solid var(--workspace-muted, #999999)',
           borderRadius: '2px'
         }}>
-          <p style={{ margin: '0', fontWeight: 'bold', color: firstItem.Trading_Log?.startsWith('INITIAL BUY:') ? '#1976d2' : 'orange' }}>
+          <p style={{ margin: '0', fontWeight: 'bold', color: 'var(--workspace-text, #f5f5f5)' }}>
             {firstItem.Trading_Log?.startsWith('INITIAL BUY:') ? 'Initial Buy' : 'Leader Switch'}
           </p>
           <p style={{ margin: '2px 0', fontSize: '13px' }}>{firstItem.Trading_Log}</p>
@@ -295,6 +332,7 @@ const AVAILABLE_STRATEGIES = [
 ];
 
 function Dashboard() {
+  const { mode, setMode } = useContext(AppearanceContext);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedStrategy, setSelectedStrategy] = useState('SPY_POWER_CASHFLOW');
@@ -363,8 +401,24 @@ function Dashboard() {
   });
   // Add state for the active tab
   const [activeTab, setActiveTab] = useState(0);
+  const [tabDirection, setTabDirection] = useState(1);
+  const [showPreview, setShowPreview] = useState(false);
+  const [solidSurfaces, setSolidSurfaces] = useState(false);
+  const [backgroundScene, setBackgroundScene] = useState(0);
+  const glassMode = !solidSurfaces;
+  const [simulationRun, setSimulationRun] = useState(0);
+  const [navigationRun, setNavigationRun] = useState(0);
+  const workspaceContent = useRef(null);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  useWorkspaceTransition(workspaceContent, navigationRun, reducedMotion);
+  const [resultContext, setResultContext] = useState(null);
 
   const handleTabChange = (event, newValue) => {
+    if (newValue === activeTab) return;
+    setBackgroundScene(newValue);
+    setSimulationRun(0);
+    setNavigationRun(run => run + 1);
+    setTabDirection(newValue > activeTab ? 1 : -1);
     setActiveTab(newValue);
   };
 
@@ -1303,10 +1357,13 @@ function Dashboard() {
     }
   };
 
-  const handleRunSimulation = async (event) => {
+  const handleRunSimulation = async (event, animate = false) => {
     if (event) {
       event.preventDefault();
     }
+    // The fullscreen wave belongs only to explicit simulation runs/retries.
+    // Navigation gives the individual information surfaces distinct entrances.
+    if (animate) setSimulationRun(run => run + 1);
     try {
       setLoading(true);
       setError(null);
@@ -1320,6 +1377,11 @@ function Dashboard() {
       
       console.log('Simulation API response received');
       const processSuccess = processSimulationData(results);
+      if (processSuccess) {
+        setShowPreview(false);
+        setBackgroundScene(activeTab);
+        setResultContext({ config: { ...config }, strategyId: selectedStrategy, completedAt: new Date().toISOString() });
+      }
       
       if (!processSuccess) {
         console.error('Failed to process simulation data - processSimulationData returned false');
@@ -1378,6 +1440,9 @@ function Dashboard() {
   const symbolByStrategy = useRef({});
 
   const handleStrategyChange = (strategyId) => {
+    if (strategyId === selectedStrategy) return;
+    setSimulationRun(0);
+    setNavigationRun(run => run + 1);
     symbolByStrategy.current[selectedStrategy] = config.symbol;
     const nextSymbol = symbolByStrategy.current[strategyId] || 'SPY';
     if (nextSymbol !== config.symbol) {
@@ -1391,76 +1456,93 @@ function Dashboard() {
   const selectedStrategyInfo = AVAILABLE_STRATEGIES.find(s => s.id === selectedStrategy);
 
   return (
-    <Root>
+    <Root className="workspace" data-glass={glassMode} data-solid={solidSurfaces} data-motion={reducedMotion ? 'reduced' : 'full'}>
+      {glassMode && <WaveBackdrop scene={backgroundScene} reducedMotion={reducedMotion} />}
+      {simulationRun > 0 && <SimulationTransition key={simulationRun} scene={backgroundScene} reducedMotion={reducedMotion} />}
+      <a className="skip-link" href="#analysis-workspace">Skip to analysis</a>
       {/* Strategy Selection Sidebar */}
-      <StrategyDrawer variant="permanent">
-        <Box sx={{ p: 2 }}>
+      <StrategyDrawer variant="permanent" PaperProps={{ component: 'nav', 'aria-label': 'Trading strategies' }}>
+        <Box sx={{ p: 3 }}>
+          <div className="workspace-brand"><span className="brand-mark" aria-hidden="true" />TradingHub</div>
           <Typography variant="h6" gutterBottom>
-            Trading Strategies
+            Strategies
           </Typography>
-          <List>
+          <List sx={{ display: { xs: 'grid', sm: 'grid', md: 'block' }, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1, mt: 2 }}>
             {AVAILABLE_STRATEGIES.map((strategy) => (
               <ListItem key={strategy.id} disablePadding>
                 <ListItemButton
                   selected={selectedStrategy === strategy.id}
+                  aria-current={selectedStrategy === strategy.id ? 'page' : undefined}
                   onClick={() => handleStrategyChange(strategy.id)}
                   sx={{
-                    borderRadius: 1,
+                    borderRadius: '3px',
                     mb: 1,
+                    minHeight: 48,
+                    alignItems: 'center',
+                    border: '1px solid transparent',
                     '&.Mui-selected': {
-                      backgroundColor: 'primary.main',
-                      color: 'primary.contrastText',
+                      backgroundColor: 'action.selected',
+                      color: 'text.primary',
+                      borderColor: 'divider',
                       '&:hover': {
-                        backgroundColor: 'primary.dark',
+                        backgroundColor: 'action.hover',
                       }
                     }
                   }}
                 >
                   <ListItemText
                     primary={strategy.name}
-                    secondary={strategy.description}
-                    secondaryTypographyProps={{
-                      sx: { 
-                        fontSize: '0.75rem',
-                        color: selectedStrategy === strategy.id ? 'primary.contrastText' : 'text.secondary'
-                      }
-                    }}
+                    primaryTypographyProps={{ fontSize: '0.875rem' }}
                   />
                 </ListItemButton>
               </ListItem>
             ))}
           </List>
-          <Divider sx={{ my: 2 }} />
-          <Typography variant="body2" color="textSecondary">
-            Select a strategy to view its performance metrics and configure parameters.
-          </Typography>
+          <details className="nav-details"><summary>Strategy guide</summary>
+            {AVAILABLE_STRATEGIES.map(strategy => <Typography key={strategy.id} variant="body2" color="text.secondary" sx={{ mb: 2 }}><strong>{strategy.name}: </strong>{strategy.description}</Typography>)}
+            <Typography variant="caption" color="text.secondary">Historical simulations—not live trading or forecasts.</Typography>
+          </details>
+          <details className="nav-details" open><summary>Appearance</summary>
+          <FormControlLabel control={<Checkbox size="small" checked={mode === 'light'} onChange={event => setMode(event.target.checked ? 'light' : 'dark')} />} label={<Typography variant="body2">Light mode</Typography>} />
+          <FormControlLabel control={<Checkbox size="small" checked={solidSurfaces} onChange={event => setSolidSurfaces(event.target.checked)} />} label={<Typography variant="body2">Solid surfaces</Typography>} />
+          <FormControlLabel control={<Checkbox size="small" checked={reducedMotion} onChange={event => setReducedMotion(event.target.checked)} />} label={<Typography variant="body2">Reduce motion</Typography>} />
+          </details>
         </Box>
       </StrategyDrawer>
 
       {/* Main Content */}
-      <MainContent>
-        <Box mb={4}>
-          <Typography variant="h4" gutterBottom>
-            Trading Strategy Performance
+      <MainContent ref={workspaceContent} as="main" id="analysis-workspace" tabIndex={-1}>
+        <Box className="workspace-header">
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 1 }}>
+          <Typography variant="h4" component="h1">
+            Strategy analysis
           </Typography>
-          <Typography variant="subtitle1" color="textSecondary">
-            Strategy: {selectedStrategyInfo?.name || 'Unknown Strategy'}
+          <span className="mode-badge">Historical backtest</span>
+          </Box>
+          <Typography variant="body2" color="textSecondary">
+            Configure a scenario and compare simulated performance with the benchmark.
           </Typography>
+          <div className="context-strip">
+            <div><div className="eyebrow">Selected strategy</div><div className="context-value">{selectedStrategyInfo?.name || 'Unknown Strategy'}</div></div>
+            <div><div className="eyebrow">Configured research period</div><div className="context-value">{config.symbol} · {config.startDate} — {config.endDate}</div></div>
+          </div>
         </Box>
 
         {/* Show loading state */}
         {loading && (
-          <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-            <CircularProgress size={60} />
+          <Box className="workspace-status" role="status" aria-live="polite" display="flex" gap={2} alignItems="center" sx={{ mb: 3, p: 2 }}>
+            <CircularProgress size={24} />
+            <Typography variant="body2">Running historical simulation…</Typography>
           </Box>
         )}
 
         {/* Show error state */}
         {error && !loading && (
           <Alert
+            className="workspace-status"
             severity="error"
             sx={{ mb: 3 }}
-            action={
+            action={/network|service unavailable|ECONN/i.test(error) ? null :
               <Button
                 color="inherit"
                 size="small"
@@ -1471,24 +1553,26 @@ function Dashboard() {
                     startDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                     endDate: new Date().toISOString().split('T')[0]
                   }));
-                  setTimeout(() => handleRunSimulation(), 100);
+                  setTimeout(() => handleRunSimulation(undefined, true), 100);
                 }}
               >
                 Try Recent Data
               </Button>
             }
           >
-            <Typography variant="h6" gutterBottom>Error Processing Data</Typography>
+            <Typography variant="h6" gutterBottom>Backtest unavailable</Typography>
             <Typography variant="body1">{error}</Typography>
             <Typography variant="body2" sx={{ mt: 1 }}>
-              Try adjusting parameters or selecting a different date range.
+              {/network|service unavailable|ECONN/i.test(error) ? 'The local API at 127.0.0.1:8080 is unavailable. Use the sample chart to review the design.' : 'No new results were produced. Check the backtest service and requested date range.'}
             </Typography>
           </Alert>
         )}
 
       {/* Configuration Form - always visible */}
-      <Box component="form" mb={3}>
-        <Grid container spacing={1}>
+      <Paper key={selectedStrategy} component="form" className="scenario-surface workspace-panel" sx={{ mb: 3, p: { xs: 2, sm: 3 } }}>
+        <Typography variant="h6" component="h2" gutterBottom>Scenario configuration</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>These settings run a historical simulation; they do not place trades.</Typography>
+        <ParameterGrid container>
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactFormControl fullWidth size="small">
               <InputLabel id="symbol-label">Symbol</InputLabel>
@@ -1564,10 +1648,9 @@ function Dashboard() {
           
           {/* Additional Strategy Parameters */}
           <Grid item xs={12}>
-            <Typography variant="h6" gutterBottom mt={1} mb={1}>
-              Advanced Strategy Parameters
-            </Typography>
-          </Grid>
+            <details className="advanced-settings" open>
+              <summary>Advanced strategy parameters</summary>
+              <ParameterGrid container>
           
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactTextField
@@ -2112,18 +2195,17 @@ function Dashboard() {
             </>
           )}
 
-          <Grid item xs={12}>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleRunSimulation}
-              sx={{ mt: 1 }}
-            >
-              RUN SIMULATION
-            </Button>
+              </ParameterGrid>
+            </details>
           </Grid>
-        </Grid>
-      </Box>
+          <Grid item xs={12}>
+            <div className="form-actions">
+              <Typography variant="body2" color="text.secondary">Edit settings, then rerun to update the results.</Typography>
+              <Button variant="contained" color="primary" onClick={event => handleRunSimulation(event, true)} disabled={loading}>Run simulation</Button>
+            </div>
+          </Grid>
+        </ParameterGrid>
+      </Paper>
 
       {/* IV Statistics Card (OPTIONS_MARTIN only) */}
       {(() => {
@@ -2136,45 +2218,45 @@ function Dashboard() {
       {selectedStrategy === 'OPTIONS_MARTIN' && data.ivStatistics && (
         <Grid container spacing={2} sx={{ mb: 2 }}>
           <Grid item xs={12}>
-            <Paper elevation={2} sx={{ p: 2, bgcolor: '#f5f5f5' }}>
-              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+            <Paper elevation={2} sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', color: 'text.primary' }}>
                 Implied Volatility (IV) Statistics - For Threshold Tuning
               </Typography>
               <Grid container spacing={2}>
                 <Grid item xs={6} sm={4} md={2}>
-                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'white', borderRadius: 1 }}>
+                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'background.default', borderRadius: 1 }}>
                     <Typography variant="body2" color="text.secondary">MIN</Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
                       {(data.ivStatistics.iv_min * 100).toFixed(1)}%
                     </Typography>
                   </Box>
                 </Grid>
                 <Grid item xs={6} sm={4} md={2}>
-                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'white', borderRadius: 1 }}>
+                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'background.default', borderRadius: 1 }}>
                     <Typography variant="body2" color="text.secondary">MAX</Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#d32f2f' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
                       {(data.ivStatistics.iv_max * 100).toFixed(1)}%
                     </Typography>
                   </Box>
                 </Grid>
                 <Grid item xs={6} sm={4} md={2}>
-                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'white', borderRadius: 1 }}>
+                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'background.default', borderRadius: 1 }}>
                     <Typography variant="body2" color="text.secondary">MEAN</Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
                       {(data.ivStatistics.iv_mean * 100).toFixed(1)}%
                     </Typography>
                   </Box>
                 </Grid>
                 <Grid item xs={6} sm={4} md={2}>
-                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'white', borderRadius: 1 }}>
+                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'background.default', borderRadius: 1 }}>
                     <Typography variant="body2" color="text.secondary">MEDIAN</Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
                       {(data.ivStatistics.iv_median * 100).toFixed(1)}%
                     </Typography>
                   </Box>
                 </Grid>
                 <Grid item xs={6} sm={4} md={2}>
-                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'white', borderRadius: 1 }}>
+                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'background.default', borderRadius: 1 }}>
                     <Typography variant="body2" color="text.secondary">STD DEV</Typography>
                     <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
                       {(data.ivStatistics.iv_std * 100).toFixed(1)}%
@@ -2182,7 +2264,7 @@ function Dashboard() {
                   </Box>
                 </Grid>
                 <Grid item xs={12} sm={12} md={2}>
-                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'white', borderRadius: 1 }}>
+                  <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'background.default', borderRadius: 1 }}>
                     <Typography variant="body2" color="text.secondary">RANGE</Typography>
                     <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
                       {(data.ivStatistics.iv_min * 100).toFixed(1)}% - {(data.ivStatistics.iv_max * 100).toFixed(1)}%
@@ -2202,7 +2284,19 @@ function Dashboard() {
       {!loading && !error && data && (
       <Grid container spacing={2}>
         <Grid item xs={12}>
-          <Paper elevation={2}>
+          <Paper elevation={2} className="analysis-results" style={{ '--panel-offset': tabDirection > 0 ? '24px' : '-24px' }} sx={{ overflow: 'hidden' }}>
+            {resultContext && (
+              <div className="result-context" aria-label="Result context">
+                <Typography variant="h6" component="h2">Historical simulation results</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {AVAILABLE_STRATEGIES.find(strategy => strategy.id === resultContext.strategyId)?.name} · {resultContext.config.symbol} · {resultContext.config.startDate} — {resultContext.config.endDate} · Calculated {new Date(resultContext.completedAt).toLocaleString()} (your local time)
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                  Hypothetical performance, not live results or a forecast. Market-data freshness, session and source time zone are not supplied by the service.
+                </Typography>
+                {JSON.stringify(resultContext.config) !== JSON.stringify(config) && <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>Settings have changed. Rerun to update these results.</Typography>}
+              </div>
+            )}
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
               <Tabs
                 value={activeTab}
@@ -2222,109 +2316,37 @@ function Dashboard() {
             {/* Tab content for Performance Chart */}
             <TabPanel value={activeTab} index={0}>
               <Typography variant="h6" gutterBottom>
-                Strategy vs SPY Performance
+                Portfolio comparison
               </Typography>
               
               {/* Custom legend for transaction markers */}
               {selectedStrategy === 'SPY500_LEADER' ? (
-                <Box sx={{ display: 'flex', gap: 2, mb: 2, p: 1, border: '1px solid #eee', borderRadius: 1, bgcolor: 'rgba(255, 140, 0, 0.05)' }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2, p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '6px' }}>
-                      <polygon points="8,0 16,16 0,16" fill="orange" />
+                      <path d="M8 1 l7 7 -7 7 -7 -7 Z" fill="#dddddd" />
                     </svg>
-                    <Typography variant="body2">Orange triangles mark days when the strategy switches to a new #1 market cap stock</Typography>
+                    <Typography variant="body2">◆ Leader switch</Typography>
                   </Box>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '6px' }}>
-                      <polygon points="8,0 16,16 0,16" fill="#1976d2" />
+                      <circle cx="8" cy="8" r="6" fill="none" stroke="#f5f5f5" strokeWidth="2" />
                     </svg>
-                    <Typography variant="body2">Blue triangle marks the initial buy</Typography>
+                    <Typography variant="body2">○ Initial purchase</Typography>
                   </Box>
                 </Box>
               ) : (
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, p: 1, border: '1px solid #eee', borderRadius: 1, bgcolor: 'rgba(0, 128, 0, 0.05)' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
                   <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                    <polygon points="8,0 16,16 0,16" fill="green" />
+                    <polygon points="8,0 16,16 0,16" fill="#dddddd" />
                   </svg>
                   <Typography variant="body2">
-                    Green triangles mark days when shares were purchased or options were written (extracted from Trading Log)
+                    ▲ Purchases or written options (trading log)
                   </Typography>
                 </Box>
               )}
               
-              <ResponsiveContainer width="100%" height={600}>
-                <LineChart
-                  data={data.chartData}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="date"
-                    angle={-45}
-                    textAnchor="end"
-                    height={60}
-                    interval="preserveEnd"
-                  />
-                  <YAxis 
-                    domain={['auto', 'auto']}
-                    tickFormatter={(value) => `$${value.toLocaleString()}`}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend 
-                    verticalAlign="top"
-                    height={36}
-                    wrapperStyle={{paddingBottom: '10px'}}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="Portfolio_Value"
-                    name="Strategy"
-                    stroke="#82ca9d"
-                    dot={selectedStrategy === 'SPY500_LEADER' ? (props) => {
-                      const { payload } = props;
-                      if (payload && payload.isSwapTransaction) {
-                        const isInitial = payload.Trading_Log && payload.Trading_Log.startsWith('INITIAL BUY:');
-                        const color = isInitial ? '#1976d2' : 'orange';
-                        return (
-                          <svg x={props.cx - 8} y={props.cy - 16} width={16} height={16} viewBox="0 0 16 16" fill={color}>
-                            <polygon points="8,0 16,16 0,16" />
-                          </svg>
-                        );
-                      }
-                      return null;
-                    } : false}
-                    activeDot={{ r: 8 }}
-                    strokeWidth={2}
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="spy_value" 
-                    name="SPY Buy & Hold" 
-                    stroke="#8884d8" 
-                    dot={(props) => {
-                      // Check if this point is a buy shares transaction
-                      const { payload } = props;
-                      if (payload && payload.isBuySharesTransaction) {
-                        return (
-                          <svg
-                            x={props.cx - 7}
-                            y={props.cy - 7}
-                            width={14}
-                            height={14}
-                            fill="green"
-                            viewBox="0 0 14 14"
-                          >
-                            <polygon points="7,0 14,14 0,14" />
-                          </svg>
-                        );
-                      }
-                      return null;
-                    }}
-                    activeDot={{ r: 8 }}
-                    strokeWidth={2}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              <PerformanceChart data={data.chartData} strategyId={selectedStrategy} tooltip={<CustomTooltip />} />
             </TabPanel>
             
             {/* Tab content for Margin Ratio Chart */}
@@ -2335,14 +2357,16 @@ function Dashboard() {
               <ResponsiveContainer width="100%" height={600}>
                 <LineChart
                   data={data.marginData}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
+                  margin={{ top: 20, right: 24, left: 8, bottom: 16 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
                     dataKey="date"
-                    angle={-45}
-                    textAnchor="end"
-                    height={60}
+                    interval="preserveStartEnd"
+                    minTickGap={48}
+                    tickFormatter={value => String(value).slice(0, 7)}
+                    height={42}
+                    tickMargin={12}
                   />
                   <YAxis 
                     domain={[0, 1]}
@@ -2355,10 +2379,11 @@ function Dashboard() {
                     wrapperStyle={{paddingBottom: '10px'}}
                   />
                   <Line 
-                    type="monotone" 
+                    type="linear"
+                    isAnimationActive={false}
                     dataKey="Margin_Ratio" 
                     name="Margin Ratio" 
-                    stroke="#ff7300" 
+                    stroke={chartColors.margin}
                     dot={false}
                     strokeWidth={2}
                   />
@@ -2374,18 +2399,21 @@ function Dashboard() {
               <ResponsiveContainer width="100%" height={600}>
                 <LineChart
                   data={data.chartData}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
+                  margin={{ top: 20, right: 24, left: 8, bottom: 16 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
                     dataKey="date"
-                    angle={-45}
-                    textAnchor="end"
-                    height={60}
+                    interval="preserveStartEnd"
+                    minTickGap={48}
+                    tickFormatter={value => String(value).slice(0, 7)}
+                    height={42}
+                    tickMargin={12}
                   />
                   <YAxis 
                     domain={['auto', 'auto']}
-                    tickFormatter={(value) => `$${value.toLocaleString()}`}
+                    width={88}
+                    tickFormatter={(value) => Math.abs(value) >= 1000 ? `$${(value / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : `$${value.toLocaleString()}`}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend 
@@ -2394,10 +2422,11 @@ function Dashboard() {
                     wrapperStyle={{paddingBottom: '10px'}}
                   />
                   <Line 
-                    type="monotone" 
+                    type="linear"
+                    isAnimationActive={false}
                     dataKey="Cash_Balance" 
                     name="Cash Balance" 
-                    stroke="#4db6ac" 
+                    stroke={chartColors.cash}
                     dot={false}
                     strokeWidth={2}
                   />
@@ -2441,20 +2470,23 @@ function Dashboard() {
                 <ResponsiveContainer width="100%" height={600}>
                   <ComposedChart
                     data={data.combinedData}
-                    margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
+                    margin={{ top: 20, right: 24, left: 8, bottom: 16 }}
                     barGap={0}
                     barCategoryGap="20%"
                   >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis 
                       dataKey="month"
-                      angle={-45}
-                      textAnchor="end"
-                      height={60}
+                      interval="preserveStartEnd"
+                      minTickGap={48}
+                      tickFormatter={value => String(value).slice(0, 7)}
+                      height={42}
+                      tickMargin={12}
                     />
                     <YAxis 
                       domain={[0, 'auto']}
-                      tickFormatter={(value) => `$${value.toLocaleString()}`}
+                      width={88}
+                      tickFormatter={(value) => Math.abs(value) >= 1000 ? `$${(value / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : `$${value.toLocaleString()}`}
                       label={{ value: 'Amount ($)', angle: -90, position: 'insideLeft' }}
                     />
                     <Tooltip content={<CustomTooltip />} />
@@ -2466,13 +2498,15 @@ function Dashboard() {
                     <Bar 
                       dataKey="Premiums_Received" 
                       name="Premium Received" 
-                      fill="#8884d8"
+                      fill={chartColors.premium}
+                      isAnimationActive={false}
                       barSize={30} 
                     />
                     <Bar 
                       dataKey="Interest_Paid" 
                       name="Interest Paid" 
-                      fill="#FF8042" 
+                      fill={chartColors.interest}
+                      isAnimationActive={false}
                       barSize={30}
                     />
                   </ComposedChart>
@@ -2540,7 +2574,7 @@ function Dashboard() {
                       Compound Annualized Return (CAGR): {(data.annualizedReturn * 100).toFixed(2)}%
                     </Typography>
                     <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-                      Initial Balance: ${config.initialBalance?.toLocaleString() || '0'} →
+                      Initial Balance: ${resultContext?.config.initialBalance?.toLocaleString() || '0'} →
                       Final Balance: ${data.chartData[data.chartData.length - 1]?.Portfolio_Value?.toLocaleString() || '0'}
                     </Typography>
                     {data.totalWithdrawAmount > 0 && (
@@ -2565,9 +2599,7 @@ function Dashboard() {
                       Maximum Drawdown: {(data.maxDrawdown * 100).toFixed(2)}%
                     </Typography>
                     <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-                      {data.maxDrawdown < -0.20 ? '⚠️ High risk - significant portfolio decline from peak' :
-                       data.maxDrawdown < -0.10 ? '⚠️ Moderate drawdown from peak' :
-                       '✓ Low drawdown - stable portfolio performance'}
+                      Observed decline from the recorded equity peak; withdrawals can affect this measure. This does not predict future risk.
                     </Typography>
                   </Alert>
                 )}
@@ -2576,7 +2608,7 @@ function Dashboard() {
               {data.tradingLogs && data.tradingLogs.length > 0 ? (
                 <Box sx={{ mb: 2, maxHeight: '600px', overflowY: 'auto' }}>
                   {data.tradingLogs.map(({ date, log, isTransaction }) => (
-                    <Paper key={date} sx={{ p: 2, mb: 1, bgcolor: log.toLowerCase().includes('assigned') ? "rgba(255, 244, 229, 0.2)" : isTransaction ? "rgba(232, 245, 233, 0.2)" : "white" }}>
+                    <Paper key={date} sx={{ p: 2, mb: 1, bgcolor: 'background.paper', borderLeft: 3, borderLeftColor: log.toLowerCase().includes('assigned') ? 'warning.main' : isTransaction ? 'primary.main' : 'divider' }}>
                       <Typography variant="subtitle2" gutterBottom color="primary" fontWeight="bold">
                         Transaction Date: {date}
                       </Typography>
@@ -2615,6 +2647,12 @@ function Dashboard() {
         </Grid>
       </Grid>
       )}
+      <Box component="section" aria-label="UI testing tools" className="testing-tools" sx={{ mt: 4, pt: 3, borderTop: 1, borderColor: 'divider' }}>
+        <Typography variant="overline" component="h2">Testing feature only</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Fictional charts for checking the UI—not simulation results.</Typography>
+        {!showPreview && <Button variant="outlined" onClick={() => { setShowPreview(true); setBackgroundScene(0); }}>Show sample chart</Button>}
+        {showPreview && <SampleChartPreview onClose={() => { setShowPreview(false); setBackgroundScene(activeTab); }} onTabChange={value => { setSimulationRun(0); setNavigationRun(run => run + 1); setBackgroundScene(value); }} />}
+      </Box>
       </MainContent>
     </Root>
   );
