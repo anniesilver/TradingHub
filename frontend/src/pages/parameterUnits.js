@@ -17,8 +17,8 @@ export const parameterUnits = {
   dipTrigger: { label: 'Dip Trigger (ratio)' },
   highVixDipTrigger: { label: 'High-VIX Dip Trigger (ratio)' },
   DEC_INDEX: { label: 'Add-Load Trigger (ratio)' },
-  vixHighThreshold: { label: 'VIX High Threshold (normalized)' },
-  vixDeleverageThreshold: { label: 'VIX Deleverage Threshold (normalized)' },
+  vixHighThreshold: { label: 'VIX High (normalized)' },
+  vixDeleverageThreshold: { label: 'VIX Deleverage (normalized)' },
 };
 
 const displayScale = (name) => parameterUnits[name]?.displayScale ?? 1;
