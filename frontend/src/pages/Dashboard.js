@@ -44,6 +44,7 @@ import PerformanceChart from '../components/PerformanceChart';
 import SampleChartPreview from '../components/SampleChartPreview';
 import { chartColors } from '../components/chartColors';
 import { parameterUnits, toDisplayValue, toStoredValue, toDisplayInputProps } from './parameterUnits';
+import { computeSharpeRatio } from './performanceMetrics';
 
 // Helper function to calculate the 3rd Friday of a month (standard options expiration)
 const getThirdFriday = (year, month) => {
@@ -350,6 +351,8 @@ function Dashboard() {
     totalWithdrawAmount: 0,
     annualizedReturn: 0,
     maxDrawdown: 0,
+    sharpeRatio: null,
+    sharpeRiskFreeRate: 0,
     ivStatistics: null  // IV stats for OPTIONS_MARTIN
   });
   const [config, setConfig] = useState({
@@ -877,6 +880,15 @@ function Dashboard() {
         maxDrawdown = 0;
       }
 
+      // Annualized Sharpe ratio from daily returns (strategy's risk-free rate, withdrawals added back)
+      let sharpeRatio = null;
+      const sharpeRiskFreeRate = Number(config.riskFreeRate) || 0;
+      try {
+        sharpeRatio = computeSharpeRatio(processedData, { riskFreeRate: sharpeRiskFreeRate });
+      } catch (sharpeError) {
+        console.error('Error calculating Sharpe ratio:', sharpeError);
+      }
+
       // Debug: Log detected buy transactions
       const buyTransactions = processedData.filter(item => item.isBuySharesTransaction);
       console.log('Detected buy transactions:', buyTransactions.length);
@@ -1333,6 +1345,8 @@ function Dashboard() {
         totalWithdrawAmount: totalWithdrawals,  // Total withdrawals from trading logs
         annualizedReturn: annualizedReturn,      // CAGR accounting for withdrawals
         maxDrawdown: maxDrawdown,                // Maximum drawdown from peak
+        sharpeRatio: sharpeRatio,                // Annualized Sharpe ratio, null if not computable
+        sharpeRiskFreeRate: sharpeRiskFreeRate,  // Annual risk-free fraction used for the Sharpe ratio
         ivStatistics: ivStatistics  // IV stats for OPTIONS_MARTIN
       });
       
@@ -2593,13 +2607,25 @@ function Dashboard() {
                 {data.chartData && data.chartData.length > 0 && (
                   <Alert
                     severity={data.maxDrawdown < -0.20 ? "error" : data.maxDrawdown < -0.10 ? "warning" : "info"}
-                    sx={{ mb: 2 }}
+                    sx={{ mb: 1 }}
                   >
                     <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
                       Maximum Drawdown: {(data.maxDrawdown * 100).toFixed(2)}%
                     </Typography>
                     <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
                       Observed decline from the recorded equity peak; withdrawals can affect this measure. This does not predict future risk.
+                    </Typography>
+                  </Alert>
+                )}
+
+                {/* Sharpe Ratio */}
+                {data.chartData && data.chartData.length > 0 && (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                      Sharpe Ratio (annualized): {data.sharpeRatio === null ? 'N/A' : data.sharpeRatio.toFixed(2)}
+                    </Typography>
+                    <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                      Mean daily excess return divided by its standard deviation, times √252. Risk-free rate: {toDisplayValue('riskFreeRate', data.sharpeRiskFreeRate)}% per year (from strategy settings); monthly withdrawals are added back so they are not counted as losses.
                     </Typography>
                   </Alert>
                 )}
