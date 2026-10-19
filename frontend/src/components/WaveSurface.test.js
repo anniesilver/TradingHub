@@ -1,19 +1,91 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import SimulationTransition, { WaveBackdrop } from './WaveSurface';
+import SimulationTransition, { foldedScenes, WaveBackdrop } from './WaveSurface';
 
 const originalMatchMedia = window.matchMedia;
-test('all monochrome strata morph from the previous tab contour to the destination', () => {
+test('six scenes have distinct planes with compatible native morph commands', () => {
+  expect(foldedScenes).toHaveLength(6);
+  ['upper', 'lower', 'middle'].forEach(plane => {
+    expect(new Set(foldedScenes.map(scene => scene[plane])).size).toBe(6);
+    const commands = foldedScenes[0][plane].match(/[A-Za-z]/g);
+    foldedScenes.forEach(scene => expect(scene[plane].match(/[A-Za-z]/g)).toEqual(commands));
+  });
+});
+
+test('finite morphs restart on the persistent SVG clock', () => {
+  const original = SVGElement.prototype.beginElement;
+  const begin = jest.fn();
+  SVGElement.prototype.beginElement = begin;
+  try {
+    const { rerender } = render(<WaveBackdrop scene={0} />);
+    expect(begin).not.toHaveBeenCalled();
+    rerender(<WaveBackdrop scene={3} />);
+    expect(begin).toHaveBeenCalledTimes(3);
+    rerender(<WaveBackdrop scene={4} />);
+    expect(begin).toHaveBeenCalledTimes(6);
+  } finally {
+    if (original) SVGElement.prototype.beginElement = original;
+    else delete SVGElement.prototype.beginElement;
+  }
+});
+
+test('local artwork IDs keep multiple mounted backdrops independent', () => {
+  const { container } = render(<><WaveBackdrop /><WaveBackdrop scene={2} /></>);
+  const ids = Array.from(container.querySelectorAll('[id]'), element => element.id);
+  expect(new Set(ids).size).toBe(ids.length);
+  container.querySelectorAll('use').forEach(use => {
+    const referenced = document.getElementById(use.getAttribute('href').slice(1));
+    expect(use.closest('svg')).toContainElement(referenced);
+  });
+});
+
+test('rapid scene changes replace finite morphs, without adding old layers or replaying after reduced motion', () => {
+  const { container, rerender } = render(<WaveBackdrop scene={0} />);
+  rerender(<WaveBackdrop scene={2} />);
+  rerender(<WaveBackdrop scene={5} />);
+  expect(container.querySelectorAll('[data-fold]')).toHaveLength(3);
+  container.querySelectorAll('animate').forEach(animation => {
+    const plane = animation.parentElement.getAttribute('data-fold');
+    expect(animation).toHaveAttribute('values', `${foldedScenes[2][plane]};${foldedScenes[5][plane]}`);
+    expect(animation).toHaveAttribute('repeatCount', '1');
+  });
+  rerender(<WaveBackdrop scene={5} reducedMotion />);
+  rerender(<WaveBackdrop scene={5} reducedMotion={false} />);
+  expect(container.querySelector('animate')).toBeNull();
+});
+
+test.each(['(prefers-reduced-motion: reduce)', '(prefers-contrast: more)', '(forced-colors: active)'])(
+  'live preference %s stops ambient layers and cancels native morphs', preference => {
+    const listeners = new Map();
+    const queries = new Map();
+    window.matchMedia = query => {
+      if (!queries.has(query)) queries.set(query, { matches: false,
+        addEventListener: jest.fn((_, callback) => listeners.set(query, callback)), removeEventListener: jest.fn() });
+      return queries.get(query);
+    };
+    const { container, rerender, unmount } = render(<WaveBackdrop scene={0} />);
+    rerender(<WaveBackdrop scene={1} />);
+    expect(container.querySelectorAll('animate')).toHaveLength(3);
+    act(() => { queries.get(preference).matches = true; listeners.get(preference)(); });
+    expect(container.querySelector('svg')).toHaveAttribute('data-paused', 'true');
+    expect(container.querySelector('animate')).toBeNull();
+    expect(container.querySelector('.fold-highlight')).toBeInTheDocument();
+    unmount();
+    queries.forEach(query => expect(query.removeEventListener).toHaveBeenCalled());
+  }
+);
+test('the three distinct planes morph to their own destination contours', () => {
   const { container, rerender } = render(<WaveBackdrop scene={0} />);
   const origin = screen.getByTestId('background-contour').getAttribute('d');
   rerender(<WaveBackdrop scene={2} />);
   const destination = screen.getByTestId('background-contour').getAttribute('d');
   expect(destination).not.toBe(origin);
   const animations = container.querySelectorAll('animate');
-  expect(animations).toHaveLength(5);
+  expect(animations).toHaveLength(3);
   animations.forEach(animation => {
-    expect(animation).toHaveAttribute('values', `${origin};${destination}`);
+    const plane = animation.parentElement.getAttribute('data-fold');
+    expect(animation).toHaveAttribute('values', `${foldedScenes[0][plane]};${foldedScenes[2][plane]}`);
     expect(animation).toHaveAttribute('dur', '.72s');
   });
   rerender(<WaveBackdrop scene={1} reducedMotion />);
@@ -38,7 +110,7 @@ test('scroll parallax is bounded and pending frames are cleaned up', () => {
   const scroll = window.scrollY;
   window.scrollY = 999999;
   const { container, unmount } = render(<WaveBackdrop />);
-  expect(container.querySelector('svg').style.getPropertyValue('--scroll-y')).toBe('-64px');
+  expect(container.querySelector('svg').style.getPropertyValue('--scroll-y')).toBe(`${-Math.min(16, window.innerHeight * .01)}px`);
   fireEvent.scroll(window);
   fireEvent.scroll(window);
   expect(raf).toHaveBeenCalledTimes(1);
