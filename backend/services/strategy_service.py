@@ -665,7 +665,7 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
             print(f"Normalized DataFrame columns: {cleaned_df.columns.tolist()}")
 
             # Calculate SPY buy & hold value using Close prices from results_df
-            # New approach: Calculate shares purchased on first day, then keep that constant
+            # Buy all shares on the first day, then reinvest each dividend in SPY at that day's close
             first_day_close = cleaned_df["Close"].iloc[0]
             initial_cash = strategy_config.INITIAL_CASH
             spy_shares_bought = initial_cash / first_day_close if first_day_close > 0 else 0
@@ -674,8 +674,18 @@ def run_spy_power_cashflow(TradingSimulator, OptionStrategy, config, start_dt, e
                 f"shares bought {spy_shares_bought:.2f}"
             )
 
-            # Calculate daily value based on fixed shares
-            spy_values = cleaned_df["Close"] * spy_shares_bought
+            if "Dividend" in cleaned_df.columns:
+                dividends = cleaned_df["Dividend"]
+            else:
+                print("Warning: No Dividend column, SPY Buy & Hold will not reinvest dividends")
+                dividends = pd.Series(0.0, index=cleaned_df.index)
+            # Each dividend grows the share count by dividend / close on its ex-date
+            reinvest_factor = (1 + dividends / cleaned_df["Close"].where(cleaned_df["Close"] > 0)).fillna(1.0)
+            spy_shares_held = spy_shares_bought * reinvest_factor.cumprod()
+            print(f"SPY Buy & Hold: shares held after dividend reinvestment {spy_shares_held.iloc[-1]:.2f}")
+
+            # Calculate daily value based on shares held, including reinvested dividends
+            spy_values = cleaned_df["Close"] * spy_shares_held
 
             # Only include actual trading days - exclude weekends and holidays
             trading_days = cleaned_df.index.tolist()
