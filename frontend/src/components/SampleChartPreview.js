@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Box, Button, Paper, Tab, Tabs, Typography } from '@mui/material';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import PerformanceChart from './PerformanceChart';
+import PerformanceSummary from './PerformanceSummary';
 import { chartColors } from './chartColors';
 
 // Fictional, fixed design-preview data. Never passed through the simulation
@@ -15,6 +16,22 @@ export const SAMPLE_POINTS = [
   date: `2024-${String(index + 1).padStart(2, '0')}-01`, Portfolio_Value, spy_value, Cash_Balance,
   Margin_Ratio: [0.12, 0.15, 0.18, 0.14, 0.2, 0.16, 0.17, 0.23, 0.19, 0.15, 0.18, 0.13][index],
 }));
+
+// Explicit fictional display fixture. Not derived from monthly sample points,
+// not processed by the backtest adapter, and never submitted to the API.
+const SAMPLE_SUMMARY = {
+  chartData: SAMPLE_POINTS,
+  annualizedReturn: 0.157,
+  maxDrawdown: -0.0315,
+  sharpeRatio: 1.24,
+  sharpeRiskFreeRate: 0.05,
+  totalPremiumsReceived: 12345.67,
+  totalDividendsReceived: 890.12,
+  totalInterestPaid: 2345.67,
+  totalAssignedCost: 1230,
+  totalWithdrawAmount: 1000,
+};
+const SAMPLE_CONTEXT = { config: { initialBalance: 100000, riskFreeRate: 0.05 } };
 
 function SampleTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
@@ -43,7 +60,10 @@ export default function SampleChartPreview({ onClose, onTabChange }) {
         {['Performance', 'Margin', 'Cash'].map((label, index) => <Tab key={label} label={label} id={`sample-tab-${index}`} aria-controls={`sample-panel-${index}`} />)}
       </Tabs>
       <Box key={tab} id={`sample-panel-${tab}`} role="tabpanel" aria-labelledby={`sample-tab-${tab}`} className="result-panel" style={{ '--panel-offset': direction > 0 ? '24px' : '-24px' }} sx={{ p: { xs: 2, sm: 3 } }}>
-        {tab === 0 ? <PerformanceChart data={SAMPLE_POINTS} sample tooltip={<SampleTooltip />} /> : <>
+        {tab === 0 ? <>
+          <PerformanceSummary data={SAMPLE_SUMMARY} resultContext={SAMPLE_CONTEXT} sample />
+          <PerformanceChart data={SAMPLE_POINTS} sample tooltip={<SampleTooltip />} />
+        </> : <>
           <Typography variant="h6" gutterBottom>{tab === 1 ? 'Illustrative margin ratio' : 'Illustrative cash balance'}</Typography>
           <div className="chart-canvas"><ResponsiveContainer width="100%" height="100%"><LineChart data={SAMPLE_POINTS} margin={{ top: 16, right: 20, left: 0, bottom: 12 }} accessibilityLayer>
             <CartesianGrid vertical={false} strokeDasharray="3 6" /><XAxis dataKey="date" interval="preserveStartEnd" minTickGap={48} height={42} axisLine={false} tickLine={false} tickMargin={12} tickFormatter={value => value.slice(0, 7)} />

@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import './App.css';
 import { createWorkspaceTheme } from './theme';
 import AppearanceContext from './AppearanceContext';
+import { workspaceCssVariables } from './themeTokens';
 
 function App() {
   const [mode, setMode] = useState('dark');
@@ -13,7 +14,7 @@ function App() {
     <AppearanceContext.Provider value={{ mode, setMode }}>
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <div className="app" data-theme={mode}>
+      <div className="app" data-theme={mode} style={workspaceCssVariables(mode)}>
         <Dashboard />
       </div>
     </ThemeProvider>

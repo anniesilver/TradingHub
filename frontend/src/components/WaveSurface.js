@@ -1,42 +1,68 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 
-// Each analysis tab has its own contour, not a simulated market movement.
-const scenes = [
-  'M-300 1080 C100 280 490 1100 820 420 S1300 10 1800 -250 L1800 1100 Z',
-  'M-300 1100 C80 620 340 40 750 470 S1210 830 1800 -120 L1800 1100 Z',
-  'M-300 1100 C170 200 570 910 1020 720 S1280 20 1800 250 L1800 1100 Z',
-  'M-300 1100 C160 730 460 50 950 320 S1370 1010 1800 430 L1800 1100 Z',
-  'M-300 1100 C170 390 630 1240 960 450 S1480 70 1800 220 L1800 1100 Z',
-  'M-300 1100 C110 760 530 710 920 140 S1390 850 1800 520 L1800 1100 Z',
+// A cut optical lens, rather than broad wallpaper ribbons. The aperture is a
+// real hole (even-odd fill); ribs are clipped to the material, not the charts.
+// Compatible commands retain the existing finite scene-morph contract.
+const lens = (x, y, radius, aperture) => {
+  const oval = r => `M ${x + r} ${y} C ${x + r} ${y + r * .56} ${x + r * .56} ${y + r} ${x} ${y + r} C ${x - r * .56} ${y + r} ${x - r} ${y + r * .56} ${x - r} ${y} C ${x - r} ${y - r * .56} ${x - r * .56} ${y - r} ${x} ${y - r} C ${x + r * .56} ${y - r} ${x + r} ${y - r * .56} ${x + r} ${y} Z`;
+  return `${oval(radius)} ${oval(aperture)}`;
+};
+const poses = [
+  [1080, 140, 1340, 430, 400, 680, 980, 350],
+  [990, 210, 1410, 370, 480, 730, 1050, 310],
+  [1160, 100, 1300, 490, 330, 610, 900, 410],
+  [1030, 170, 1460, 450, 440, 650, 1120, 390],
+  [1130, 230, 1380, 340, 360, 750, 950, 280],
+  [1000, 90, 1280, 400, 520, 660, 1060, 450],
 ];
+export const foldedScenes = poses.map(([cx, cy, fx, fy, lx, ly, mx, my]) => ({
+  upper: lens(1260 + (cx - 1080) * .5, 100 + (cy - 140) * .5, 350 + (fx - 1340) * .2, 220 + (fy - 430) * .15),
+  lower: lens(-60 + (lx - 400) * .5, 770 + (ly - 680) * .5, 290, 235),
+  middle: `M ${mx} -120 L ${mx + 80} -120 L ${mx + 470} 900 L ${mx + 435} 900 Z`,
+}));
+const stillQueries = ['(prefers-reduced-motion: reduce)', '(prefers-contrast: more)', '(forced-colors: active)'];
+const systemWantsStill = () => stillQueries.some(query => window.matchMedia?.(query).matches);
+
 export function WaveBackdrop({ scene = 0, reducedMotion = false }) {
   const id = useId();
   const artwork = useRef(null);
+  const [systemStill, setSystemStill] = useState(systemWantsStill);
+  const canMorph = !reducedMotion && !systemStill && !document.hidden;
   const [morph, setMorph] = useState({ from: scene, to: scene });
   useEffect(() => {
-    setMorph(previous => previous.to === scene ? previous : { from: previous.to, to: scene });
-  }, [scene]);
-  const destination = scenes[morph.to % scenes.length];
-  const origin = scenes[morph.from % scenes.length];
-  const canMorph = !reducedMotion && !(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
-  const contourMotion = () => canMorph && morph.from !== morph.to ? <animate key={morph.to} attributeName="d" values={`${origin};${destination}`} dur=".72s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".35 0 .65 1" /> : null;
+    setMorph(previous => previous.to === scene && canMorph ? previous : { from: canMorph ? previous.to : scene, to: scene });
+  }, [scene, canMorph]);
+  const destination = foldedScenes[morph.to % foldedScenes.length];
+  const origin = foldedScenes[morph.from % foldedScenes.length];
+  const contourMotion = plane => canMorph && morph.from !== morph.to ? (
+    <animate key={morph.to} attributeName="d" values={`${origin[plane]};${destination[plane]}`}
+      dur=".72s" repeatCount="1" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".35 0 .65 1" />
+  ) : null;
   useEffect(() => {
-    const media = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    // Restart finite native animations on the long-lived SVG's current clock.
+    // Merely inserting begin="0s" after the SVG has loaded may skip a morph.
+    artwork.current?.querySelectorAll('animate').forEach(animation => animation.beginElement?.());
+  }, [morph]);
+
+  useEffect(() => {
+    const media = stillQueries.map(query => window.matchMedia?.(query)).filter(Boolean);
     let frame = 0;
-    const still = () => reducedMotion || media?.matches || document.hidden;
+    const still = () => reducedMotion || media.some(query => query.matches) || document.hidden;
     const syncScroll = () => {
       frame = 0;
       const range = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
       const progress = Math.max(0, Math.min(1, window.scrollY / range));
-      artwork.current?.style.setProperty('--scroll-y', still() ? '0px' : `${-64 * progress}px`);
+      // 1vh parallax leaves room for the bounded opposing plane movement.
+      const displacement = Math.min(16, window.innerHeight * .01) * progress;
+      artwork.current?.style.setProperty('--scroll-y', still() ? '0px' : `${-displacement}px`);
     };
-    // Only respond to input: no continuous JavaScript animation loop.
     const schedule = () => {
       if (!frame && !still()) frame = window.requestAnimationFrame(syncScroll);
     };
     const update = () => {
       if (frame) window.cancelAnimationFrame(frame);
       frame = 0;
+      setSystemStill(media.some(query => query.matches));
       if (artwork.current) artwork.current.dataset.paused = String(still());
       if (still()) artwork.current?.pauseAnimations?.();
       else artwork.current?.unpauseAnimations?.();
@@ -45,34 +71,82 @@ export function WaveBackdrop({ scene = 0, reducedMotion = false }) {
     window.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', update, { passive: true });
     document.addEventListener('visibilitychange', update);
-    media?.addEventListener('change', update);
+    media.forEach(query => query.addEventListener('change', update));
     update();
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
       window.removeEventListener('scroll', schedule);
       window.removeEventListener('resize', update);
       document.removeEventListener('visibilitychange', update);
-      media?.removeEventListener('change', update);
+      media.forEach(query => query.removeEventListener('change', update));
     };
   }, [reducedMotion, scene]);
+
   return (
-    <svg ref={artwork} data-scene={scene} className="workspace-wave-backdrop" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+    <svg ref={artwork} data-scene={scene} className="workspace-wave-backdrop" viewBox="0 0 1600 900"
+      preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
       <defs>
-        <linearGradient id={`${id}-base`} x1="0" y1="0" x2="1" y2="1">
-          <stop stopColor="var(--wave-base, #111111)" /><stop offset="1" stopColor="var(--wave-depth, #252525)" />
+        <radialGradient id={`${id}-light`} cx=".85" cy=".08" r=".85">
+          <stop stopColor="var(--workspace-accent)" stopOpacity=".2" /><stop offset="1" stopColor="var(--workspace-bg)" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id={`${id}-metal`} x1="0" y1="0" x2="1" y2=".7">
+          <stop stopColor="var(--fold-shadow)" /><stop offset=".3" stopColor="var(--fold-raised)" />
+          <stop offset=".49" stopColor="var(--fold-highlight)" /><stop offset=".515" stopColor="var(--fold-paper)" />
+          <stop offset=".65" stopColor="var(--fold-raised)" /><stop offset="1" stopColor="var(--workspace-bg)" />
         </linearGradient>
-        <linearGradient id={`${id}-ridge`} x1="0" y1="1" x2="1" y2="0">
-          <stop stopColor="var(--wave-depth, #1b1b1b)" /><stop offset=".48" stopColor="var(--wave-ridge, #696969)" /><stop offset=".62" stopColor="var(--wave-fold, #343434)" /><stop offset="1" stopColor="var(--wave-base, #111111)" />
+        <linearGradient id={`${id}-paper`} x1="0" y1="1" x2=".9" y2="0">
+          <stop stopColor="var(--workspace-bg)" /><stop offset=".45" stopColor="var(--fold-paper)" />
+          <stop offset=".7" stopColor="var(--fold-reflection)" /><stop offset=".72" stopColor="var(--fold-raised)" />
+          <stop offset="1" stopColor="var(--fold-shadow)" />
+        </linearGradient>
+        <linearGradient id={`${id}-sheen`}>
+          <stop stopColor="var(--fold-highlight)" stopOpacity="0" />
+          <stop offset=".5" stopColor="var(--fold-highlight)" stopOpacity=".45" />
+          <stop offset="1" stopColor="var(--workspace-accent)" stopOpacity="0" />
+        </linearGradient>
+        <pattern id={`${id}-grain`} width="48" height="48" patternUnits="userSpaceOnUse">
+          <path d="M8 5h1 M26 17h1 M15 39h1 M42 32h1" stroke="var(--fold-texture)" strokeWidth=".7" />
+        </pattern>
+        <pattern id={`${id}-flutes`} width="13" height="13" patternUnits="userSpaceOnUse" patternTransform="rotate(-28)">
+          <rect width="13" height="13" fill={`url(#${id}-rib)`} />
+        </pattern>
+        <linearGradient id={`${id}-rib`}>
+          <stop stopColor="var(--fold-shadow)" stopOpacity=".7" />
+          <stop offset=".4" stopColor="var(--fold-highlight)" stopOpacity=".04" />
+          <stop offset=".72" stopColor="var(--fold-highlight)" stopOpacity=".7" />
+          <stop offset="1" stopColor="var(--fold-shadow)" stopOpacity=".85" />
+        </linearGradient>
+        <pattern id={`${id}-registration`} width="80" height="80" patternUnits="userSpaceOnUse">
+          <path d="M37 40h6 M40 37v6" fill="none" stroke="var(--fold-highlight)" strokeWidth=".7" />
+        </pattern>
+        <clipPath id={`${id}-upper-clip`}><use href={`#${id}-upper`} clipRule="evenodd" /></clipPath>
+        <linearGradient id={`${id}-quiet`}>
+          <stop stopColor="var(--workspace-bg)" stopOpacity=".96" />
+          <stop offset=".18" stopColor="var(--workspace-bg)" stopOpacity=".88" />
+          <stop offset=".55" stopColor="var(--workspace-bg)" stopOpacity=".12" />
+          <stop offset="1" stopColor="var(--workspace-bg)" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <rect width="1600" height="900" fill={`url(#${id}-base)`} />
-      <g className="background-current">
-        <path d={destination} transform="translate(0,-180)" fill="var(--wave-band-light, #454545)">{contourMotion()}</path>
-        <path d={destination} transform="translate(0,-100)" fill="var(--wave-band-mid, #292929)" stroke="var(--wave-edge, #8a8a8a)" strokeOpacity=".25">{contourMotion()}</path>
-        <path data-testid="background-contour" d={destination} fill={`url(#${id}-ridge)`} stroke="var(--wave-edge, #8a8a8a)" strokeOpacity=".3" strokeWidth="2">{contourMotion()}</path>
-        <path d={destination} transform="translate(0,110)" fill="var(--wave-band-dark, #151515)" stroke="var(--wave-edge, #8a8a8a)" strokeOpacity=".25">{contourMotion()}</path>
-        <path d={destination} transform="translate(0,190)" fill="var(--wave-band-mid, #292929)" stroke="var(--wave-edge, #8a8a8a)" strokeOpacity=".15">{contourMotion()}</path>
+      <rect width="1600" height="900" fill="var(--workspace-bg)" />
+      <rect width="1600" height="900" fill={`url(#${id}-light)`} />
+      <rect className="optical-registration" width="1600" height="900" fill={`url(#${id}-registration)`} opacity=".18" />
+      <g className="fold-plane fold-plane-middle" opacity=".28">
+        <path data-fold="middle" d={destination.middle} fill={`url(#${id}-paper)`} stroke="var(--fold-highlight)" strokeOpacity=".18">{contourMotion('middle')}</path>
       </g>
+      <g className="fold-plane fold-plane-upper">
+        <path id={`${id}-upper`} data-fold="upper" data-testid="background-contour" d={destination.upper}
+          fill={`url(#${id}-metal)`} fillRule="evenodd" stroke="var(--fold-highlight)" strokeOpacity=".6" strokeWidth="1">{contourMotion('upper')}</path>
+        <g clipPath={`url(#${id}-upper-clip)`}>
+          <rect className="optical-flutes" width="1800" height="1000" y="-100" fill={`url(#${id}-flutes)`} />
+          <rect className="fold-highlight" x="800" y="-250" width="300" height="1500" fill={`url(#${id}-sheen)`} />
+        </g>
+      </g>
+      <g className="fold-plane fold-plane-lower">
+        <path data-fold="lower" d={destination.lower} fill={`url(#${id}-paper)`}
+          fillRule="evenodd" stroke="var(--fold-highlight)" strokeOpacity=".25" strokeWidth="1">{contourMotion('lower')}</path>
+      </g>
+      <rect className="fold-grain" width="1600" height="900" fill={`url(#${id}-grain)`} opacity=".055" />
+      <rect width="1600" height="900" fill={`url(#${id}-quiet)`} />
     </svg>
   );
 }
@@ -112,13 +186,13 @@ export default function SimulationTransition({ reducedMotion, scene = 0 }) {
     <svg className="simulation-wave-transition" data-scene={scene} data-testid="simulation-transition" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true" focusable="false" onAnimationEnd={() => setActive(false)}>
       <defs>
         <linearGradient id={`${id}-wipe`} x1="0" y1="0" x2="1" y2="1">
-          <stop stopColor="var(--wipe-base, #131313)" /><stop offset=".32" stopColor="var(--wipe-light, #666666)" /><stop offset=".65" stopColor="var(--wipe-mid, #393939)" /><stop offset="1" stopColor="var(--wipe-base, #131313)" />
+          <stop stopColor="var(--wipe-base)" /><stop offset=".32" stopColor="var(--wipe-light)" /><stop offset=".49" stopColor="var(--wipe-mid)" /><stop offset=".52" stopColor="var(--wipe-base)" /><stop offset="1" stopColor="var(--wipe-base)" />
         </linearGradient>
       </defs>
       <path fill={`url(#${id}-wipe)`} d="M0 0 H1000 V780 C700 690 460 1010 0 870 Z">
         <animate attributeName="d" dur=".72s" repeatCount="1" fill="freeze" values="M0 0 H1000 V780 C700 690 460 1010 0 870 Z;M0 0 H1000 V920 C700 1080 460 640 0 950 Z;M0 0 H1000 V810 C700 740 460 1080 0 880 Z" />
       </path>
-      <path fill="none" stroke="var(--wave-edge, #c6c6c6)" strokeOpacity=".4" strokeWidth="1.5" d="M0 720 C360 860 680 560 1000 710">
+      <path fill="none" stroke="var(--fold-highlight)" strokeOpacity=".4" strokeWidth="1.5" d="M0 720 C360 860 680 560 1000 710">
         <animate attributeName="d" dur=".72s" repeatCount="1" fill="freeze" values="M0 720 C360 860 680 560 1000 710;M0 760 C360 500 680 930 1000 810;M0 780 C360 940 680 610 1000 720" />
       </path>
     </svg>

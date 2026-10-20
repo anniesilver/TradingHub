@@ -20,7 +20,6 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
-  Drawer,
   Checkbox,
   FormControlLabel,
 } from '@mui/material';
@@ -41,6 +40,7 @@ import { runSimulation } from '../services/simulationService';
 import ParameterField from '../components/ParameterField';
 import SimulationTransition, { WaveBackdrop } from '../components/WaveSurface';
 import PerformanceChart from '../components/PerformanceChart';
+import PerformanceSummary from '../components/PerformanceSummary';
 import SampleChartPreview from '../components/SampleChartPreview';
 import { chartColors } from '../components/chartColors';
 import { parameterUnits, toDisplayValue, toStoredValue, toDisplayInputProps } from './parameterUnits';
@@ -74,28 +74,26 @@ const getDefaultExpiration = () => {
 };
 
 const Root = styled('div')(({ theme }) => ({
-  display: 'flex',
+  display: 'grid',
+  gridTemplateColumns: '184px minmax(0, 1fr)',
+  alignItems: 'start',
+  width: '100%',
+  minWidth: 0,
+  boxSizing: 'border-box',
   flexGrow: 1,
   minHeight: '100vh',
-  [theme.breakpoints.down('md')]: { flexDirection: 'column' },
+  [theme.breakpoints.down('md')]: { gridTemplateColumns: 'minmax(0, 1fr)' },
 }));
 
-const StrategyDrawer = styled(Drawer)(({ theme }) => ({
-  width: 220,
-  flexShrink: 0,
-  '& .MuiDrawer-paper': {
-    width: 220,
-    boxSizing: 'border-box',
-    position: 'relative',
-    background: 'transparent',
-    backdropFilter: 'none',
-    border: 0,
-    borderRight: 0,
-    boxShadow: 'none',
-  },
+// Navigation is an in-flow grid cell, not MUI's viewport-sized Drawer paper.
+// This also prevents a full-height drawer from preceding the header on mobile.
+const StrategyDrawer = styled('nav')(({ theme }) => ({
+  minWidth: 0,
+  position: 'relative',
+  background: 'transparent',
+  padding: theme.spacing(3, 1.5, 2, 2),
   [theme.breakpoints.down('md')]: {
-    width: '100%',
-    '& .MuiDrawer-paper': { width: '100%', minHeight: 'auto', border: 0 },
+    padding: theme.spacing(2, 2, 0),
   },
 }));
 
@@ -103,11 +101,15 @@ const MainContent = styled('div')(({ theme }) => ({
   flexGrow: 1,
   minWidth: 0,
   width: '100%',
+  boxSizing: 'border-box',
   maxWidth: 2400,
   margin: '0 auto',
-  padding: theme.spacing(4),
+  // Keep real gutters inside the grid cell, including safe-area insets.
+  padding: 'max(32px, env(safe-area-inset-top)) max(clamp(20px, 2vw, 40px), env(safe-area-inset-right)) 32px max(clamp(20px, 2vw, 40px), env(safe-area-inset-left))',
   paddingBottom: 'max(32px, env(safe-area-inset-bottom))',
-  [theme.breakpoints.down('sm')]: { padding: theme.spacing(2) },
+  [theme.breakpoints.down('sm')]: {
+    padding: '24px max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
+  },
 }));
 
 // Use an actual responsive grid, instead of squeezing eight financial fields
@@ -1475,10 +1477,10 @@ function Dashboard() {
       {simulationRun > 0 && <SimulationTransition key={simulationRun} scene={backgroundScene} reducedMotion={reducedMotion} />}
       <a className="skip-link" href="#analysis-workspace">Skip to analysis</a>
       {/* Strategy Selection Sidebar */}
-      <StrategyDrawer variant="permanent" PaperProps={{ component: 'nav', 'aria-label': 'Trading strategies' }}>
-        <Box sx={{ p: 3 }}>
+      <StrategyDrawer className="strategy-rail" aria-label="Trading strategies">
+        <Box>
           <div className="workspace-brand"><span className="brand-mark" aria-hidden="true" />TradingHub</div>
-          <Typography variant="h6" gutterBottom>
+          <Typography className="strategy-rail-label" variant="overline" component="h2" gutterBottom>
             Strategies
           </Typography>
           <List sx={{ display: { xs: 'grid', sm: 'grid', md: 'block' }, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1, mt: 2 }}>
@@ -1489,15 +1491,17 @@ function Dashboard() {
                   aria-current={selectedStrategy === strategy.id ? 'page' : undefined}
                   onClick={() => handleStrategyChange(strategy.id)}
                   sx={{
-                    borderRadius: '3px',
-                    mb: 1,
-                    minHeight: 48,
+                    borderRadius: 0,
+                    mb: .5,
+                    minHeight: 44,
+                    px: 1.25,
+                    color: 'text.secondary',
                     alignItems: 'center',
-                    border: '1px solid transparent',
+                    borderLeft: '2px solid transparent',
                     '&.Mui-selected': {
-                      backgroundColor: 'action.selected',
+                      backgroundColor: 'transparent',
                       color: 'text.primary',
-                      borderColor: 'divider',
+                      borderLeftColor: 'primary.main',
                       '&:hover': {
                         backgroundColor: 'action.hover',
                       }
@@ -1506,7 +1510,7 @@ function Dashboard() {
                 >
                   <ListItemText
                     primary={strategy.name}
-                    primaryTypographyProps={{ fontSize: '0.875rem' }}
+                    primaryTypographyProps={{ fontSize: '0.8rem', lineHeight: 1.5 }}
                   />
                 </ListItemButton>
               </ListItem>
@@ -1527,6 +1531,7 @@ function Dashboard() {
       {/* Main Content */}
       <MainContent ref={workspaceContent} as="main" id="analysis-workspace" tabIndex={-1}>
         <Box className="workspace-header">
+          <div className="research-masthead"><span>TradingHub / Research workspace</span><span aria-hidden="true">Strategy lab — TH / 01</span></div>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 1 }}>
           <Typography variant="h4" component="h1">
             Strategy analysis
@@ -1585,7 +1590,7 @@ function Dashboard() {
       {/* Configuration Form - always visible */}
       <Paper key={selectedStrategy} component="form" className="scenario-surface workspace-panel" sx={{ mb: 3, p: { xs: 2, sm: 3 } }}>
         <Typography variant="h6" component="h2" gutterBottom>Scenario configuration</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>These settings run a historical simulation; they do not place trades.</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>These settings run a historical simulation; they do not place trades.</Typography>
         <ParameterGrid container>
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactFormControl fullWidth size="small">
@@ -2214,8 +2219,8 @@ function Dashboard() {
           </Grid>
           <Grid item xs={12}>
             <div className="form-actions">
-              <Typography variant="body2" color="text.secondary">Edit settings, then rerun to update the results.</Typography>
               <Button variant="contained" color="primary" onClick={event => handleRunSimulation(event, true)} disabled={loading}>Run simulation</Button>
+              <Typography variant="body2" color="text.secondary">Edit settings, then rerun to update the results.</Typography>
             </div>
           </Grid>
         </ParameterGrid>
@@ -2329,6 +2334,7 @@ function Dashboard() {
             
             {/* Tab content for Performance Chart */}
             <TabPanel value={activeTab} index={0}>
+              <PerformanceSummary data={data} resultContext={resultContext} />
               <Typography variant="h6" gutterBottom>
                 Portfolio comparison
               </Typography>
@@ -2537,99 +2543,9 @@ function Dashboard() {
             {/* Tab content for Trading Logs (now index 4) */}
             <TabPanel value={activeTab} index={4}>
               <Typography variant="h6" gutterBottom>
-                Trading Logs (Debug View)
+                Trading Logs
               </Typography>
               
-              {/* Add summary info boxes */}
-              <Box sx={{ mb: 3 }}>
-                {data.totalAssignedCost > 0 && (
-                  <Alert severity="info" sx={{ mb: 1 }}>
-                    <Typography variant="subtitle2">
-                      Total ITM call closure cost (buybacks + assignments): ${data.totalAssignedCost.toFixed(2)}
-                    </Typography>
-                  </Alert>
-                )}
-                {data.totalPremiumsReceived > 0 && (
-                  <Alert severity="success" sx={{ mb: 1 }}>
-                    <Typography variant="subtitle2">
-                      Total premiums received during test period: ${data.totalPremiumsReceived.toFixed(2)}
-                    </Typography>
-                  </Alert>
-                )}
-                {data.totalInterestPaid > 0 && (
-                  <Alert severity="warning" sx={{ mb: 1 }}>
-                    <Typography variant="subtitle2">
-                      Total interest paid during test period: ${data.totalInterestPaid.toFixed(2)}
-                    </Typography>
-                  </Alert>
-                )}
-                {data.totalDividendsReceived > 0 && (
-                  <Alert severity="success" sx={{ mb: 1 }}>
-                    <Typography variant="subtitle2">
-                      Total dividends received during test period: ${data.totalDividendsReceived.toFixed(2)}
-                    </Typography>
-                  </Alert>
-                )}
-                {data.totalWithdrawAmount > 0 && (
-                  <Alert severity="info" sx={{ mb: 1 }}>
-                    <Typography variant="subtitle2">
-                      Total withdrawals during test period: ${data.totalWithdrawAmount.toFixed(2)}
-                    </Typography>
-                  </Alert>
-                )}
-
-                {/* Compound Annualized Return (CAGR) */}
-                {data.chartData && data.chartData.length > 0 && (
-                  <Alert
-                    severity={data.annualizedReturn >= 0 ? "success" : "error"}
-                    sx={{ mb: 1 }}
-                  >
-                    <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                      Compound Annualized Return (CAGR): {(data.annualizedReturn * 100).toFixed(2)}%
-                    </Typography>
-                    <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-                      Initial Balance: ${resultContext?.config.initialBalance?.toLocaleString() || '0'} →
-                      Final Balance: ${data.chartData[data.chartData.length - 1]?.Portfolio_Value?.toLocaleString() || '0'}
-                    </Typography>
-                    {data.totalWithdrawAmount > 0 && (
-                      <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>
-                        Total Withdrawals: ${data.totalWithdrawAmount?.toLocaleString() || '0'}
-                        {' '}(adjusted final value: ${((data.chartData[data.chartData.length - 1]?.Portfolio_Value || 0) + data.totalWithdrawAmount)?.toLocaleString() || '0'})
-                      </Typography>
-                    )}
-                    <Typography variant="caption" sx={{ display: 'block' }}>
-                      Period: {data.chartData[0]?.date || 'N/A'} to {data.chartData[data.chartData.length - 1]?.date || 'N/A'}
-                    </Typography>
-                  </Alert>
-                )}
-
-                {/* Maximum Drawdown */}
-                {data.chartData && data.chartData.length > 0 && (
-                  <Alert
-                    severity={data.maxDrawdown < -0.20 ? "error" : data.maxDrawdown < -0.10 ? "warning" : "info"}
-                    sx={{ mb: 1 }}
-                  >
-                    <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                      Maximum Drawdown: {(data.maxDrawdown * 100).toFixed(2)}%
-                    </Typography>
-                    <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-                      Observed decline from the recorded equity peak; withdrawals can affect this measure. This does not predict future risk.
-                    </Typography>
-                  </Alert>
-                )}
-
-                {/* Sharpe Ratio */}
-                {data.chartData && data.chartData.length > 0 && (
-                  <Alert severity="info" sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                      Sharpe Ratio (annualized): {data.sharpeRatio === null ? 'N/A' : data.sharpeRatio.toFixed(2)}
-                    </Typography>
-                    <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-                      Mean daily excess return divided by its standard deviation, times √252. Risk-free rate: {toDisplayValue('riskFreeRate', data.sharpeRiskFreeRate)}% per year (from strategy settings); monthly withdrawals are added back so they are not counted as losses.
-                    </Typography>
-                  </Alert>
-                )}
-              </Box>
 
               {data.tradingLogs && data.tradingLogs.length > 0 ? (
                 <Box sx={{ mb: 2, maxHeight: '600px', overflowY: 'auto' }}>

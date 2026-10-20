@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import userEvent from '@testing-library/user-event';
 import ParameterField from '../components/ParameterField';
@@ -8,10 +8,118 @@ import App from '../App';
 import { createWorkspaceTheme } from '../theme';
 import { chartColors } from '../components/chartColors';
 import { runSimulation } from '../services/simulationService';
+import { computeSharpeRatio } from './performanceMetrics';
 
 jest.mock('../services/simulationService', () => ({ runSimulation: jest.fn() }));
 
 const originalResizeObserver = global.ResizeObserver;
+test('strategy navigation and header occupy separate in-flow grid cells', async () => {
+  const { container } = render(<App />);
+  await screen.findByText('Backtest service unavailable');
+  const rail = screen.getByRole('navigation', { name: 'Trading strategies' });
+  const main = screen.getByRole('main');
+  expect(rail.parentElement).toBe(main.parentElement);
+  expect(rail.parentElement).toHaveStyle({ display: 'grid', gridTemplateColumns: '184px minmax(0, 1fr)' });
+  expect(rail).toHaveStyle({ position: 'relative' });
+  expect(main).toHaveStyle({ minWidth: '0', boxSizing: 'border-box' });
+  expect(within(main).getByText('Configured research period').closest('.context-strip')).toBeInTheDocument();
+  expect(container.querySelector('.MuiDrawer-paper')).toBeNull();
+  expect(within(rail).getByRole('button', { name: 'SPY Power Cashflow' })).toHaveAttribute('aria-current', 'page');
+  expect(within(main).getByRole('heading', { name: 'Strategy analysis' })).toBeVisible();
+  const run = screen.getByRole('button', { name: 'Run simulation' });
+  expect(run.closest('.form-actions').firstElementChild).toBe(run);
+});
+
+test('Folded Light keeps its palette in glass/solid and light/dark without rerunning or resetting the scenario', async () => {
+  const { container } = render(<App />);
+  await screen.findByText('Backtest service unavailable');
+  fireEvent.change(screen.getByLabelText('Initial Balance'), { target: { value: '456000' } });
+  const calls = runSimulation.mock.calls.length;
+  const app = container.querySelector('.app');
+  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#A5B4FC');
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Solid surfaces' }));
+  expect(container.querySelector('.workspace-wave-backdrop')).toBeNull();
+  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#A5B4FC');
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Light mode' }));
+  expect(app.style.getPropertyValue('--workspace-bg')).toBe('#F5F5FB');
+  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#4F46E5');
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Solid surfaces' }));
+  expect(container.querySelector('.workspace-wave-backdrop')).toBeInTheDocument();
+  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#4F46E5');
+  expect(screen.getByLabelText('Initial Balance')).toHaveValue(456000);
+  expect(runSimulation).toHaveBeenCalledTimes(calls);
+});
+// Deterministic backtest fixture; never used by the production API or preview.
+const summaryRun = {
+  '2026-09-11': { Portfolio_Value: 200000, spy_value: 200000, Cash_Balance: 10000, Margin_Ratio: 0.1, Premiums_Received: 0, Interest_Paid: 0, Dividends_Received: 0, Trading_Log: 'Buy: 10 shares at $100.00' },
+  '2026-09-14': { Portfolio_Value: 202000, spy_value: 201000, Cash_Balance: 10200, Margin_Ratio: 0.1, Premiums_Received: 200, Interest_Paid: 10, Dividends_Received: 50, Trading_Log: 'Wrote 1 call premium $200.00' },
+  '2026-09-15': { Portfolio_Value: 198000, spy_value: 199000, Cash_Balance: 9700, Margin_Ratio: 0.2, Premiums_Received: 0, Interest_Paid: 20, Dividends_Received: 0, Trading_Log: 'Bought back call at a cost of $500.00' },
+  '2026-10-09': { Portfolio_Value: 204000, spy_value: 202000, Cash_Balance: 9000, Margin_Ratio: 0.1, Premiums_Received: 300, Interest_Paid: 30, Dividends_Received: 0, Trading_Log: 'Monthly withdrawal: $1,000.00' },
+};
+
+test.each(['SPY Power Cashflow', 'SPY Enhanced Cashflow', 'Options Martingale', 'S&P 500 Leader'])(
+  'shows all eight metrics in Performance, retains Premium context, and keeps Logs transactional for %s', async strategy => {
+    const leader = strategy === 'S&P 500 Leader';
+    const response = leader ? Object.fromEntries(Object.entries(summaryRun).map(([date, row], index) => [date, {
+      ...row, Premiums_Received: 0, Interest_Paid: 0,
+      Trading_Log: index === 0 ? 'INITIAL BUY: 10 shares at $100.00' : index === 3 ? 'SWAP: Rebalanced portfolio' : '',
+      isSwapTransaction: index === 0 || index === 3,
+    }])) : summaryRun;
+    runSimulation.mockResolvedValue(response);
+    render(<Dashboard />);
+    if (strategy !== 'SPY Power Cashflow') fireEvent.click(screen.getByRole('button', { name: strategy }));
+    const summary = await screen.findByRole('region', { name: 'Performance summary' });
+    const row = name => within(summary).getByText(name).closest('.performance-cash-row');
+    expect(summary.querySelectorAll('.performance-cash-row.performance-metric')).toHaveLength(5);
+    expect(row('Premiums received').querySelector('dt')).toHaveTextContent('Premiums received');
+    expect(row('Premiums received').querySelector('dd .performance-metric-value')).toBeInTheDocument();
+    expect(within(summary).getByText('CAGR')).toBeInTheDocument();
+    expect(within(summary).getByText('Maximum drawdown (MDD)')).toBeInTheDocument();
+    const sharpe = computeSharpeRatio(Object.values(response), { riskFreeRate: 0.05 });
+    expect(within(summary).getByText('Sharpe ratio').closest('.performance-metric')).toHaveTextContent(sharpe.toFixed(2));
+    expect(row('Premiums received')).toHaveTextContent(leader ? '$0.00' : '$500.00');
+    expect(row('Dividends received')).toHaveTextContent('$50.00');
+    expect(row('Interest paid')).toHaveTextContent(leader ? '$0.00' : '$60.00');
+    expect(row('ITM call closure costs')).toHaveTextContent(leader ? '$0.00' : '$500.00');
+    expect(row('Withdrawals')).toHaveTextContent(leader ? '$0.00' : '$1,000.00');
+    const calls = runSimulation.mock.calls.length;
+    fireEvent.click(screen.getByRole('tab', { name: 'Trading Logs' }));
+    expect(screen.queryByRole('region', { name: 'Performance summary' })).not.toBeInTheDocument();
+    expect(screen.queryByText('CAGR')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Total premiums received during test period/)).not.toBeInTheDocument();
+    expect(screen.getByText(leader ? 'Transaction Date: 2026-09-11' : 'Transaction Date: 2026-09-15')).toBeInTheDocument();
+    expect(screen.getByText(leader ? 'SWAP: Rebalanced portfolio' : 'Bought back call at a cost of $500.00')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Premium & Interest' }));
+    if (leader) {
+      expect(screen.queryByText(/Total premiums received:/)).not.toBeInTheDocument();
+    } else {
+      expect(screen.getByText('Total premiums received: $500.00')).toBeInTheDocument();
+      expect(screen.getByText('Total interest paid: $60.00')).toBeInTheDocument();
+    }
+    fireEvent.click(screen.getByRole('tab', { name: 'Performance' }));
+    expect(screen.getByRole('region', { name: 'Performance summary' })).toBeInTheDocument();
+    expect(runSimulation).toHaveBeenCalledTimes(calls);
+  }
+);
+
+test('the summary retains this run’s risk-free rate after editing the next scenario', async () => {
+  runSimulation.mockResolvedValue(summaryRun);
+  render(<Dashboard />);
+  const summary = await screen.findByRole('region', { name: 'Performance summary' });
+  const before = summary.textContent;
+  fireEvent.change(screen.getByLabelText('Risk Free Rate (%)'), { target: { value: '12' } });
+  expect(summary.textContent).toBe(before);
+  expect(within(summary).getByText(/Risk-free rate: 5.00% per year/)).toBeInTheDocument();
+  const details = within(summary).getByText('Calculation details').closest('details');
+  fireEvent.click(within(details).getByText('Calculation details'));
+  expect(within(details).getByText('Recorded period')).toBeInTheDocument();
+  expect(within(details).getByText('Adjusted final value')).toBeInTheDocument();
+  expect(details).not.toHaveTextContent('Compound annualized growth rate');
+  expect(details).not.toHaveTextContent('Observed decline');
+  expect(details).not.toHaveTextContent('Annualized mean daily excess return');
+  expect(within(summary).getByRole('button', { name: 'About Sharpe ratio' })).toHaveAccessibleDescription(/Risk-free rate: 5.00% per year/);
+  expect(screen.getByText('Settings have changed. Rerun to update these results.')).toBeInTheDocument();
+});
 test('light mode changes the app theme without resetting parameters or requesting a simulation', async () => {
   const { container } = render(<App />);
   await screen.findByText('Backtest service unavailable');
@@ -83,8 +191,11 @@ test('successful results keep their run context when configuration changes', asy
   fireEvent.change(screen.getByLabelText('Initial Balance'), { target: { value: '300000' } });
   expect(screen.getByText('Settings have changed. Rerun to update these results.')).toBeInTheDocument();
   expect(context.textContent).toContain(originalContext);
+  const summary = screen.getByRole('region', { name: 'Performance summary' });
+  expect(within(summary).getByText('$200,000.00')).toBeInTheDocument();
+  expect(within(summary).queryByText('$300,000.00')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab', { name: 'Trading Logs' }));
-  expect(screen.getByText(/Initial Balance: \$200,000/)).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Performance summary' })).not.toBeInTheDocument();
 });
 
 test('glass is the default and solid surfaces is the only material override', async () => {
