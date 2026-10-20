@@ -49,6 +49,8 @@ test('rapid scene changes replace finite morphs, without adding old layers or re
     const plane = animation.parentElement.getAttribute('data-fold');
     expect(animation).toHaveAttribute('values', `${foldedScenes[2][plane]};${foldedScenes[5][plane]}`);
     expect(animation).toHaveAttribute('repeatCount', '1');
+    expect(animation).toHaveAttribute('dur', '.72s');
+    expect(animation.parentElement).toHaveAttribute('d', foldedScenes[5][plane]);
   });
   rerender(<WaveBackdrop scene={5} reducedMotion />);
   rerender(<WaveBackdrop scene={5} reducedMotion={false} />);
@@ -75,22 +77,6 @@ test.each(['(prefers-reduced-motion: reduce)', '(prefers-contrast: more)', '(for
     queries.forEach(query => expect(query.removeEventListener).toHaveBeenCalled());
   }
 );
-test('the three distinct planes morph to their own destination contours', () => {
-  const { container, rerender } = render(<WaveBackdrop scene={0} />);
-  const origin = screen.getByTestId('background-contour').getAttribute('d');
-  rerender(<WaveBackdrop scene={2} />);
-  const destination = screen.getByTestId('background-contour').getAttribute('d');
-  expect(destination).not.toBe(origin);
-  const animations = container.querySelectorAll('animate');
-  expect(animations).toHaveLength(3);
-  animations.forEach(animation => {
-    const plane = animation.parentElement.getAttribute('data-fold');
-    expect(animation).toHaveAttribute('values', `${foldedScenes[0][plane]};${foldedScenes[2][plane]}`);
-    expect(animation).toHaveAttribute('dur', '.72s');
-  });
-  rerender(<WaveBackdrop scene={1} reducedMotion />);
-  expect(container.querySelector('animate')).toBeNull();
-});
 test('background pauses for hidden tabs and manual motion reduction', () => {
   const { container, rerender } = render(<WaveBackdrop />);
   const background = container.querySelector('svg');

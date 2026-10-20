@@ -24,10 +24,10 @@ function MetricHelp({ label, children }) {
   </>;
 }
 
-function HeadlineMetric({ label, value, caption, help }) {
-  return <div className="performance-metric">
-    <dt><span>{label}</span><MetricHelp label={label}>{help}</MetricHelp></dt>
-    <dd><span className="performance-metric-value">{value}</span><span className="performance-metric-caption">{caption}</span></dd>
+function HeadlineMetric({ label, value, caption, help, className = '' }) {
+  return <div className={`performance-metric ${className}`}>
+    <dt><span>{label}</span>{help && <MetricHelp label={label}>{help}</MetricHelp>}</dt>
+    <dd><span className="performance-metric-value">{value}</span>{caption && <span className="performance-metric-caption">{caption}</span>}</dd>
   </div>;
 }
 
@@ -35,10 +35,9 @@ function CashFlowGroup({ title, rows }) {
   const id = useId();
   return <section className="performance-cash-group" aria-labelledby={id}>
     <h4 id={id}>{title}</h4>
-    <dl>{rows.map(([label, value, help]) => <div className="performance-cash-row" key={label}>
-      <dt><span>{label}</span>{help && <MetricHelp label={label}>{help}</MetricHelp>}</dt>
-      <dd>{currency(value)}</dd>
-    </div>)}</dl>
+    <dl style={{ '--cash-columns': rows.length }}>{rows.map(([label, value, help]) =>
+      <HeadlineMetric key={label} className="performance-cash-row" label={label} value={currency(value)} help={help} />
+    )}</dl>
   </section>;
 }
 
@@ -60,7 +59,7 @@ export default function PerformanceSummary({ data, resultContext, sample = false
   const riskFree = finite(data.sharpeRiskFreeRate) ? data.sharpeRiskFreeRate : resultContext?.config?.riskFreeRate;
   const cagrHelp = 'Compound annualized growth rate using final balance plus total withdrawals. This existing adjustment does not account for the timing of each withdrawal.';
   const drawdownHelp = 'Observed decline from the recorded equity peak; withdrawals can affect this measure. This does not predict future risk.';
-  const sharpeHelp = 'Annualized mean daily excess return divided by its sample standard deviation, times √252. Monthly withdrawals are added back so they are not counted as losses. N/A means there are insufficient valid returns or no return variability.';
+  const sharpeHelp = `Annualized mean daily excess return divided by its sample standard deviation, times √252. Monthly withdrawals are added back so they are not counted as losses. N/A means there are insufficient valid returns or no return variability. Risk-free rate: ${percent(riskFree)} per year (from this run’s strategy settings).`;
 
   return <section className="performance-summary" aria-labelledby={`${id}-title`}>
     <div className="performance-summary-heading">
@@ -95,8 +94,6 @@ export default function PerformanceSummary({ data, resultContext, sample = false
             <div><dt>Adjusted final value</dt><dd>{currency(adjusted)}</dd></div>
           </dl>
         </section>
-        <section><h4>CAGR & maximum drawdown</h4><p>{cagrHelp}</p><p>{drawdownHelp}</p></section>
-        <section><h4>Sharpe ratio methodology</h4><p>{sharpeHelp}</p><p>Risk-free rate: {percent(riskFree)} per year (from this run’s strategy settings).</p></section>
       </div>
     </details>
   </section>;

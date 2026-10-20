@@ -2219,8 +2219,8 @@ function Dashboard() {
           </Grid>
           <Grid item xs={12}>
             <div className="form-actions">
-              <Typography variant="body2" color="text.secondary">Edit settings, then rerun to update the results.</Typography>
               <Button variant="contained" color="primary" onClick={event => handleRunSimulation(event, true)} disabled={loading}>Run simulation</Button>
+              <Typography variant="body2" color="text.secondary">Edit settings, then rerun to update the results.</Typography>
             </div>
           </Grid>
         </ParameterGrid>

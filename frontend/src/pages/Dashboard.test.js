@@ -26,6 +26,8 @@ test('strategy navigation and header occupy separate in-flow grid cells', async 
   expect(container.querySelector('.MuiDrawer-paper')).toBeNull();
   expect(within(rail).getByRole('button', { name: 'SPY Power Cashflow' })).toHaveAttribute('aria-current', 'page');
   expect(within(main).getByRole('heading', { name: 'Strategy analysis' })).toBeVisible();
+  const run = screen.getByRole('button', { name: 'Run simulation' });
+  expect(run.closest('.form-actions').firstElementChild).toBe(run);
 });
 
 test('Folded Light keeps its palette in glass/solid and light/dark without rerunning or resetting the scenario', async () => {
@@ -68,6 +70,9 @@ test.each(['SPY Power Cashflow', 'SPY Enhanced Cashflow', 'Options Martingale', 
     if (strategy !== 'SPY Power Cashflow') fireEvent.click(screen.getByRole('button', { name: strategy }));
     const summary = await screen.findByRole('region', { name: 'Performance summary' });
     const row = name => within(summary).getByText(name).closest('.performance-cash-row');
+    expect(summary.querySelectorAll('.performance-cash-row.performance-metric')).toHaveLength(5);
+    expect(row('Premiums received').querySelector('dt')).toHaveTextContent('Premiums received');
+    expect(row('Premiums received').querySelector('dd .performance-metric-value')).toBeInTheDocument();
     expect(within(summary).getByText('CAGR')).toBeInTheDocument();
     expect(within(summary).getByText('Maximum drawdown (MDD)')).toBeInTheDocument();
     const sharpe = computeSharpeRatio(Object.values(response), { riskFreeRate: 0.05 });
@@ -105,6 +110,14 @@ test('the summary retains this run’s risk-free rate after editing the next sce
   fireEvent.change(screen.getByLabelText('Risk Free Rate (%)'), { target: { value: '12' } });
   expect(summary.textContent).toBe(before);
   expect(within(summary).getByText(/Risk-free rate: 5.00% per year/)).toBeInTheDocument();
+  const details = within(summary).getByText('Calculation details').closest('details');
+  fireEvent.click(within(details).getByText('Calculation details'));
+  expect(within(details).getByText('Recorded period')).toBeInTheDocument();
+  expect(within(details).getByText('Adjusted final value')).toBeInTheDocument();
+  expect(details).not.toHaveTextContent('Compound annualized growth rate');
+  expect(details).not.toHaveTextContent('Observed decline');
+  expect(details).not.toHaveTextContent('Annualized mean daily excess return');
+  expect(within(summary).getByRole('button', { name: 'About Sharpe ratio' })).toHaveAccessibleDescription(/Risk-free rate: 5.00% per year/);
   expect(screen.getByText('Settings have changed. Rerun to update these results.')).toBeInTheDocument();
 });
 test('light mode changes the app theme without resetting parameters or requesting a simulation', async () => {
