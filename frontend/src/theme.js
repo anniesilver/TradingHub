@@ -1,7 +1,7 @@
 import { createTheme } from '@mui/material/styles';
-import { workspaceCssVariables, workspacePalettes } from './themeTokens';
+import { defaultWorkspaceMode, workspaceCssVariables, workspacePalettes } from './themeTokens';
 
-export const createWorkspaceTheme = (mode = 'dark') => {
+export const createWorkspaceTheme = (mode = defaultWorkspaceMode) => {
   const p = workspacePalettes[mode];
   return createTheme({
     palette: {

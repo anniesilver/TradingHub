@@ -1613,7 +1613,8 @@ function Dashboard() {
               </CompactSelect>
             </CompactFormControl>
           </Grid>
-          <Grid item xs={12} sm={3} md={1.5}>
+          {/* Power Cashflow always writes calls; keep other strategies unchanged. */}
+          {selectedStrategy !== 'SPY_POWER_CASHFLOW' && <Grid item xs={12} sm={3} md={1.5}>
             <CompactFormControl fullWidth size="small">
               <InputLabel id="optionType-label">Option Type</InputLabel>
               <CompactSelect
@@ -1628,7 +1629,7 @@ function Dashboard() {
                 <MenuItem value="put">Put</MenuItem>
               </CompactSelect>
             </CompactFormControl>
-          </Grid>
+          </Grid>}
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactTextField
               fullWidth
@@ -1840,7 +1841,8 @@ function Dashboard() {
             />
           </Grid>
           
-          <Grid item xs={12} sm={3} md={1.5}>
+          {/* These two limits are config-only, unused by Power Cashflow. */}
+          {selectedStrategy !== 'SPY_POWER_CASHFLOW' && <Grid item xs={12} sm={3} md={1.5}>
             <CompactTextField
               fullWidth
               size="small"
@@ -1851,7 +1853,7 @@ function Dashboard() {
               onChange={handleConfigChange}
               InputProps={{ inputProps: { min: 0, step: 100 } }}
             />
-          </Grid>
+          </Grid>}
           
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactTextField
@@ -1879,7 +1881,7 @@ function Dashboard() {
             />
           </Grid>
           
-          <Grid item xs={12} sm={3} md={1.5}>
+          {selectedStrategy !== 'SPY_POWER_CASHFLOW' && <Grid item xs={12} sm={3} md={1.5}>
             <CompactTextField
               fullWidth
               size="small"
@@ -1890,7 +1892,7 @@ function Dashboard() {
               onChange={handleConfigChange}
               InputProps={{ inputProps: { min: 0, step: 100 } }}
             />
-          </Grid>
+          </Grid>}
           
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactTextField
