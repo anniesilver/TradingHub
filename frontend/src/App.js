@@ -5,10 +5,10 @@ import Dashboard from './pages/Dashboard';
 import './App.css';
 import { createWorkspaceTheme } from './theme';
 import AppearanceContext from './AppearanceContext';
-import { workspaceCssVariables } from './themeTokens';
+import { defaultWorkspaceMode, workspaceCssVariables } from './themeTokens';
 
 function App() {
-  const [mode, setMode] = useState('dark');
+  const [mode, setMode] = useState(defaultWorkspaceMode);
   const theme = useMemo(() => createWorkspaceTheme(mode), [mode]);
   return (
     <AppearanceContext.Provider value={{ mode, setMode }}>

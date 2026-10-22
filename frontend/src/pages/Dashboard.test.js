@@ -13,6 +13,33 @@ import { computeSharpeRatio } from './performanceMetrics';
 jest.mock('../services/simulationService', () => ({ runSimulation: jest.fn() }));
 
 const originalResizeObserver = global.ResizeObserver;
+test('only Power Cashflow hides its unused fields, without losing their values', async () => {
+  render(<Dashboard />);
+  await screen.findByText('Backtest service unavailable');
+  const labels = ['Option Type', 'Max Position Size', 'Min Trade Size'];
+  labels.forEach(label => expect(screen.queryByLabelText(label)).not.toBeInTheDocument());
+  for (const strategy of ['SPY Enhanced Cashflow', 'Options Martingale', 'S&P 500 Leader']) {
+    fireEvent.click(screen.getByRole('button', { name: strategy }));
+    await screen.findByText('Backtest service unavailable');
+    labels.forEach(label => expect(screen.getByLabelText(label)).toBeInTheDocument());
+  }
+  fireEvent.change(screen.getByLabelText('Max Position Size'), { target: { value: '12000' } });
+  fireEvent.change(screen.getByLabelText('Min Trade Size'), { target: { value: '2400' } });
+  fireEvent.mouseDown(screen.getByLabelText('Option Type'));
+  fireEvent.click(screen.getByRole('option', { name: 'Put' }));
+  fireEvent.click(screen.getByRole('button', { name: 'SPY Power Cashflow' }));
+  await screen.findByText('Backtest service unavailable');
+  labels.forEach(label => expect(screen.queryByLabelText(label)).not.toBeInTheDocument());
+  expect(runSimulation.mock.calls.at(-1)[0]).toEqual(expect.objectContaining({
+    maxPositionSize: 12000, minTradeSize: 2400, optionType: 'put',
+  }));
+  fireEvent.click(screen.getByRole('button', { name: 'SPY Enhanced Cashflow' }));
+  await screen.findByText('Backtest service unavailable');
+  expect(screen.getByLabelText('Max Position Size')).toHaveValue(12000);
+  expect(screen.getByLabelText('Min Trade Size')).toHaveValue(2400);
+  expect(screen.getByLabelText('Option Type')).toHaveTextContent('Put');
+});
+
 test('strategy navigation and header occupy separate in-flow grid cells', async () => {
   const { container } = render(<App />);
   await screen.findByText('Backtest service unavailable');
@@ -21,7 +48,7 @@ test('strategy navigation and header occupy separate in-flow grid cells', async 
   expect(rail.parentElement).toBe(main.parentElement);
   expect(rail.parentElement).toHaveStyle({ display: 'grid', gridTemplateColumns: '184px minmax(0, 1fr)' });
   expect(rail).toHaveStyle({ position: 'relative' });
-  expect(main).toHaveStyle({ minWidth: '0', boxSizing: 'border-box' });
+  expect(main).toHaveAttribute('id', 'analysis-workspace');
   expect(within(main).getByText('Configured research period').closest('.context-strip')).toBeInTheDocument();
   expect(container.querySelector('.MuiDrawer-paper')).toBeNull();
   expect(within(rail).getByRole('button', { name: 'SPY Power Cashflow' })).toHaveAttribute('aria-current', 'page');
@@ -36,16 +63,17 @@ test('Folded Light keeps its palette in glass/solid and light/dark without rerun
   fireEvent.change(screen.getByLabelText('Initial Balance'), { target: { value: '456000' } });
   const calls = runSimulation.mock.calls.length;
   const app = container.querySelector('.app');
-  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#A5B4FC');
+  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#4F46E5');
   fireEvent.click(screen.getByRole('checkbox', { name: 'Solid surfaces' }));
   expect(container.querySelector('.workspace-wave-backdrop')).toBeNull();
-  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#A5B4FC');
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Light mode' }));
-  expect(app.style.getPropertyValue('--workspace-bg')).toBe('#F5F5FB');
   expect(app.style.getPropertyValue('--workspace-accent')).toBe('#4F46E5');
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Light mode' }));
+  expect(app.style.getPropertyValue('--workspace-bg')).toBe('#1B385A');
+  expect(app.style.getPropertyValue('--chart-surface')).toBe('#2B5278');
+  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#ADD7FF');
   fireEvent.click(screen.getByRole('checkbox', { name: 'Solid surfaces' }));
   expect(container.querySelector('.workspace-wave-backdrop')).toBeInTheDocument();
-  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#4F46E5');
+  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#ADD7FF');
   expect(screen.getByLabelText('Initial Balance')).toHaveValue(456000);
   expect(runSimulation).toHaveBeenCalledTimes(calls);
 });
@@ -120,19 +148,22 @@ test('the summary retains this run’s risk-free rate after editing the next sce
   expect(within(summary).getByRole('button', { name: 'About Sharpe ratio' })).toHaveAccessibleDescription(/Risk-free rate: 5.00% per year/);
   expect(screen.getByText('Settings have changed. Rerun to update these results.')).toBeInTheDocument();
 });
-test('light mode changes the app theme without resetting parameters or requesting a simulation', async () => {
+test('light is the default and theme switching preserves parameters without requesting a simulation', async () => {
   const { container } = render(<App />);
   await screen.findByText('Backtest service unavailable');
+  expect(container.querySelector('.app')).toHaveAttribute('data-theme', 'light');
+  expect(screen.getByRole('checkbox', { name: 'Light mode' })).toBeChecked();
+  expect(createWorkspaceTheme().palette.mode).toBe('light');
   fireEvent.change(screen.getByLabelText('Initial Balance'), { target: { value: '321000' } });
   const calls = runSimulation.mock.calls.length;
   fireEvent.click(screen.getByRole('checkbox', { name: 'Light mode' }));
-  expect(container.querySelector('.app')).toHaveAttribute('data-theme', 'light');
+  expect(container.querySelector('.app')).toHaveAttribute('data-theme', 'dark');
   expect(screen.getByLabelText('Initial Balance')).toHaveValue(321000);
   expect(runSimulation).toHaveBeenCalledTimes(calls);
   expect(createWorkspaceTheme('light').palette.mode).toBe('light');
   expect(createWorkspaceTheme('light').shape.borderRadius).toBe(3);
   fireEvent.click(screen.getByRole('checkbox', { name: 'Light mode' }));
-  expect(container.querySelector('.app')).toHaveAttribute('data-theme', 'dark');
+  expect(container.querySelector('.app')).toHaveAttribute('data-theme', 'light');
 });
 
 test('sample tabs morph distinct contours without a fullscreen navigation wave', async () => {

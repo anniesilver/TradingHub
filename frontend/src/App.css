@@ -142,8 +142,11 @@ button:active:not(:disabled) { transform: translateY(1px); }
 .chart-data th:first-child { text-align: left; }
 .sample-tooltip { padding: 12px; background: var(--tooltip-bg); color: var(--workspace-text); border: 1px solid var(--workspace-border); border-radius: 3px; font-size: .8rem; }
 .sample-tooltip strong { display: block; margin-bottom: 8px; }
-.recharts-cartesian-grid line { stroke: var(--workspace-border); }
-.recharts-cartesian-axis-tick-value { fill: var(--workspace-muted); }
+.workspace .recharts-wrapper { background: var(--chart-surface); border-radius: 2px; }
+.recharts-cartesian-grid line { stroke: var(--chart-grid); stroke-opacity: .35; }
+.recharts-cartesian-axis-tick-value { fill: var(--chart-label); font-variant-numeric: tabular-nums; }
+@media (prefers-contrast: more) { .recharts-cartesian-grid line { stroke-opacity: .65; } }
+@media (forced-colors: active) { .workspace .recharts-wrapper { background: Canvas; } .recharts-cartesian-axis-tick-value { fill: CanvasText; } .recharts-cartesian-grid line { stroke: GrayText; } }
 .recharts-default-tooltip { background: var(--tooltip-bg) !important; border-color: var(--workspace-border) !important; color: var(--workspace-text); }
 .app[data-theme='light'] .workspace svg [fill='#dddddd'] { fill: var(--workspace-text); }
 .app[data-theme='light'] .workspace svg [fill='#141414'] { fill: var(--surface); }
