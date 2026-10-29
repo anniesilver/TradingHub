@@ -4,6 +4,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import PerformanceChart from './PerformanceChart';
 import PerformanceSummary from './PerformanceSummary';
 import { chartColors } from './chartColors';
+import ExpandableChart from './ExpandableChart';
 
 // Fictional, fixed design-preview data. Never passed through the simulation
 // adapter, used for performance statistics, or sent to the API.
@@ -54,16 +55,16 @@ export default function SampleChartPreview({ onClose, onTabChange }) {
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
           <Typography variant="h6" component="h2">Sample chart preview · Testing only</Typography><Button onClick={onClose}>Close preview</Button>
         </Box>
-        <Typography variant="body2" color="text.secondary">Fictional data for UI review only—not market prices, a backtest, or a forecast. Your simulation settings are unchanged.</Typography>
+        <Typography variant="body2" color="text.secondary">Fictional data for UI review only—not market prices, a backtest, or a forecast. Statistics are fixed examples, not calculated from the chart. Your simulation settings are unchanged.</Typography>
       </div>
       <Tabs value={tab} onChange={(_, value) => { onTabChange?.(value); setDirection(value > tab ? 1 : -1); setTab(value); }} aria-label="sample chart tabs" variant="scrollable" scrollButtons="auto">
         {['Performance', 'Margin', 'Cash'].map((label, index) => <Tab key={label} label={label} id={`sample-tab-${index}`} aria-controls={`sample-panel-${index}`} />)}
       </Tabs>
       <Box key={tab} id={`sample-panel-${tab}`} role="tabpanel" aria-labelledby={`sample-tab-${tab}`} className="result-panel" style={{ '--panel-offset': direction > 0 ? '24px' : '-24px' }} sx={{ p: { xs: 2, sm: 3 } }}>
-        {tab === 0 ? <>
+        {tab === 0 ? <div className="performance-overview sample-overview">
           <PerformanceSummary data={SAMPLE_SUMMARY} resultContext={SAMPLE_CONTEXT} sample />
-          <PerformanceChart data={SAMPLE_POINTS} sample tooltip={<SampleTooltip />} />
-        </> : <>
+          <div className="portfolio-chart"><PerformanceChart data={SAMPLE_POINTS} sample tooltip={<SampleTooltip />} /></div>
+        </div> : <ExpandableChart title={tab === 1 ? 'Sample margin chart' : 'Sample cash chart'} sample>
           <Typography variant="h6" gutterBottom>{tab === 1 ? 'Illustrative margin ratio' : 'Illustrative cash balance'}</Typography>
           <div className="chart-canvas"><ResponsiveContainer width="100%" height="100%"><LineChart data={SAMPLE_POINTS} margin={{ top: 16, right: 20, left: 0, bottom: 12 }} accessibilityLayer>
             <CartesianGrid vertical={false} strokeDasharray="3 6" /><XAxis dataKey="date" interval="preserveStartEnd" minTickGap={48} height={42} axisLine={false} tickLine={false} tickMargin={12} tickFormatter={value => value.slice(0, 7)} />
@@ -71,7 +72,7 @@ export default function SampleChartPreview({ onClose, onTabChange }) {
             <Tooltip content={<SampleTooltip />} /><Line type="linear" dataKey={tab === 1 ? 'Margin_Ratio' : 'Cash_Balance'} name={tab === 1 ? 'Illustrative margin' : 'Illustrative cash'} stroke={tab === 1 ? chartColors.margin : chartColors.cash} strokeWidth={2.5} dot={false} isAnimationActive={false} />
           </LineChart></ResponsiveContainer></div>
           <p className="chart-note">Fictional monthly values · January–December 2024</p>
-        </>}
+        </ExpandableChart>}
       </Box>
     </Paper>
   );

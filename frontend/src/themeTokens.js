@@ -2,21 +2,26 @@
 export const defaultWorkspaceMode = 'light';
 export const workspacePalettes = {
   dark: {
-    // Blue surfaces stay distinct from inputs and secondary text.
-    background: '#1B385A', surface: '#23476B', raised: '#2C5278', highlight: '#BAD7F2',
-    accent: '#ADD7FF', accentHover: '#D1E8FF', onAccent: '#102940',
-    text: '#F5F9FF', muted: '#DFEAF6', border: '#A1BBD7', control: '#1C3B5C',
-    glass: 'rgba(35, 71, 107, .97)', glassBorder: 'rgba(173, 215, 255, .5)',
-    selection: '#30557A', hover: '#2A4E72', shadow: '#183552',
-    reflection: '#5789BA', paper: '#3D648B', texture: '#D9E9FA',
+    background: '#021024', shell: '#06172E', sidebar: '#071A32',
+    surface: '#0A203C', raised: '#102D4D', highlight: '#C1E8FF',
+    accent: '#C1E8FF', accentHover: '#E0F3FF', onAccent: '#052659',
+    text: '#ECF6FF', muted: '#ADC4DB', border: '#294664', controlBorder: '#577594',
+    control: '#071A32', glass: 'rgba(10, 32, 60, .88)',
+    glassBorder: 'rgba(193, 232, 255, .2)', inset: 'rgba(193, 232, 255, .1)',
+    selection: '#163C60', hover: '#113453', shadow: '#010A18',
+    reflection: '#5483B3', paper: '#052659', texture: '#7DA0CA',
+    chart: '#071A32', chartLabel: '#C9DDEF', chartGrid: '#426181',
   },
   light: {
-    background: '#F5F5FB', surface: '#FFFFFF', raised: '#E7EAF4', highlight: '#BCC6DB',
-    accent: '#4F46E5', accentHover: '#4338CA', onAccent: '#FFFFFF',
-    text: '#181B2A', muted: '#535E73', border: '#8995AD', control: '#FFFFFF',
-    glass: 'rgba(255, 255, 255, .93)', glassBorder: 'rgba(79, 70, 229, .2)',
-    selection: '#E4E6FA', hover: '#EDEFF9', shadow: '#C1C8DC',
-    reflection: '#CBCDF3', paper: '#F0F2FA', texture: '#66738F',
+    background: '#DBE9F4', shell: '#E9F2F9', sidebar: '#E2EEF8',
+    surface: '#F8FCFF', raised: '#EDF5FB', highlight: '#FFFFFF',
+    accent: '#052659', accentHover: '#123F70', onAccent: '#F8FCFF',
+    text: '#092541', muted: '#4D6680', border: '#CBDDEB', controlBorder: '#829BB3',
+    control: '#F7FBFF', glass: 'rgba(248, 252, 255, .88)',
+    glassBorder: 'rgba(255, 255, 255, .88)', inset: 'rgba(255, 255, 255, .9)',
+    selection: '#CBDFEF', hover: '#D9EAF6', shadow: '#284E73',
+    reflection: '#7DA0CA', paper: '#C1E8FF', texture: '#5483B3',
+    chart: '#F8FCFF', chartLabel: '#425D77', chartGrid: '#AEC4D8',
   },
 };
 
@@ -24,22 +29,25 @@ export function workspaceCssVariables(mode = defaultWorkspaceMode) {
   const p = workspacePalettes[mode];
   return {
     '--workspace-bg': p.background, '--surface': p.surface,
+    '--shell-bg': p.shell, '--sidebar-bg': p.sidebar, '--surface-raised': p.raised,
+    '--control-bg': p.control, '--control-border': p.controlBorder,
+    '--selection-bg': p.selection, '--hover-bg': p.hover,
+    '--radius-card': '20px', '--radius-control': '12px', '--radius-pill': '999px',
     '--workspace-text': p.text, '--workspace-muted': p.muted,
     '--workspace-border': p.border, '--workspace-accent': p.accent,
     '--accent-hover': p.accentHover, '--on-accent': p.onAccent,
     '--glass-bg': p.glass, '--glass-border': p.glassBorder,
-    '--glass-shadow': `0 12px 40px ${p.shadow}30`,
+    '--glass-inset': p.inset, '--glass-shadow': `0 14px 38px ${p.shadow}16`,
+    '--shell-shadow': `0 8px 24px ${p.shadow}0F`,
     '--tooltip-bg': p.surface, '--fold-raised': p.raised,
     '--fold-highlight': p.highlight, '--fold-reflection': p.reflection,
     '--fold-paper': p.paper, '--fold-shadow': p.shadow, '--fold-texture': p.texture,
     '--wipe-base': p.raised, '--wipe-light': p.highlight, '--wipe-mid': p.reflection,
-    // A brighter opaque plot keeps the artwork away from chart data.
-    '--chart-surface': mode === 'light' ? '#FFFFFF' : '#2B5278',
-    '--chart-label': mode === 'light' ? '#39465C' : '#F5F9FF',
-    '--chart-grid': mode === 'light' ? '#8995AD' : '#B5CAE0',
-    '--chart-strategy': mode === 'light' ? '#1761ac' : '#96CEFF',
-    '--chart-benchmark': mode === 'light' ? '#956000' : '#FFD28A',
-    '--chart-margin': mode === 'light' ? '#7551a5' : '#D4C0FF',
-    '--chart-cash': mode === 'light' ? '#087563' : '#89E6D0',
+    // Financial plots stay opaque, even when their surrounding panel is glass.
+    '--chart-surface': p.chart, '--chart-label': p.chartLabel, '--chart-grid': p.chartGrid,
+    '--chart-strategy': mode === 'light' ? '#2368A4' : '#8FCCFF',
+    '--chart-benchmark': mode === 'light' ? '#8B5C17' : '#E5BF81',
+    '--chart-margin': mode === 'light' ? '#7354A0' : '#C8B8EA',
+    '--chart-cash': mode === 'light' ? '#177563' : '#81D6C0',
   };
 }

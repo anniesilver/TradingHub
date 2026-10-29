@@ -23,6 +23,9 @@ import {
   Checkbox,
   FormControlLabel,
 } from '@mui/material';
+import ShowChartRoundedIcon from '@mui/icons-material/ShowChartRounded';
+import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
+import KeyboardArrowRightRoundedIcon from '@mui/icons-material/KeyboardArrowRightRounded';
 import { styled } from '@mui/material/styles';
 import {
   LineChart,
@@ -40,6 +43,7 @@ import { runSimulation } from '../services/simulationService';
 import ParameterField from '../components/ParameterField';
 import SimulationTransition, { WaveBackdrop } from '../components/WaveSurface';
 import PerformanceChart from '../components/PerformanceChart';
+import ExpandableChart from '../components/ExpandableChart';
 import PerformanceSummary from '../components/PerformanceSummary';
 import SampleChartPreview from '../components/SampleChartPreview';
 import { chartColors } from '../components/chartColors';
@@ -75,13 +79,13 @@ const getDefaultExpiration = () => {
 
 const Root = styled('div')(({ theme }) => ({
   display: 'grid',
-  gridTemplateColumns: '184px minmax(0, 1fr)',
+  gridTemplateColumns: '232px minmax(0, 1fr)',
   alignItems: 'start',
   width: '100%',
   minWidth: 0,
   boxSizing: 'border-box',
   flexGrow: 1,
-  minHeight: '100vh',
+  minHeight: 'calc(100vh - 32px)',
   [theme.breakpoints.down('md')]: { gridTemplateColumns: 'minmax(0, 1fr)' },
 }));
 
@@ -91,9 +95,9 @@ const StrategyDrawer = styled('nav')(({ theme }) => ({
   minWidth: 0,
   position: 'relative',
   background: 'transparent',
-  padding: theme.spacing(3, 1.5, 2, 2),
+  padding: theme.spacing(3, 2),
   [theme.breakpoints.down('md')]: {
-    padding: theme.spacing(2, 2, 0),
+    padding: theme.spacing(2),
   },
 }));
 
@@ -105,7 +109,7 @@ const MainContent = styled('div')(({ theme }) => ({
   maxWidth: 2400,
   margin: '0 auto',
   // Keep real gutters inside the grid cell, including safe-area insets.
-  padding: 'max(32px, env(safe-area-inset-top)) max(clamp(20px, 2vw, 40px), env(safe-area-inset-right)) 32px max(clamp(20px, 2vw, 40px), env(safe-area-inset-left))',
+  padding: '18px max(18px, env(safe-area-inset-right)) 24px max(18px, env(safe-area-inset-left))',
   paddingBottom: 'max(32px, env(safe-area-inset-bottom))',
   [theme.breakpoints.down('sm')]: {
     padding: '24px max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
@@ -335,6 +339,8 @@ const AVAILABLE_STRATEGIES = [
 ];
 
 function Dashboard() {
+  const [strategyMenuOpen, setStrategyMenuOpen] = useState(false);
+  const strategyMenuButton = useRef(null);
   const { mode, setMode } = useContext(AppearanceContext);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1456,7 +1462,11 @@ function Dashboard() {
   const symbolByStrategy = useRef({});
 
   const handleStrategyChange = (strategyId) => {
-    if (strategyId === selectedStrategy) return;
+    if (strategyId === selectedStrategy) {
+      setStrategyMenuOpen(false);
+      if (strategyMenuOpen) strategyMenuButton.current?.focus();
+      return;
+    }
     setSimulationRun(0);
     setNavigationRun(run => run + 1);
     symbolByStrategy.current[selectedStrategy] = config.symbol;
@@ -1465,6 +1475,8 @@ function Dashboard() {
       setConfig(prev => ({ ...prev, symbol: nextSymbol }));
     }
     setSelectedStrategy(strategyId);
+    if (strategyMenuOpen) strategyMenuButton.current?.focus();
+    setStrategyMenuOpen(false);
     setLoading(true);
     setError(null);
   };
@@ -1477,9 +1489,18 @@ function Dashboard() {
       {simulationRun > 0 && <SimulationTransition key={simulationRun} scene={backgroundScene} reducedMotion={reducedMotion} />}
       <a className="skip-link" href="#analysis-workspace">Skip to analysis</a>
       {/* Strategy Selection Sidebar */}
-      <StrategyDrawer className="strategy-rail" aria-label="Trading strategies">
-        <Box>
-          <div className="workspace-brand"><span className="brand-mark" aria-hidden="true" />TradingHub</div>
+      <StrategyDrawer className="strategy-rail" aria-label="Trading strategies" data-expanded={strategyMenuOpen} onKeyDown={event => {
+        if (event.key === 'Escape' && strategyMenuOpen) {
+          setStrategyMenuOpen(false);
+          strategyMenuButton.current?.focus();
+        }
+      }}>
+        <div className="rail-heading">
+          <div className="workspace-brand"><span className="brand-mark" aria-hidden="true"><ShowChartRoundedIcon /></span>TradingHub</div>
+          <Button ref={strategyMenuButton} className="mobile-strategy-toggle" aria-label="Toggle strategy navigation" aria-expanded={strategyMenuOpen} aria-controls="strategy-navigation" onClick={() => setStrategyMenuOpen(open => !open)}><MenuRoundedIcon /></Button>
+        </div>
+        <Box id="strategy-navigation" className="strategy-navigation">
+          <p className="rail-intro">Your strategy workspace</p>
           <Typography className="strategy-rail-label" variant="overline" component="h2" gutterBottom>
             Strategies
           </Typography>
@@ -1491,27 +1512,28 @@ function Dashboard() {
                   aria-current={selectedStrategy === strategy.id ? 'page' : undefined}
                   onClick={() => handleStrategyChange(strategy.id)}
                   sx={{
-                    borderRadius: 0,
+                    borderRadius: '12px',
                     mb: .5,
-                    minHeight: 44,
+                    minHeight: 52,
                     px: 1.25,
                     color: 'text.secondary',
                     alignItems: 'center',
-                    borderLeft: '2px solid transparent',
+                    gap: 1.25,
                     '&.Mui-selected': {
-                      backgroundColor: 'transparent',
+                      backgroundColor: 'action.selected',
                       color: 'text.primary',
-                      borderLeftColor: 'primary.main',
                       '&:hover': {
                         backgroundColor: 'action.hover',
                       }
                     }
                   }}
                 >
+                  <ShowChartRoundedIcon className="strategy-symbol" aria-hidden="true" sx={{ fontSize: 16 }} />
                   <ListItemText
                     primary={strategy.name}
-                    primaryTypographyProps={{ fontSize: '0.8rem', lineHeight: 1.5 }}
+                    primaryTypographyProps={{ fontSize: '0.8125rem', lineHeight: 1.5, fontWeight: selectedStrategy === strategy.id ? 600 : 400 }}
                   />
+                  {selectedStrategy === strategy.id && <KeyboardArrowRightRoundedIcon className="strategy-chevron" sx={{ fontSize: 16 }} />}
                 </ListItemButton>
               </ListItem>
             ))}
@@ -1525,27 +1547,16 @@ function Dashboard() {
           <FormControlLabel control={<Checkbox size="small" checked={solidSurfaces} onChange={event => setSolidSurfaces(event.target.checked)} />} label={<Typography variant="body2">Solid surfaces</Typography>} />
           <FormControlLabel control={<Checkbox size="small" checked={reducedMotion} onChange={event => setReducedMotion(event.target.checked)} />} label={<Typography variant="body2">Reduce motion</Typography>} />
           </details>
+          <div className="rail-footnote"><span className="rail-status-dot" aria-hidden="true" />Historical research<span>Simulations, never live trades</span></div>
         </Box>
       </StrategyDrawer>
 
       {/* Main Content */}
       <MainContent ref={workspaceContent} as="main" id="analysis-workspace" tabIndex={-1}>
-        <Box className="workspace-header">
-          <div className="research-masthead"><span>TradingHub / Research workspace</span><span aria-hidden="true">Strategy lab — TH / 01</span></div>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 1 }}>
-          <Typography variant="h4" component="h1">
-            Strategy analysis
-          </Typography>
-          <span className="mode-badge">Historical backtest</span>
-          </Box>
-          <Typography variant="body2" color="textSecondary">
-            Configure a scenario and compare simulated performance with the benchmark.
-          </Typography>
-          <div className="context-strip">
-            <div><div className="eyebrow">Selected strategy</div><div className="context-value">{selectedStrategyInfo?.name || 'Unknown Strategy'}</div></div>
-            <div><div className="eyebrow">Configured research period</div><div className="context-value">{config.symbol} · {config.startDate} — {config.endDate}</div></div>
-          </div>
-        </Box>
+        <header className="analysis-toolbar">
+          <div><span className="eyebrow">Historical research</span><Typography component="h1" variant="h6">{selectedStrategyInfo?.name || 'Strategy analysis'}</Typography></div>
+          <div className="toolbar-context" aria-label="Configured scenario"><span>{config.symbol}</span><span>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(config.initialBalance)} USD</span><span>{config.startDate} — {config.endDate}</span></div>
+        </header>
 
         {/* Show loading state */}
         {loading && (
@@ -1579,7 +1590,7 @@ function Dashboard() {
               </Button>
             }
           >
-            <Typography variant="h6" gutterBottom>Backtest unavailable</Typography>
+            <Typography variant="h6" component="h2" gutterBottom>Backtest unavailable</Typography>
             <Typography variant="body1">{error}</Typography>
             <Typography variant="body2" sx={{ mt: 1 }}>
               {/network|service unavailable|ECONN/i.test(error) ? 'The local API at 127.0.0.1:8080 is unavailable. Use the sample chart to review the design.' : 'No new results were produced. Check the backtest service and requested date range.'}
@@ -1588,10 +1599,10 @@ function Dashboard() {
         )}
 
       {/* Configuration Form - always visible */}
-      <Paper key={selectedStrategy} component="form" className="scenario-surface workspace-panel" sx={{ mb: 3, p: { xs: 2, sm: 3 } }}>
-        <Typography variant="h6" component="h2" gutterBottom>Scenario configuration</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>These settings run a historical simulation; they do not place trades.</Typography>
+      <Paper key={selectedStrategy} component="form" data-strategy={selectedStrategy} className="scenario-surface workspace-panel" sx={{ mb: 2, p: 2 }}>
+        <div className="scenario-heading"><Typography component="h2" variant="subtitle2">Run settings</Typography><span>Historical simulation · No trades placed</span></div>
         <ParameterGrid container>
+          <Grid item xs={12} className="primary-run-action"><div className="form-actions"><Button variant="contained" color="primary" onClick={event => handleRunSimulation(event, true)} disabled={loading}>Run simulation</Button></div></Grid>
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactFormControl fullWidth size="small">
               <InputLabel id="symbol-label">Symbol</InputLabel>
@@ -1668,7 +1679,7 @@ function Dashboard() {
           
           {/* Additional Strategy Parameters */}
           <Grid item xs={12}>
-            <details className="advanced-settings" open>
+            <details className="advanced-settings">
               <summary>Advanced strategy parameters</summary>
               <ParameterGrid container>
           
@@ -2219,15 +2230,306 @@ function Dashboard() {
               </ParameterGrid>
             </details>
           </Grid>
-          <Grid item xs={12}>
-            <div className="form-actions">
-              <Button variant="contained" color="primary" onClick={event => handleRunSimulation(event, true)} disabled={loading}>Run simulation</Button>
-              <Typography variant="body2" color="text.secondary">Edit settings, then rerun to update the results.</Typography>
-            </div>
-          </Grid>
         </ParameterGrid>
       </Paper>
 
+      {!resultContext && !showPreview && <section className="empty-analysis" aria-label="Simulation overview">
+        <div className="empty-analysis-heading"><div><Typography component="h2" variant="subtitle1">Simulation overview</Typography><span>Run a scenario to populate this workspace</span></div><Button size="small" variant="outlined" onClick={() => { setShowPreview(true); setBackgroundScene(0); }}>Show sample chart</Button></div>
+        <dl className="empty-metrics">{['CAGR', 'Maximum drawdown', 'Sharpe ratio'].map(label => <div key={label}><dt>{label}</dt><dd>—<span>No completed run</span></dd></div>)}</dl>
+        <div className="empty-analysis-grid"><div className="empty-plot"><ShowChartRoundedIcon aria-hidden="true" /><Typography component="h3" variant="subtitle1">Portfolio comparison</Typography><p>{error ? 'The backtest service is unavailable.' : 'No simulation results yet.'} Your chart will appear here after a successful run.</p></div><div className="empty-cash"><h3>Income & costs</h3>{['Premiums received', 'Dividends received', 'Interest paid', 'ITM call closure costs', 'Withdrawals'].map(label => <div key={label}><span>{label}</span><span>—</span></div>)}<p>USD · Completed-run values only</p></div></div>
+      </section>}
+
+      {/* Performance Charts with Tabs - only show when we have data and no error */}
+      {!loading && !error && data && (
+      <Grid container spacing={2}>
+        <Grid item xs={12}>
+          <Paper elevation={2} className="analysis-results" style={{ '--panel-offset': tabDirection > 0 ? '24px' : '-24px' }} sx={{ overflow: 'hidden' }}>
+            {resultContext && (
+              <div className="result-context" aria-label="Result context">
+                <Typography variant="h6" component="h2">Historical simulation results</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {AVAILABLE_STRATEGIES.find(strategy => strategy.id === resultContext.strategyId)?.name} · {resultContext.config.symbol} · {resultContext.config.startDate} — {resultContext.config.endDate}
+                </Typography>
+                <details className="run-assumptions"><summary>Run context & assumptions</summary><Typography variant="caption" color="text.secondary" display="block">Calculated {new Date(resultContext.completedAt).toLocaleString()} (your local time). Hypothetical performance, not live results or a forecast. Market-data freshness, session and source time zone are not supplied by the service.</Typography></details>
+                {JSON.stringify(resultContext.config) !== JSON.stringify(config) && <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>Settings have changed. Rerun to update these results.</Typography>}
+              </div>
+            )}
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs
+                value={activeTab}
+                onChange={handleTabChange}
+                aria-label="chart tabs"
+                variant="scrollable"
+                scrollButtons="auto"
+              >
+                <Tab label="Performance" {...a11yProps(0)} />
+                <Tab label="Margin Ratio" {...a11yProps(1)} />
+                <Tab label="Cash Balance" {...a11yProps(2)} />
+                <Tab label="Premium & Interest" {...a11yProps(3)} />
+                <Tab label="Trading Logs" {...a11yProps(4)} />
+              </Tabs>
+            </Box>
+            
+            {/* Tab content for Performance Chart */}
+            <TabPanel value={activeTab} index={0}>
+              <div className="performance-overview"><PerformanceSummary data={data} resultContext={resultContext} /><div className="portfolio-chart">
+              <PerformanceChart data={data.chartData} strategyId={selectedStrategy} tooltip={<CustomTooltip />} /><details className="transaction-key"><summary>Transaction markers</summary>
+              {/* Custom legend for transaction markers */}
+              {selectedStrategy === 'SPY500_LEADER' ? (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2, p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '6px' }}>
+                      <path d="M8 1 l7 7 -7 7 -7 -7 Z" fill="#dddddd" />
+                    </svg>
+                    <Typography variant="body2">◆ Leader switch</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '6px' }}>
+                      <circle cx="8" cy="8" r="6" fill="none" stroke="#f5f5f5" strokeWidth="2" />
+                    </svg>
+                    <Typography variant="body2">○ Initial purchase</Typography>
+                  </Box>
+                </Box>
+              ) : (
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                    <polygon points="8,0 16,16 0,16" fill="#dddddd" />
+                  </svg>
+                  <Typography variant="body2">
+                    ▲ Purchases or written options (trading log)
+                  </Typography>
+                </Box>
+              )}
+              
+</details></div></div>
+            </TabPanel>
+            
+            {/* Tab content for Margin Ratio Chart */}
+            <TabPanel value={activeTab} index={1}>
+              <Typography variant="h6" gutterBottom>
+                Margin Ratio
+              </Typography>
+              <ExpandableChart title="Margin ratio chart">
+              <ResponsiveContainer width="100%" height={600}>
+                <LineChart
+                  data={data.marginData}
+                  margin={{ top: 20, right: 24, left: 8, bottom: 16 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="date"
+                    interval="preserveStartEnd"
+                    minTickGap={48}
+                    tickFormatter={value => String(value).slice(0, 7)}
+                    height={42}
+                    tickMargin={12}
+                  />
+                  <YAxis 
+                    domain={[0, 1]}
+                    tickFormatter={(value) => `${(value * 100).toFixed(0)}%`}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend 
+                    verticalAlign="top"
+                    height={36}
+                    wrapperStyle={{paddingBottom: '10px'}}
+                  />
+                  <Line 
+                    type="linear"
+                    isAnimationActive={false}
+                    dataKey="Margin_Ratio" 
+                    name="Margin Ratio" 
+                    stroke={chartColors.margin}
+                    dot={false}
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+              </ExpandableChart>
+            </TabPanel>
+            
+            {/* Tab content for Cash Balance Chart */}
+            <TabPanel value={activeTab} index={2}>
+              <Typography variant="h6" gutterBottom>
+                Cash Balance
+              </Typography>
+              <ExpandableChart title="Cash balance chart">
+              <ResponsiveContainer width="100%" height={600}>
+                <LineChart
+                  data={data.chartData}
+                  margin={{ top: 20, right: 24, left: 8, bottom: 16 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="date"
+                    interval="preserveStartEnd"
+                    minTickGap={48}
+                    tickFormatter={value => String(value).slice(0, 7)}
+                    height={42}
+                    tickMargin={12}
+                  />
+                  <YAxis 
+                    domain={['auto', 'auto']}
+                    width={88}
+                    tickFormatter={(value) => Math.abs(value) >= 1000 ? `$${(value / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : `$${value.toLocaleString()}`}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend 
+                    verticalAlign="top"
+                    height={36}
+                    wrapperStyle={{paddingBottom: '10px'}}
+                  />
+                  <Line 
+                    type="linear"
+                    isAnimationActive={false}
+                    dataKey="Cash_Balance" 
+                    name="Cash Balance" 
+                    stroke={chartColors.cash}
+                    dot={false}
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+              </ExpandableChart>
+            </TabPanel>
+            
+            {/* Combined tab content for Premium Received and Interest Paid */}
+            <TabPanel value={activeTab} index={3}>
+              <Typography variant="h6" gutterBottom>
+                Monthly Premium Received vs Interest Paid
+              </Typography>
+              
+              <Box sx={{ mb: 2 }}>
+                {data.totalPremiumsReceived > 0 && (
+                  <Alert severity="success" sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2">
+                      Total premiums received: ${data.totalPremiumsReceived.toFixed(2)}
+                    </Typography>
+                  </Alert>
+                )}
+                
+                {data.totalInterestPaid > 0 && (
+                  <Alert severity="info" sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2">
+                      Total interest paid: ${data.totalInterestPaid.toFixed(2)}
+                    </Typography>
+                  </Alert>
+                )}
+                
+                {data.totalPremiumsReceived > 0 && data.totalInterestPaid > 0 && (
+                  <Alert severity={data.totalPremiumsReceived > data.totalInterestPaid ? "success" : "warning"} sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2">
+                      Net premium after interest: ${(data.totalPremiumsReceived - data.totalInterestPaid).toFixed(2)}
+                    </Typography>
+                  </Alert>
+                )}
+              </Box>
+              
+              {data.combinedData && data.combinedData.length > 0 ? (
+                <ExpandableChart title="Premium and interest chart">
+              <ResponsiveContainer width="100%" height={600}>
+                  <ComposedChart
+                    data={data.combinedData}
+                    margin={{ top: 20, right: 24, left: 8, bottom: 16 }}
+                    barGap={0}
+                    barCategoryGap="20%"
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="month"
+                      interval="preserveStartEnd"
+                      minTickGap={48}
+                      tickFormatter={value => String(value).slice(0, 7)}
+                      height={42}
+                      tickMargin={12}
+                    />
+                    <YAxis 
+                      domain={[0, 'auto']}
+                      width={88}
+                      tickFormatter={(value) => Math.abs(value) >= 1000 ? `$${(value / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : `$${value.toLocaleString()}`}
+                      label={{ value: 'Amount ($)', angle: -90, position: 'insideLeft' }}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend 
+                      verticalAlign="top"
+                      height={36}
+                      wrapperStyle={{paddingBottom: '10px'}}
+                    />
+                    <Bar 
+                      dataKey="Premiums_Received" 
+                      name="Premium Received" 
+                      fill={chartColors.premium}
+                      isAnimationActive={false}
+                      barSize={30} 
+                    />
+                    <Bar 
+                      dataKey="Interest_Paid" 
+                      name="Interest Paid" 
+                      fill={chartColors.interest}
+                      isAnimationActive={false}
+                      barSize={30}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </ExpandableChart>
+              ) : (
+                <Box mt={2} textAlign="center" height={600} display="flex" alignItems="center" justifyContent="center">
+                  <Typography variant="body1" color="textSecondary">
+                    No premium or interest data available for the selected period
+                  </Typography>
+                </Box>
+              )}
+            </TabPanel>
+            
+            {/* Tab content for Trading Logs (now index 4) */}
+            <TabPanel value={activeTab} index={4}>
+              <Typography variant="h6" gutterBottom>
+                Trading Logs
+              </Typography>
+              
+
+              {data.tradingLogs && data.tradingLogs.length > 0 ? (
+                <Box sx={{ mb: 2, maxHeight: '600px', overflowY: 'auto' }}>
+                  {data.tradingLogs.map(({ date, log, isTransaction }) => (
+                    <Paper key={date} sx={{ p: 2, mb: 1, bgcolor: 'background.paper', borderLeft: 3, borderLeftColor: log.toLowerCase().includes('assigned') ? 'warning.main' : isTransaction ? 'primary.main' : 'divider' }}>
+                      <Typography variant="subtitle2" gutterBottom color="primary" fontWeight="bold">
+                        Transaction Date: {date}
+                      </Typography>
+                      <Typography variant="body2" component="pre" sx={{ 
+                        whiteSpace: 'pre-wrap', 
+                        wordBreak: 'break-word',
+                        fontFamily: 'monospace',
+                        fontSize: '0.85rem'
+                      }}>
+                        {log}
+                      </Typography>
+                      {log.toLowerCase().includes('assigned') && log.toLowerCase().includes('cost') && (
+                        <Typography variant="body2" color="error" sx={{ mt: 0.5, fontWeight: 'bold' }}>
+                          Assigned Options Event
+                        </Typography>
+                      )}
+                      {isTransaction && !log.toLowerCase().includes('assigned') && (
+                        <Typography variant="body2" color="success.main" sx={{ mt: 0.5, fontWeight: 'bold' }}>
+                          {log.toLowerCase().includes('wrote') ? '📝 Option Written' :
+                           log.toLowerCase().includes('dividend') ? 'Dividend Received' :
+                           log.toLowerCase().includes('buy') ? '🔼 Buy Transaction' :
+                           log.toLowerCase().includes('sell') ? '🔽 Sell Transaction' :
+                           '💼 Trading Activity'}
+                        </Typography>
+                      )}
+                    </Paper>
+                  ))}
+                </Box>
+              ) : (
+                <Alert severity="info">
+                  No trading logs available for the selected period.
+                </Alert>
+              )}
+            </TabPanel>
+          </Paper>
+        </Grid>
+      </Grid>
+      )}
       {/* IV Statistics Card (OPTIONS_MARTIN only) */}
       {(() => {
         console.log('🎯 IV Card Render Check:');
@@ -2294,307 +2596,14 @@ function Dashboard() {
                 </Grid>
               </Grid>
               <Typography variant="caption" sx={{ mt: 1, display: 'block', fontStyle: 'italic' }}>
-                💡 Use these values to tune IV_ENTRY_THRESHOLD (entry when low) and IV_EXIT_THRESHOLD (exit when high)
+                Use these values to tune IV_ENTRY_THRESHOLD (entry when low) and IV_EXIT_THRESHOLD (exit when high)
               </Typography>
             </Paper>
           </Grid>
         </Grid>
       )}
 
-      {/* Performance Charts with Tabs - only show when we have data and no error */}
-      {!loading && !error && data && (
-      <Grid container spacing={2}>
-        <Grid item xs={12}>
-          <Paper elevation={2} className="analysis-results" style={{ '--panel-offset': tabDirection > 0 ? '24px' : '-24px' }} sx={{ overflow: 'hidden' }}>
-            {resultContext && (
-              <div className="result-context" aria-label="Result context">
-                <Typography variant="h6" component="h2">Historical simulation results</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {AVAILABLE_STRATEGIES.find(strategy => strategy.id === resultContext.strategyId)?.name} · {resultContext.config.symbol} · {resultContext.config.startDate} — {resultContext.config.endDate} · Calculated {new Date(resultContext.completedAt).toLocaleString()} (your local time)
-                </Typography>
-                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
-                  Hypothetical performance, not live results or a forecast. Market-data freshness, session and source time zone are not supplied by the service.
-                </Typography>
-                {JSON.stringify(resultContext.config) !== JSON.stringify(config) && <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>Settings have changed. Rerun to update these results.</Typography>}
-              </div>
-            )}
-            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-              <Tabs
-                value={activeTab}
-                onChange={handleTabChange}
-                aria-label="chart tabs"
-                variant="scrollable"
-                scrollButtons="auto"
-              >
-                <Tab label="Performance" {...a11yProps(0)} />
-                <Tab label="Margin Ratio" {...a11yProps(1)} />
-                <Tab label="Cash Balance" {...a11yProps(2)} />
-                <Tab label="Premium & Interest" {...a11yProps(3)} />
-                <Tab label="Trading Logs" {...a11yProps(4)} />
-              </Tabs>
-            </Box>
-            
-            {/* Tab content for Performance Chart */}
-            <TabPanel value={activeTab} index={0}>
-              <PerformanceSummary data={data} resultContext={resultContext} />
-              <Typography variant="h6" gutterBottom>
-                Portfolio comparison
-              </Typography>
-              
-              {/* Custom legend for transaction markers */}
-              {selectedStrategy === 'SPY500_LEADER' ? (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2, p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '6px' }}>
-                      <path d="M8 1 l7 7 -7 7 -7 -7 Z" fill="#dddddd" />
-                    </svg>
-                    <Typography variant="body2">◆ Leader switch</Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '6px' }}>
-                      <circle cx="8" cy="8" r="6" fill="none" stroke="#f5f5f5" strokeWidth="2" />
-                    </svg>
-                    <Typography variant="body2">○ Initial purchase</Typography>
-                  </Box>
-                </Box>
-              ) : (
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
-                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                    <polygon points="8,0 16,16 0,16" fill="#dddddd" />
-                  </svg>
-                  <Typography variant="body2">
-                    ▲ Purchases or written options (trading log)
-                  </Typography>
-                </Box>
-              )}
-              
-              <PerformanceChart data={data.chartData} strategyId={selectedStrategy} tooltip={<CustomTooltip />} />
-            </TabPanel>
-            
-            {/* Tab content for Margin Ratio Chart */}
-            <TabPanel value={activeTab} index={1}>
-              <Typography variant="h6" gutterBottom>
-                Margin Ratio
-              </Typography>
-              <ResponsiveContainer width="100%" height={600}>
-                <LineChart
-                  data={data.marginData}
-                  margin={{ top: 20, right: 24, left: 8, bottom: 16 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="date"
-                    interval="preserveStartEnd"
-                    minTickGap={48}
-                    tickFormatter={value => String(value).slice(0, 7)}
-                    height={42}
-                    tickMargin={12}
-                  />
-                  <YAxis 
-                    domain={[0, 1]}
-                    tickFormatter={(value) => `${(value * 100).toFixed(0)}%`}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend 
-                    verticalAlign="top"
-                    height={36}
-                    wrapperStyle={{paddingBottom: '10px'}}
-                  />
-                  <Line 
-                    type="linear"
-                    isAnimationActive={false}
-                    dataKey="Margin_Ratio" 
-                    name="Margin Ratio" 
-                    stroke={chartColors.margin}
-                    dot={false}
-                    strokeWidth={2}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </TabPanel>
-            
-            {/* Tab content for Cash Balance Chart */}
-            <TabPanel value={activeTab} index={2}>
-              <Typography variant="h6" gutterBottom>
-                Cash Balance
-              </Typography>
-              <ResponsiveContainer width="100%" height={600}>
-                <LineChart
-                  data={data.chartData}
-                  margin={{ top: 20, right: 24, left: 8, bottom: 16 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="date"
-                    interval="preserveStartEnd"
-                    minTickGap={48}
-                    tickFormatter={value => String(value).slice(0, 7)}
-                    height={42}
-                    tickMargin={12}
-                  />
-                  <YAxis 
-                    domain={['auto', 'auto']}
-                    width={88}
-                    tickFormatter={(value) => Math.abs(value) >= 1000 ? `$${(value / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : `$${value.toLocaleString()}`}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend 
-                    verticalAlign="top"
-                    height={36}
-                    wrapperStyle={{paddingBottom: '10px'}}
-                  />
-                  <Line 
-                    type="linear"
-                    isAnimationActive={false}
-                    dataKey="Cash_Balance" 
-                    name="Cash Balance" 
-                    stroke={chartColors.cash}
-                    dot={false}
-                    strokeWidth={2}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </TabPanel>
-            
-            {/* Combined tab content for Premium Received and Interest Paid */}
-            <TabPanel value={activeTab} index={3}>
-              <Typography variant="h6" gutterBottom>
-                Monthly Premium Received vs Interest Paid
-              </Typography>
-              
-              <Box sx={{ mb: 2 }}>
-                {data.totalPremiumsReceived > 0 && (
-                  <Alert severity="success" sx={{ mb: 1 }}>
-                    <Typography variant="subtitle2">
-                      Total premiums received: ${data.totalPremiumsReceived.toFixed(2)}
-                    </Typography>
-                  </Alert>
-                )}
-                
-                {data.totalInterestPaid > 0 && (
-                  <Alert severity="info" sx={{ mb: 1 }}>
-                    <Typography variant="subtitle2">
-                      Total interest paid: ${data.totalInterestPaid.toFixed(2)}
-                    </Typography>
-                  </Alert>
-                )}
-                
-                {data.totalPremiumsReceived > 0 && data.totalInterestPaid > 0 && (
-                  <Alert severity={data.totalPremiumsReceived > data.totalInterestPaid ? "success" : "warning"} sx={{ mb: 1 }}>
-                    <Typography variant="subtitle2">
-                      Net premium after interest: ${(data.totalPremiumsReceived - data.totalInterestPaid).toFixed(2)}
-                    </Typography>
-                  </Alert>
-                )}
-              </Box>
-              
-              {data.combinedData && data.combinedData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={600}>
-                  <ComposedChart
-                    data={data.combinedData}
-                    margin={{ top: 20, right: 24, left: 8, bottom: 16 }}
-                    barGap={0}
-                    barCategoryGap="20%"
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis 
-                      dataKey="month"
-                      interval="preserveStartEnd"
-                      minTickGap={48}
-                      tickFormatter={value => String(value).slice(0, 7)}
-                      height={42}
-                      tickMargin={12}
-                    />
-                    <YAxis 
-                      domain={[0, 'auto']}
-                      width={88}
-                      tickFormatter={(value) => Math.abs(value) >= 1000 ? `$${(value / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : `$${value.toLocaleString()}`}
-                      label={{ value: 'Amount ($)', angle: -90, position: 'insideLeft' }}
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend 
-                      verticalAlign="top"
-                      height={36}
-                      wrapperStyle={{paddingBottom: '10px'}}
-                    />
-                    <Bar 
-                      dataKey="Premiums_Received" 
-                      name="Premium Received" 
-                      fill={chartColors.premium}
-                      isAnimationActive={false}
-                      barSize={30} 
-                    />
-                    <Bar 
-                      dataKey="Interest_Paid" 
-                      name="Interest Paid" 
-                      fill={chartColors.interest}
-                      isAnimationActive={false}
-                      barSize={30}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              ) : (
-                <Box mt={2} textAlign="center" height={600} display="flex" alignItems="center" justifyContent="center">
-                  <Typography variant="body1" color="textSecondary">
-                    No premium or interest data available for the selected period
-                  </Typography>
-                </Box>
-              )}
-            </TabPanel>
-            
-            {/* Tab content for Trading Logs (now index 4) */}
-            <TabPanel value={activeTab} index={4}>
-              <Typography variant="h6" gutterBottom>
-                Trading Logs
-              </Typography>
-              
-
-              {data.tradingLogs && data.tradingLogs.length > 0 ? (
-                <Box sx={{ mb: 2, maxHeight: '600px', overflowY: 'auto' }}>
-                  {data.tradingLogs.map(({ date, log, isTransaction }) => (
-                    <Paper key={date} sx={{ p: 2, mb: 1, bgcolor: 'background.paper', borderLeft: 3, borderLeftColor: log.toLowerCase().includes('assigned') ? 'warning.main' : isTransaction ? 'primary.main' : 'divider' }}>
-                      <Typography variant="subtitle2" gutterBottom color="primary" fontWeight="bold">
-                        Transaction Date: {date}
-                      </Typography>
-                      <Typography variant="body2" component="pre" sx={{ 
-                        whiteSpace: 'pre-wrap', 
-                        wordBreak: 'break-word',
-                        fontFamily: 'monospace',
-                        fontSize: '0.85rem'
-                      }}>
-                        {log}
-                      </Typography>
-                      {log.toLowerCase().includes('assigned') && log.toLowerCase().includes('cost') && (
-                        <Typography variant="body2" color="error" sx={{ mt: 0.5, fontWeight: 'bold' }}>
-                          ⚠️ Assigned Options Event
-                        </Typography>
-                      )}
-                      {isTransaction && !log.toLowerCase().includes('assigned') && (
-                        <Typography variant="body2" color="success.main" sx={{ mt: 0.5, fontWeight: 'bold' }}>
-                          {log.toLowerCase().includes('wrote') ? '📝 Option Written' :
-                           log.toLowerCase().includes('dividend') ? '💰 Dividend Received' :
-                           log.toLowerCase().includes('buy') ? '🔼 Buy Transaction' :
-                           log.toLowerCase().includes('sell') ? '🔽 Sell Transaction' :
-                           '💼 Trading Activity'}
-                        </Typography>
-                      )}
-                    </Paper>
-                  ))}
-                </Box>
-              ) : (
-                <Alert severity="info">
-                  No trading logs available for the selected period.
-                </Alert>
-              )}
-            </TabPanel>
-          </Paper>
-        </Grid>
-      </Grid>
-      )}
-      <Box component="section" aria-label="UI testing tools" className="testing-tools" sx={{ mt: 4, pt: 3, borderTop: 1, borderColor: 'divider' }}>
-        <Typography variant="overline" component="h2">Testing feature only</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Fictional charts for checking the UI—not simulation results.</Typography>
-        {!showPreview && <Button variant="outlined" onClick={() => { setShowPreview(true); setBackgroundScene(0); }}>Show sample chart</Button>}
+      <Box component="section" aria-label="UI testing tools" className="testing-tools">
         {showPreview && <SampleChartPreview onClose={() => { setShowPreview(false); setBackgroundScene(activeTab); }} onTabChange={value => { setSimulationRun(0); setNavigationRun(run => run + 1); setBackgroundScene(value); }} />}
       </Box>
       </MainContent>
