@@ -32,7 +32,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `POST /api/market-data/refresh/<symbol>` - Refresh market data from IBKR
 - `GET /api/market-data/status/<symbol>` - Check data availability and coverage
 - `GET /api/market-data/test-connection` - Test IBKR TWS/Gateway connection
-- Connects to IB Gateway on the trade-engine Linux server (IBKR_HOST/IBKR_PORT in backend/services/.env; Gateway ports are 4001 live, 4002 paper)
+- Connects to IB Gateway (paper, port 4002) on the trade-engine Linux server through an SSH tunnel: `ssh -N -L 4002:localhost:4002 <user>@trade-engine.local`, with IBKR_HOST=127.0.0.1 and IBKR_PORT=4002 in backend/services/.env
 
 ## Architecture Overview
 

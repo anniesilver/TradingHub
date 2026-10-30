@@ -35,7 +35,7 @@ DB_CONFIG = {
 # IBKR configuration
 IBKR_CONFIG = {
     "host": os.environ.get("IBKR_HOST", "127.0.0.1"),
-    "port": int(os.environ.get("IBKR_PORT", "4001")),
+    "port": int(os.environ.get("IBKR_PORT", "4002")),
     "client_id": int(os.environ.get("IBKR_CLIENT_ID", "123")),
 }
 
