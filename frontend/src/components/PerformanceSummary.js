@@ -66,7 +66,6 @@ export default function PerformanceSummary({ data, resultContext, sample = false
       <div><span className="eyebrow">Return · Risk · Cash flows</span><h3 id={`${id}-title`}>{sample ? 'Sample performance summary' : 'Performance summary'}</h3></div>
       <p>{sample ? 'Fictional example' : 'Historical backtest'} <span aria-hidden="true">·</span> USD</p>
     </div>
-    {sample && <p className="chart-note">Fixed example statistics for layout testing only—not calculated from the chart or a simulation.</p>}
     <dl className="performance-headlines">
       <HeadlineMetric label="CAGR" value={cagrAvailable ? percent(data.annualizedReturn) : 'N/A'} caption="Withdrawal-adjusted · annualized" help={cagrHelp} />
       <HeadlineMetric label="Maximum drawdown (MDD)" value={points.length ? percent(data.maxDrawdown) : 'N/A'} caption="Largest recorded peak-to-trough decline" help={drawdownHelp} />

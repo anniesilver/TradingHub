@@ -1,6 +1,7 @@
 import React, { useId, useState } from 'react';
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts';
 import { chartColors } from './chartColors';
+import ExpandableChart from './ExpandableChart';
 
 const currency = value => `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const shortCurrency = value => Math.abs(value) >= 1000 ? `$${(value / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : currency(value);
@@ -12,7 +13,7 @@ export default function PerformanceChart({ data, strategyId, tooltip, sample = f
   if (!data.length) return <p>No recorded performance data available.</p>;
 
   return (
-    <figure className="performance-figure" aria-labelledby={`${id}-caption`}>
+    <ExpandableChart title={sample ? 'Sample performance chart' : 'Portfolio performance chart'} sample={sample}><figure className="performance-figure" aria-labelledby={`${id}-caption`}>
       <figcaption id={`${id}-caption`} className="chart-heading">
         <div><div className="eyebrow">{sample ? 'Illustrative strategy' : 'Strategy value'}</div><div className="chart-value">{currency(last.Portfolio_Value)}</div></div>
         <div><div className="eyebrow">{sample ? 'Illustrative benchmark' : 'SPY buy & hold'}</div><div className="chart-value chart-value-secondary">{currency(last.spy_value)}</div></div>
@@ -37,8 +38,8 @@ export default function PerformanceChart({ data, strategyId, tooltip, sample = f
         </ResponsiveContainer>
       </div>
       <p className="chart-note">{data[0].date} — {last.date} · {data.length.toLocaleString()} recorded points · USD</p>
-      <details className="chart-data" onToggle={event => setShowValues(event.currentTarget.open)}>
-        <summary>View chart values</summary>
+      <details className="chart-data" open={showValues}>
+        <summary onClick={event => { event.preventDefault(); setShowValues(value => !value); }}>View chart values</summary>
         {showValues && (
           <div className="chart-table-scroll">
             <table>
@@ -62,6 +63,6 @@ export default function PerformanceChart({ data, strategyId, tooltip, sample = f
           </div>
         )}
       </details>
-    </figure>
+    </figure></ExpandableChart>
   );
 }

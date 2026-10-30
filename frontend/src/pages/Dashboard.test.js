@@ -13,6 +13,40 @@ import { computeSharpeRatio } from './performanceMetrics';
 jest.mock('../services/simulationService', () => ({ runSimulation: jest.fn() }));
 
 const originalResizeObserver = global.ResizeObserver;
+test('configured starting capital preserves cents without requesting another simulation', async () => {
+  render(<Dashboard />);
+  await screen.findByText('Backtest service unavailable');
+  const calls = runSimulation.mock.calls.length;
+  fireEvent.change(screen.getByLabelText('Initial Balance'), { target: { value: '200000.50' } });
+  expect(screen.getByText('$200,000.50 USD')).toBeInTheDocument();
+  expect(runSimulation).toHaveBeenCalledTimes(calls);
+});
+
+test('compact strategy navigation closes with Escape or a selection and returns focus', async () => {
+  render(<Dashboard />);
+  await screen.findByText('Backtest service unavailable');
+  const menu = screen.getByRole('button', { name: 'Toggle strategy navigation' });
+  const calls = runSimulation.mock.calls.length;
+  fireEvent.click(menu);
+  expect(menu).toHaveAttribute('aria-expanded', 'true');
+  screen.getByRole('button', { name: 'SPY Enhanced Cashflow' }).focus();
+  fireEvent.keyDown(document.activeElement, { key: 'Escape' });
+  expect(menu).toHaveAttribute('aria-expanded', 'false');
+  expect(menu).toHaveFocus();
+  expect(runSimulation).toHaveBeenCalledTimes(calls);
+  fireEvent.click(menu);
+  fireEvent.click(screen.getByRole('button', { name: 'SPY Power Cashflow' }));
+  expect(menu).toHaveAttribute('aria-expanded', 'false');
+  expect(menu).toHaveFocus();
+  expect(runSimulation).toHaveBeenCalledTimes(calls);
+  fireEvent.click(menu);
+  fireEvent.click(screen.getByRole('button', { name: 'SPY Enhanced Cashflow' }));
+  await screen.findByText('Backtest service unavailable');
+  expect(menu).toHaveAttribute('aria-expanded', 'false');
+  expect(menu).toHaveFocus();
+  expect(screen.getByRole('button', { name: 'SPY Enhanced Cashflow' })).toHaveAttribute('aria-current', 'page');
+});
+
 test('only Power Cashflow hides its unused fields, without losing their values', async () => {
   render(<Dashboard />);
   await screen.findByText('Backtest service unavailable');
@@ -46,34 +80,35 @@ test('strategy navigation and header occupy separate in-flow grid cells', async 
   const rail = screen.getByRole('navigation', { name: 'Trading strategies' });
   const main = screen.getByRole('main');
   expect(rail.parentElement).toBe(main.parentElement);
-  expect(rail.parentElement).toHaveStyle({ display: 'grid', gridTemplateColumns: '184px minmax(0, 1fr)' });
+  expect(rail.parentElement).toHaveStyle({ display: 'grid', gridTemplateColumns: '232px minmax(0, 1fr)' });
   expect(rail).toHaveStyle({ position: 'relative' });
   expect(main).toHaveAttribute('id', 'analysis-workspace');
-  expect(within(main).getByText('Configured research period').closest('.context-strip')).toBeInTheDocument();
+  expect(within(main).getByLabelText('Configured scenario')).toHaveTextContent('SPY');
   expect(container.querySelector('.MuiDrawer-paper')).toBeNull();
   expect(within(rail).getByRole('button', { name: 'SPY Power Cashflow' })).toHaveAttribute('aria-current', 'page');
-  expect(within(main).getByRole('heading', { name: 'Strategy analysis' })).toBeVisible();
+  expect(within(main).getByRole('heading', { name: 'SPY Power Cashflow' })).toBeVisible();
   const run = screen.getByRole('button', { name: 'Run simulation' });
   expect(run.closest('.form-actions').firstElementChild).toBe(run);
+  expect(run.closest('.MuiGrid-container').firstElementChild).toBe(run.closest('.primary-run-action'));
 });
 
-test('Folded Light keeps its palette in glass/solid and light/dark without rerunning or resetting the scenario', async () => {
+test('the reference palette supports glass/solid and light/dark without rerunning or resetting the scenario', async () => {
   const { container } = render(<App />);
   await screen.findByText('Backtest service unavailable');
   fireEvent.change(screen.getByLabelText('Initial Balance'), { target: { value: '456000' } });
   const calls = runSimulation.mock.calls.length;
   const app = container.querySelector('.app');
-  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#4F46E5');
+  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#052659');
   fireEvent.click(screen.getByRole('checkbox', { name: 'Solid surfaces' }));
   expect(container.querySelector('.workspace-wave-backdrop')).toBeNull();
-  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#4F46E5');
+  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#052659');
   fireEvent.click(screen.getByRole('checkbox', { name: 'Light mode' }));
-  expect(app.style.getPropertyValue('--workspace-bg')).toBe('#1B385A');
-  expect(app.style.getPropertyValue('--chart-surface')).toBe('#2B5278');
-  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#ADD7FF');
+  expect(app.style.getPropertyValue('--workspace-bg')).toBe('#021024');
+  expect(app.style.getPropertyValue('--chart-surface')).toBe('#071A32');
+  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#C1E8FF');
   fireEvent.click(screen.getByRole('checkbox', { name: 'Solid surfaces' }));
   expect(container.querySelector('.workspace-wave-backdrop')).toBeInTheDocument();
-  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#ADD7FF');
+  expect(app.style.getPropertyValue('--workspace-accent')).toBe('#C1E8FF');
   expect(screen.getByLabelText('Initial Balance')).toHaveValue(456000);
   expect(runSimulation).toHaveBeenCalledTimes(calls);
 });
@@ -161,7 +196,7 @@ test('light is the default and theme switching preserves parameters without requ
   expect(screen.getByLabelText('Initial Balance')).toHaveValue(321000);
   expect(runSimulation).toHaveBeenCalledTimes(calls);
   expect(createWorkspaceTheme('light').palette.mode).toBe('light');
-  expect(createWorkspaceTheme('light').shape.borderRadius).toBe(3);
+  expect(createWorkspaceTheme('light').shape.borderRadius).toBe(12);
   fireEvent.click(screen.getByRole('checkbox', { name: 'Light mode' }));
   expect(container.querySelector('.app')).toHaveAttribute('data-theme', 'light');
 });
@@ -197,8 +232,8 @@ afterAll(() => {
 test('labels the historical workspace and exposes session-only accessibility preferences', async () => {
   const { container } = render(<Dashboard />);
   await screen.findByText('Backtest service unavailable');
-  expect(screen.getByRole('heading', { level: 1, name: 'Strategy analysis' })).toBeInTheDocument();
-  expect(screen.getByText('Historical backtest')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { level: 1, name: 'SPY Power Cashflow' })).toBeInTheDocument();
+  expect(within(screen.getByRole('main')).getByText('Historical research')).toBeInTheDocument();
   expect(screen.getByRole('navigation', { name: 'Trading strategies' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /^SPY Power Cashflow/ })).toHaveAttribute('aria-current', 'page');
   expect(screen.getByRole('link', { name: 'Skip to analysis' })).toHaveAttribute('href', '#analysis-workspace');
@@ -265,7 +300,6 @@ test('sample preview is explicit, isolated from the API, and slides in both dire
   fireEvent.click(screen.getByRole('button', { name: 'Show sample chart' }));
   expect(screen.getByRole('region', { name: 'Sample chart preview' })).toBeInTheDocument();
   expect(screen.getByText(/Fictional data for UI review only/)).toBeInTheDocument();
-  expect(screen.getByText('Testing feature only')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Sample chart preview · Testing only' })).toBeInTheDocument();
   expect(container.querySelector('main').lastElementChild).toBe(container.querySelector('.testing-tools'));
   expect(chartColors.strategy).toContain('--chart-strategy');
@@ -325,6 +359,7 @@ test.each([
   }
   await screen.findByText('Backtest service unavailable');
 
+  fireEvent.click(screen.getByText('Advanced strategy parameters'));
   // MUI Select renders a visible control plus an aria-hidden internal input.
   const inputs = container.querySelectorAll(
     'form input:not([aria-hidden="true"]), form [role="combobox"], form [role="button"][aria-haspopup="listbox"]'
@@ -512,6 +547,7 @@ test('IV help stays available when its entry threshold is disabled', async () =>
   render(<Dashboard />);
   fireEvent.click(screen.getByText('Options Martingale'));
   await screen.findByText('Backtest service unavailable');
+  fireEvent.click(screen.getByText('Advanced strategy parameters'));
   fireEvent.click(screen.getByRole('checkbox', { name: 'Enable IV Entry Filter' }));
   const threshold = screen.getByLabelText(/^IV Entry Threshold/);
   expect(threshold).toBeDisabled();
@@ -538,3 +574,80 @@ test('keyboard focus reveals help and Escape dismisses it', async () => {
   userEvent.keyboard('{Escape}');
   await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
 });
+
+
+test('advanced parameters are opt-in and retain edits without running a simulation', async () => {
+  const { container } = render(<App />);
+  await screen.findByText('Backtest service unavailable');
+  const panel = container.querySelector('.advanced-settings');
+  expect(panel).not.toHaveAttribute('open');
+  const calls = runSimulation.mock.calls.length;
+  fireEvent.click(screen.getByText('Advanced strategy parameters'));
+  expect(panel).toHaveAttribute('open');
+  fireEvent.change(screen.getByLabelText('Contract Size'), { target: { value: '125' } });
+  fireEvent.click(screen.getByText('Advanced strategy parameters'));
+  expect(panel).not.toHaveAttribute('open');
+  fireEvent.click(screen.getByText('Advanced strategy parameters'));
+  expect(screen.getByLabelText('Contract Size')).toHaveValue(125);
+  expect(runSimulation).toHaveBeenCalledTimes(calls);
+});
+
+test('unavailable results keep an honest empty overview instead of invented values', async () => {
+  render(<App />);
+  await screen.findByText('Backtest service unavailable');
+  const overview = screen.getByRole('region', { name: 'Simulation overview' });
+  expect(within(overview).getAllByText('No completed run')).toHaveLength(3);
+  expect(within(overview).getByRole('button', { name: 'Show sample chart' })).toBeVisible();
+  expect(screen.queryByText('15.70%')).not.toBeInTheDocument();
+});
+
+
+test('sample chart expansion preserves the scenario and table, supports Escape, and restores focus', async () => {
+  render(<App />);
+  await screen.findByText('Backtest service unavailable');
+  fireEvent.change(screen.getByLabelText('Initial Balance'), { target: { value: '212345.67' } });
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Light mode' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Show sample chart' }));
+  fireEvent.click(screen.getByText('View chart values'));
+  const calls = runSimulation.mock.calls.length;
+  const expand = screen.getByRole('button', { name: 'Expand Sample performance chart' });
+  userEvent.click(expand);
+  const dialog = await screen.findByRole('dialog', { name: 'Sample performance chart' });
+  expect(dialog).toHaveTextContent('Fictional sample · UI testing only');
+  expect(within(dialog).getByRole('button', { name: 'Close chart' })).toHaveFocus();
+  expect(dialog.closest('.expanded-chart-dialog').style.getPropertyValue('--chart-surface')).toBe('#071A32');
+  expect(within(dialog).getByRole('table')).toHaveTextContent('2024-12-01');
+  expect(within(dialog).getByText('$115,100')).toBeInTheDocument();
+  userEvent.keyboard('{Escape}');
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(expand).toHaveFocus();
+  expect(screen.getByLabelText('Initial Balance')).toHaveValue(212345.67);
+  expect(screen.getByRole('table')).toHaveTextContent('2024-12-01');
+  expect(runSimulation).toHaveBeenCalledTimes(calls);
+  for (const [tab, title] of [['Margin', 'Sample margin chart'], ['Cash', 'Sample cash chart']]) {
+    fireEvent.click(screen.getByRole('tab', { name: tab }));
+    userEvent.click(screen.getByRole('button', { name: `Expand ${title}` }));
+    expect(await screen.findByRole('dialog', { name: title })).toHaveTextContent('Fictional sample');
+    userEvent.click(screen.getByRole('button', { name: 'Close chart' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  }
+  expect(runSimulation).toHaveBeenCalledTimes(calls);
+}, 15000);
+
+test('completed-run charts expand without recalculating or replacing run context', async () => {
+  runSimulation.mockResolvedValue(summaryRun);
+  render(<App />);
+  await screen.findByRole('heading', { name: 'Historical simulation results' });
+  const calls = runSimulation.mock.calls.length;
+  for (const [tab, title] of [['Performance', 'Portfolio performance chart'], ['Margin Ratio', 'Margin ratio chart'], ['Cash Balance', 'Cash balance chart'], ['Premium & Interest', 'Premium and interest chart']]) {
+    fireEvent.click(screen.getByRole('tab', { name: tab }));
+    userEvent.click(screen.getByRole('button', { name: `Expand ${title}` }));
+    const dialog = await screen.findByRole('dialog', { name: title });
+    expect(dialog).toHaveTextContent('Historical simulation · Completed-run values');
+    expect(dialog).not.toHaveTextContent('Fictional sample');
+    userEvent.click(within(dialog).getByRole('button', { name: 'Close chart' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('heading', { name: 'Historical simulation results' })).toBeInTheDocument();
+  }
+  expect(runSimulation).toHaveBeenCalledTimes(calls);
+}, 15000);
