@@ -15,6 +15,11 @@ from ibapi.contract import Contract
 from ibapi.wrapper import EWrapper
 from psycopg2.extras import DictCursor
 
+try:
+    from .ibkr_tunnel import ensure_tunnel
+except ImportError:
+    from ibkr_tunnel import ensure_tunnel
+
 # Load environment variables
 env_path = os.path.join(os.path.dirname(__file__), ".env")
 if os.path.exists(env_path):
@@ -35,7 +40,7 @@ DB_CONFIG = {
 # IBKR configuration
 IBKR_CONFIG = {
     "host": os.environ.get("IBKR_HOST", "127.0.0.1"),
-    "port": int(os.environ.get("IBKR_PORT", "7496")),
+    "port": int(os.environ.get("IBKR_PORT", "4002")),
     "client_id": int(os.environ.get("IBKR_CLIENT_ID", "124")),  # Different from stock client
 }
 
@@ -95,8 +100,10 @@ class IBKROptionClient(EWrapper, EClient):
             logger.info(f"IV data request {reqId} completed. Received {len(self.iv_data)} bars")
             self.iv_data_received.set()
 
-    def connect_to_ibkr(self, host: str = "127.0.0.1", port: int = 7496) -> bool:
+    def connect_to_ibkr(self, host: str = IBKR_CONFIG["host"], port: int = IBKR_CONFIG["port"]) -> bool:
         """Connect to IBKR TWS/Gateway"""
+        if not ensure_tunnel(host, port):
+            return False
         try:
             self.connect(host, port, self.client_id)
             logger.info("Option client connection successful")

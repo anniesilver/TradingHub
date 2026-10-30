@@ -7,6 +7,9 @@ from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'services'))
+from ibkr_data_service import IBKR_CONFIG
+
 class TestStockDataClient(EWrapper, EClient):
     """Test client to fetch both TRADES and IV from stock"""
 
@@ -18,7 +21,7 @@ class TestStockDataClient(EWrapper, EClient):
         self.trades_received = threading.Event()
         self.iv_received = threading.Event()
 
-    def connect_to_ibkr(self, host="127.0.0.1", port=7496):
+    def connect_to_ibkr(self, host=IBKR_CONFIG["host"], port=IBKR_CONFIG["port"]):
         """Connect to IBKR"""
         try:
             self.connect(host, port, self.client_id)
@@ -73,7 +76,7 @@ def test_stock_data_match():
 
     try:
         # Connect
-        if not client.connect_to_ibkr("127.0.0.1", 7496):
+        if not client.connect_to_ibkr(IBKR_CONFIG["host"], IBKR_CONFIG["port"]):
             print("❌ Failed to connect to IBKR")
             return False
 
