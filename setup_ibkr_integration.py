@@ -66,7 +66,7 @@ def main():
     print("2. Configure API settings in TWS/Gateway:")
     print("   - Enable API connections")
     print("   - Set socket port (IB Gateway default: 4001 live, 4002 paper)")
-    print("   - For the trade-engine Gateway: ssh -N -L 4002:localhost:4002 <user>@trade-engine.local")
+    print("   - For the trade-engine Gateway: ssh -N -L 4002:localhost:4002 annie@192.168.0.219 (or set IBKR_SSH_TUNNEL in .env)")
     print("3. Test connection using: python backend/routes/market_data.py (test endpoint)")
     
     # Step 6: Usage instructions
