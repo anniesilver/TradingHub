@@ -83,7 +83,7 @@ def test_connection():
     print("   - Open TWS/Gateway")
     print("   - Go to: File → Global Configuration → API → Settings")
     print("   - Check 'Enable ActiveX and Socket Clients'")
-    print("   - Verify port matches .env file (7496 for TWS, 4002 for Gateway)")
+    print("   - Verify IBKR_PORT in .env matches IB Gateway (4001 live, 4002 paper)")
     print("3. If using Gateway, ensure it's connected to your IBKR account")
     print("4. Try using a different Client ID (change IBKR_CLIENT_ID in .env)")
     print("=" * 60)

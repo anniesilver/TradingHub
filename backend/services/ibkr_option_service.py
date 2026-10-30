@@ -35,7 +35,7 @@ DB_CONFIG = {
 # IBKR configuration
 IBKR_CONFIG = {
     "host": os.environ.get("IBKR_HOST", "127.0.0.1"),
-    "port": int(os.environ.get("IBKR_PORT", "7496")),
+    "port": int(os.environ.get("IBKR_PORT", "4001")),
     "client_id": int(os.environ.get("IBKR_CLIENT_ID", "124")),  # Different from stock client
 }
 
@@ -95,7 +95,7 @@ class IBKROptionClient(EWrapper, EClient):
             logger.info(f"IV data request {reqId} completed. Received {len(self.iv_data)} bars")
             self.iv_data_received.set()
 
-    def connect_to_ibkr(self, host: str = "127.0.0.1", port: int = 7496) -> bool:
+    def connect_to_ibkr(self, host: str = IBKR_CONFIG["host"], port: int = IBKR_CONFIG["port"]) -> bool:
         """Connect to IBKR TWS/Gateway"""
         try:
             self.connect(host, port, self.client_id)

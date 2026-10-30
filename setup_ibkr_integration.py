@@ -65,8 +65,8 @@ def main():
     print("1. Start TWS or IB Gateway")
     print("2. Configure API settings in TWS/Gateway:")
     print("   - Enable API connections")
-    print("   - Set socket port (default: 7496 for TWS, 4002 for Gateway)")
-    print("   - Add 127.0.0.1 to trusted IPs")
+    print("   - Set socket port (IB Gateway default: 4001 live, 4002 paper)")
+    print("   - Add this machine's IP to Trusted IPs and uncheck 'Allow connections from localhost only'")
     print("3. Test connection using: python backend/routes/market_data.py (test endpoint)")
     
     # Step 6: Usage instructions
