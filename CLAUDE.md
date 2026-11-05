@@ -41,6 +41,7 @@ TradingHub is a full-stack web application for trading strategy simulation and b
 ### Backend Structure
 - **Flask API** (`backend/simple_app.py`) - Main API server with CORS enabled
 - **Strategy Service** (`backend/services/strategy_service.py`) - Core trading strategy logic and simulation engine
+- **Wheel Service** (`backend/services/wheel_service.py`) - WHEEL backtest: runs the rules shared with trade-engine's paper bot from `<ALGO_BASE_PATH>/shared/tradekit` (once a day, Black-Scholes on a made-up weekly chain)
 - **Models** (`backend/models/`) - SQLAlchemy database models for users and products
 - **Routes** (`backend/routes/`) - API route handlers for auth, accounts, and strategies
 - **Database**: PostgreSQL with Flask-SQLAlchemy ORM
