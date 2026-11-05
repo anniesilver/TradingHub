@@ -155,7 +155,7 @@ export const runSimulation = async (config) => {
     // WHEEL: the rules' own parameter names (algo_trading/shared/tradekit/rules/wheel.py) + backtest settings
     if (config.strategyId === 'WHEEL') {
       const keys = ['budget', 'initial_position_pct', 'put_otm_pct', 'call_otm_pct', 'min_days_to_expiry',
-        'call_floor_pct', 'call_max_days', 'min_premium', 'cash_secured', 'use_iv_filter', 'iv_min',
+        'call_floor_pct', 'call_max_days', 'put_take_profit', 'min_premium', 'cash_secured', 'use_iv_filter', 'iv_min',
         'strike_step', 'slippage', 'iv_source', 'fixed_iv'];
       payload.config = { underlying: config.symbol || 'SPY', risk_free_rate: config.riskFreeRate };
       keys.forEach(key => {
