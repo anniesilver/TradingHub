@@ -8,6 +8,7 @@ from datetime import datetime
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from services.strategy_service import import_strategy, run_spy_power_cashflow, run_options_martin, run_spy500_leader
+from services.wheel_service import run_wheel, wheel_params
 from routes.market_data import market_data_bp
 
 
@@ -60,6 +61,16 @@ def get_strategies():
     except Exception as e:
         logger.error(f"Error in strategies endpoint: {str(e)}")
         logger.error(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/strategies/WHEEL/params", methods=["GET"])
+def get_wheel_params():
+    """The Wheel rules' parameters (defaults, ranges, help) straight from algo_trading/shared."""
+    try:
+        return jsonify(wheel_params())
+    except Exception as e:
+        logger.error(f"Error reading Wheel parameters: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -128,6 +139,19 @@ def run_simulation():
             logger.error(f"Error parsing initial balance: {e}")
             initial_balance = 500000.0  # Fallback to default
             logger.info(f"Using fallback initial balance: {initial_balance}")
+
+        # WHEEL runs the shared tradekit rules (algo_trading/shared), not an old-style simulator
+        if data["strategy_type"] == "WHEEL":
+            try:
+                results = run_wheel(data["config"], start_date, end_date, initial_balance)
+                return jsonify(results)
+            except ValueError as e:
+                logger.error(f"WHEEL settings error: {str(e)}")
+                return jsonify({"error": str(e)}), 400
+            except Exception as e:
+                logger.error(f"WHEEL execution error: {str(e)}")
+                logger.error(traceback.format_exc())
+                return jsonify({"error": f"Strategy execution failed: {str(e)}"}), 500
 
         # Import strategy modules
         TradingSimulator, OptionStrategy, success = import_strategy(data["strategy_type"])
