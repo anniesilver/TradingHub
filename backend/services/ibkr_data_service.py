@@ -131,6 +131,12 @@ class IBKRDataClient(EWrapper, EClient):
                 contract.exchange = 'SMART'
                 data_type = "DIVIDENDS"
                 bar_size = "1 day"  # TWS requires a valid bar size; data_type controls what is returned
+            elif symbol.endswith("_IV"):
+                # The stock's own 30-day implied volatility (a VIX for one stock), e.g. "AMZN_IV"
+                contract.symbol = symbol[:-3]
+                contract.secType = 'STK'
+                contract.exchange = 'SMART'
+                data_type = "OPTION_IMPLIED_VOLATILITY"
             else:
                 # For normal tickers like SPY - use MIDPOINT for STK securities
                 contract.secType = 'STK'
