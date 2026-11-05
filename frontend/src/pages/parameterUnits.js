@@ -19,6 +19,12 @@ export const parameterUnits = {
   DEC_INDEX: { label: 'Add-Load Trigger (ratio)' },
   vixHighThreshold: { label: 'VIX High (normalized)' },
   vixDeleverageThreshold: { label: 'VIX Deleverage (normalized)' },
+  initial_position_pct: { label: 'Initial Position %', displayScale: 100 },
+  put_otm_pct: { label: 'Put OTM (%)', displayScale: 100 },
+  call_otm_pct: { label: 'Call OTM (%)', displayScale: 100 },
+  call_floor_pct: { label: 'Call Floor Below Basis (%)', displayScale: 100 },
+  iv_min: { label: 'Min IV (%)', displayScale: 100 },
+  fixed_iv: { label: 'Fixed IV (%)', displayScale: 100 },
 };
 
 const displayScale = (name) => parameterUnits[name]?.displayScale ?? 1;

@@ -152,6 +152,17 @@ export const runSimulation = async (config) => {
       end_date: config.endDate || new Date().toISOString().split('T')[0]
     };
 
+    // WHEEL: the rules' own parameter names (algo_trading/shared/tradekit/rules/wheel.py) + backtest settings
+    if (config.strategyId === 'WHEEL') {
+      const keys = ['budget', 'initial_position_pct', 'put_otm_pct', 'call_otm_pct', 'min_days_to_expiry',
+        'call_floor_pct', 'call_max_days', 'min_premium', 'cash_secured', 'use_iv_filter', 'iv_min',
+        'strike_step', 'slippage', 'iv_source', 'fixed_iv'];
+      payload.config = { underlying: config.symbol || 'SPY', risk_free_rate: config.riskFreeRate };
+      keys.forEach(key => {
+        if (config[key] !== undefined) payload.config[key] = config[key];
+      });
+    }
+
     // OPTIONS_MARTIN specific parameters
     if (config.strategyId === 'OPTIONS_MARTIN') {
       payload.config.STRIKE = config.STRIKE !== undefined ? config.STRIKE : 680.0;

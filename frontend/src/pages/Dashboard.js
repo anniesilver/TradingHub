@@ -285,7 +285,7 @@ export const CustomTooltip = ({ active, payload, label }) => {
       {payload.map((entry, index) => {
         // Determine the label based on the dataKey
         const seriesName = entry.dataKey === "Portfolio_Value" ? "Strategy" : 
-                         entry.dataKey === "spy_value" ? "SPY Buy & Hold" :
+                         entry.dataKey === "spy_value" ? "Buy & Hold" :
                          entry.dataKey === "Margin_Ratio" ? "Margin Ratio" :
                          entry.dataKey === "Cash_Balance" ? "Cash Balance" :
                          entry.dataKey === "Premiums_Received" ? "Premium Received" :
@@ -335,6 +335,11 @@ const AVAILABLE_STRATEGIES = [
     id: 'SPY500_LEADER',
     name: 'S&P 500 Leader',
     description: 'Invest in the #1 market cap company, switch when leadership changes'
+  },
+  {
+    id: 'WHEEL',
+    name: 'Wheel',
+    description: 'Sell cash-secured puts; if assigned, sell covered calls until called away. Same rules as the paper bot'
   }
 ];
 
@@ -361,7 +366,9 @@ function Dashboard() {
     maxDrawdown: 0,
     sharpeRatio: null,
     sharpeRiskFreeRate: 0,
-    ivStatistics: null  // IV stats for OPTIONS_MARTIN
+    ivStatistics: null,  // IV stats for OPTIONS_MARTIN
+    wheelSummary: null,  // WHEEL cycles, assignments, cost basis
+    wheelNotes: null     // WHEEL data/pricing notes
   });
   const [config, setConfig] = useState({
     symbol: 'SPY',
@@ -409,6 +416,23 @@ function Dashboard() {
     CONFIRMATION_DAYS: 5,
     INITIAL_POSITION_PERCENT: 0.6,
     SLIPPAGE_PERCENT: 0.001,
+    // WHEEL parameters: same names, defaults and ranges as the rules (algo_trading/shared/tradekit/rules/wheel.py)
+    budget: 100000,
+    initial_position_pct: 1.0,
+    put_otm_pct: 0.05,
+    call_otm_pct: 0.05,
+    min_days_to_expiry: 30,
+    call_floor_pct: 0.0,
+    call_max_days: 90,
+    min_premium: 0.10,
+    cash_secured: true,
+    use_iv_filter: false,
+    iv_min: 0.20,
+    // WHEEL backtest-only settings (the live bot doesn't have these)
+    strike_step: 1.0,
+    slippage: 0.0,
+    iv_source: 'market',
+    fixed_iv: 0.25,
   });
   // Add state for the active tab
   const [activeTab, setActiveTab] = useState(0);
@@ -433,6 +457,10 @@ function Dashboard() {
     setActiveTab(newValue);
   };
 
+  // The Wheel starts with its budget (a rule parameter shared with the paper bot), not initialBalance.
+  const startingCash = selectedStrategy === 'WHEEL' ? config.budget : config.initialBalance;
+  const runConfigFor = (cfg) => (selectedStrategy === 'WHEEL' ? { ...cfg, initialBalance: cfg.budget } : cfg);
+
   const handleConfigChange = (event) => {
     const { name, value } = event.target;
     let processedValue = value;
@@ -445,7 +473,9 @@ function Dashboard() {
       'initialPositionPercent', 'marginInterestRate',
       'maxMarginRatio', 'maxPositionSize', 'minCommission', 'minStrikeDistance',
       'minTradeSize', 'monthlyWithdrawalRate', 'optionCommission', 'riskFreeRate',
-      'stockCommission', 'volatilityScalingFactor'
+      'stockCommission', 'volatilityScalingFactor',
+      'budget', 'initial_position_pct', 'put_otm_pct', 'call_otm_pct', 'min_days_to_expiry',
+      'call_floor_pct', 'call_max_days', 'min_premium', 'iv_min', 'strike_step', 'slippage', 'fixed_iv'
     ];
     
     if (numericFields.includes(name) || parameterUnits[name]?.displayScale !== undefined) {
@@ -536,6 +566,8 @@ function Dashboard() {
 
       // Extract IV statistics from metadata (for OPTIONS_MARTIN)
       let ivStatistics = null;
+      let wheelSummary = null;
+      let wheelNotes = null;
       console.log('🔍 Checking for IV statistics metadata...');
       console.log('🔍 parsedData keys:', Object.keys(parsedData));
       console.log('🔍 parsedData sample (first 3 keys):', Object.keys(parsedData).slice(0, 3));
@@ -544,6 +576,8 @@ function Dashboard() {
 
       if (parsedData && parsedData.__metadata__) {
         ivStatistics = parsedData.__metadata__.iv_statistics || null;
+        wheelSummary = parsedData.__metadata__.wheel_summary || null;
+        wheelNotes = parsedData.__metadata__.data_notes || null;
         console.log('✅ Extracted IV statistics:', ivStatistics);
         // Remove metadata from parsedData so it doesn't interfere with date processing
         delete parsedData.__metadata__;
@@ -829,10 +863,10 @@ function Dashboard() {
       // Calculate Compound Annualized Return (CAGR) - Accounting for Withdrawals
       let annualizedReturn = 0;
       try {
-        if (processedData.length > 1 && config.initialBalance > 0) {
+        if (processedData.length > 1 && startingCash > 0) {
           const firstDate = new Date(processedData[0].date);
           const lastDate = new Date(processedData[processedData.length - 1].date);
-          const initialValue = config.initialBalance;
+          const initialValue = startingCash;
           const finalValue = processedData[processedData.length - 1].Portfolio_Value;
 
           // Calculate years (including fractional years)
@@ -1355,7 +1389,9 @@ function Dashboard() {
         maxDrawdown: maxDrawdown,                // Maximum drawdown from peak
         sharpeRatio: sharpeRatio,                // Annualized Sharpe ratio, null if not computable
         sharpeRiskFreeRate: sharpeRiskFreeRate,  // Annual risk-free fraction used for the Sharpe ratio
-        ivStatistics: ivStatistics  // IV stats for OPTIONS_MARTIN
+        ivStatistics: ivStatistics,  // IV stats for OPTIONS_MARTIN
+        wheelSummary: wheelSummary,
+        wheelNotes: wheelNotes
       });
       
       // Indicate success
@@ -1393,7 +1429,7 @@ function Dashboard() {
       console.log('Running simulation with config:', config);
       
       const results = await runSimulation({
-        ...config,
+        ...runConfigFor(config),
         strategyId: selectedStrategy
       });
       
@@ -1402,7 +1438,7 @@ function Dashboard() {
       if (processSuccess) {
         setShowPreview(false);
         setBackgroundScene(activeTab);
-        setResultContext({ config: { ...config }, strategyId: selectedStrategy, completedAt: new Date().toISOString() });
+        setResultContext({ config: runConfigFor(config), strategyId: selectedStrategy, completedAt: new Date().toISOString() });
       }
       
       if (!processSuccess) {
@@ -1555,7 +1591,7 @@ function Dashboard() {
       <MainContent ref={workspaceContent} as="main" id="analysis-workspace" tabIndex={-1}>
         <header className="analysis-toolbar">
           <div><span className="eyebrow">Historical research</span><Typography component="h1" variant="h6">{selectedStrategyInfo?.name || 'Strategy analysis'}</Typography></div>
-          <div className="toolbar-context" aria-label="Configured scenario"><span>{config.symbol}</span><span>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(config.initialBalance)} USD</span><span>{config.startDate} — {config.endDate}</span></div>
+          <div className="toolbar-context" aria-label="Configured scenario"><span>{config.symbol}</span><span>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(startingCash)} USD</span><span>{config.startDate} — {config.endDate}</span></div>
         </header>
 
         {/* Show loading state */}
@@ -1625,7 +1661,7 @@ function Dashboard() {
             </CompactFormControl>
           </Grid>
           {/* Power Cashflow always writes calls; keep other strategies unchanged. */}
-          {selectedStrategy !== 'SPY_POWER_CASHFLOW' && <Grid item xs={12} sm={3} md={1.5}>
+          {selectedStrategy !== 'SPY_POWER_CASHFLOW' && selectedStrategy !== 'WHEEL' && <Grid item xs={12} sm={3} md={1.5}>
             <CompactFormControl fullWidth size="small">
               <InputLabel id="optionType-label">Option Type</InputLabel>
               <CompactSelect
@@ -1641,7 +1677,18 @@ function Dashboard() {
               </CompactSelect>
             </CompactFormControl>
           </Grid>}
-          <Grid item xs={12} sm={3} md={1.5}>
+          {selectedStrategy === 'WHEEL' ? <Grid item xs={12} sm={3} md={1.5}>
+            <CompactTextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Budget"
+              name="budget"
+              value={config.budget}
+              onChange={handleConfigChange}
+              InputProps={{ inputProps: { min: 1000, step: 1000 } }}
+            />
+          </Grid> : <Grid item xs={12} sm={3} md={1.5}>
             <CompactTextField
               fullWidth
               size="small"
@@ -1651,7 +1698,7 @@ function Dashboard() {
               value={config.initialBalance}
               onChange={handleConfigChange}
             />
-          </Grid>
+          </Grid>}
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactTextField
               fullWidth
@@ -1682,7 +1729,7 @@ function Dashboard() {
             <details className="advanced-settings">
               <summary>Advanced strategy parameters</summary>
               <ParameterGrid container>
-          
+          {selectedStrategy !== 'WHEEL' && (<>
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactTextField
               fullWidth
@@ -1969,6 +2016,107 @@ function Dashboard() {
               InputProps={{ inputProps: { min: 0, step: 0.01 } }}
             />
           </Grid>
+          </>)}
+
+          {/* WHEEL parameters: the rules' own (shared with the paper bot), then backtest-only settings */}
+          {selectedStrategy === 'WHEEL' && (
+            <>
+              <Grid item xs={12}>
+                <Typography variant="subtitle2" sx={{ mt: 1, mb: 1, fontWeight: 'bold' }}>
+                  Wheel rules (same as the paper bot)
+                </Typography>
+              </Grid>
+              {[
+                ['initial_position_pct', 'Initial Position %', { min: 0.01, max: 1, step: 0.05 }],
+                ['put_otm_pct', 'Put OTM %', { min: 0, max: 0.5, step: 0.01 }],
+                ['call_otm_pct', 'Call OTM %', { min: 0, max: 0.5, step: 0.01 }],
+                ['min_days_to_expiry', 'Min Days to Expiry', { min: 0, max: 365, step: 1 }],
+                ['call_floor_pct', 'Call Floor Below Basis %', { min: 0, max: 1, step: 0.01 }],
+                ['call_max_days', 'Call Max Days', { min: 0, max: 365, step: 1 }],
+                ['min_premium', 'Min Premium ($/share)', { min: 0, max: 100, step: 0.05 }],
+                ['iv_min', 'Min IV %', { min: 0, max: 5, step: 0.01 }],
+              ].map(([name, label, limits]) => (
+                <Grid item xs={12} sm={3} md={1.5} key={name}>
+                  <CompactTextField
+                    fullWidth
+                    size="small"
+                    type="number"
+                    label={label}
+                    name={name}
+                    value={config[name]}
+                    onChange={handleConfigChange}
+                    disabled={name === 'iv_min' && !config.use_iv_filter}
+                    InputProps={{ inputProps: limits }}
+                  />
+                </Grid>
+              ))}
+              {[
+                ['cash_secured', 'Cash-secured puts'],
+                ['use_iv_filter', 'Sell only when IV is high enough'],
+              ].map(([name, label]) => (
+                <Grid item xs={12} sm={6} md={3} key={name}>
+                  <ParameterField name={name} label={label}>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={!!config[name]}
+                          inputProps={{ 'aria-describedby': `${name}-help` }}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setConfig(prev => ({ ...prev, [name]: checked }));
+                          }}
+                        />
+                      }
+                      label={label}
+                    />
+                  </ParameterField>
+                </Grid>
+              ))}
+
+              <Grid item xs={12}>
+                <Typography variant="subtitle2" sx={{ mt: 1, mb: 1, fontWeight: 'bold' }}>
+                  Backtest settings
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={3} md={1.5}>
+                  <CompactFormControl fullWidth size="small">
+                    <InputLabel id="iv_source-label">Volatility Source</InputLabel>
+                    <CompactSelect
+                      labelId="iv_source-label"
+                      inputProps={{ 'aria-describedby': 'iv_source-help' }}
+                      name="iv_source"
+                      value={config.iv_source}
+                      onChange={handleConfigChange}
+                      label="Volatility Source"
+                    >
+                      <MenuItem value="market">Market IV (VIX for SPY)</MenuItem>
+                      <MenuItem value="realized">Realized volatility</MenuItem>
+                      <MenuItem value="fixed">Fixed IV</MenuItem>
+                    </CompactSelect>
+                  </CompactFormControl>
+              </Grid>
+              {[
+                ['fixed_iv', 'Fixed IV %', { min: 0.01, max: 5, step: 0.01 }],
+                ['strike_step', 'Strike Step ($)', { min: 0.5, step: 0.5 }],
+                ['slippage', 'Slippage ($/share)', { min: 0, step: 0.01 }],
+                ['riskFreeRate', 'Risk Free Rate', { min: 0, step: 0.005 }],
+              ].map(([name, label, limits]) => (
+                <Grid item xs={12} sm={3} md={1.5} key={name}>
+                  <CompactTextField
+                    fullWidth
+                    size="small"
+                    type="number"
+                    label={label}
+                    name={name}
+                    value={config[name]}
+                    onChange={handleConfigChange}
+                    disabled={name === 'fixed_iv' && config.iv_source !== 'fixed'}
+                    InputProps={{ inputProps: limits }}
+                  />
+                </Grid>
+              ))}
+            </>
+          )}
 
           {/* OPTIONS_MARTIN Specific Parameters */}
           {selectedStrategy === 'OPTIONS_MARTIN' && (
@@ -2251,7 +2399,7 @@ function Dashboard() {
                   {AVAILABLE_STRATEGIES.find(strategy => strategy.id === resultContext.strategyId)?.name} · {resultContext.config.symbol} · {resultContext.config.startDate} — {resultContext.config.endDate}
                 </Typography>
                 <details className="run-assumptions"><summary>Run context & assumptions</summary><Typography variant="caption" color="text.secondary" display="block">Calculated {new Date(resultContext.completedAt).toLocaleString()} (your local time). Hypothetical performance, not live results or a forecast. Market-data freshness, session and source time zone are not supplied by the service.</Typography></details>
-                {JSON.stringify(resultContext.config) !== JSON.stringify(config) && <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>Settings have changed. Rerun to update these results.</Typography>}
+                {JSON.stringify(resultContext.config) !== JSON.stringify(runConfigFor(config)) && <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>Settings have changed. Rerun to update these results.</Typography>}
               </div>
             )}
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
@@ -2273,7 +2421,7 @@ function Dashboard() {
             {/* Tab content for Performance Chart */}
             <TabPanel value={activeTab} index={0}>
               <div className="performance-overview"><PerformanceSummary data={data} resultContext={resultContext} /><div className="portfolio-chart">
-              <PerformanceChart data={data.chartData} strategyId={selectedStrategy} tooltip={<CustomTooltip />} /><details className="transaction-key"><summary>Transaction markers</summary>
+              <PerformanceChart data={data.chartData} strategyId={selectedStrategy} tooltip={<CustomTooltip />} benchmarkSymbol={selectedStrategy === 'WHEEL' ? data.wheelSummary?.underlying : 'SPY'} /><details className="transaction-key"><summary>Transaction markers</summary>
               {/* Custom legend for transaction markers */}
               {selectedStrategy === 'SPY500_LEADER' ? (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2, p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
@@ -2530,6 +2678,53 @@ function Dashboard() {
         </Grid>
       </Grid>
       )}
+      {/* Wheel summary card (WHEEL only) */}
+      {selectedStrategy === 'WHEEL' && data.wheelSummary && (() => {
+        const w = data.wheelSummary;
+        const n = data.wheelNotes || {};
+        const money = v => (v === null || v === undefined) ? '—' : `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+        const tiles = [
+          ['Completed cycles', w.cycles],
+          ['Puts sold', w.puts_sold],
+          ['Puts assigned', w.puts_assigned],
+          ['Calls sold', w.calls_sold],
+          ['Called away', w.calls_assigned],
+          ['Premiums', money(w.premiums)],
+          ['Dividends', money(w.dividends)],
+          ['Commissions', money(w.commissions)],
+          ['Shares held at end', w.shares],
+          ['Cost basis', w.cost_basis ? `$${Number(w.cost_basis).toFixed(2)}` : '—'],
+          ['Open option at end', w.open_option || '—'],
+        ];
+        return (
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+            <Grid item xs={12}>
+              <Paper elevation={2} sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', color: 'text.primary' }}>
+                  Wheel summary · {w.underlying}
+                </Typography>
+                <Grid container spacing={2}>
+                  {tiles.map(([label, value]) => (
+                    <Grid item xs={6} sm={4} md={2} key={label}>
+                      <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'background.default', borderRadius: 1 }}>
+                        <Typography variant="body2" color="text.secondary">{label}</Typography>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: 'text.primary', wordBreak: 'break-word' }}>{value}</Typography>
+                      </Box>
+                    </Grid>
+                  ))}
+                </Grid>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1.5 }}>
+                  Option prices are modeled, not real quotes: {n.pricing || 'Black-Scholes'}. Volatility: {n.iv_name || n.iv_source}
+                  {n.days_on_realized_vol ? ` (${n.days_on_realized_vol} days without market IV used realized volatility)` : ''}.
+                  Strike step ${n.strike_step}, slippage ${n.slippage}/share, risk-free rate {((n.risk_free_rate || 0) * 100).toFixed(1)}%.
+                  Decides once a day at the close; assignment only at expiry.
+                </Typography>
+              </Paper>
+            </Grid>
+          </Grid>
+        );
+      })()}
+
       {/* IV Statistics Card (OPTIONS_MARTIN only) */}
       {(() => {
         console.log('🎯 IV Card Render Check:');

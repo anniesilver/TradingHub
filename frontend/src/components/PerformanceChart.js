@@ -6,7 +6,7 @@ import ExpandableChart from './ExpandableChart';
 const currency = value => `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const shortCurrency = value => Math.abs(value) >= 1000 ? `$${(value / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : currency(value);
 
-export default function PerformanceChart({ data, strategyId, tooltip, sample = false }) {
+export default function PerformanceChart({ data, strategyId, tooltip, sample = false, benchmarkSymbol }) {
   const id = useId();
   const [showValues, setShowValues] = useState(false);
   const last = data[data.length - 1];
@@ -33,7 +33,7 @@ export default function PerformanceChart({ data, strategyId, tooltip, sample = f
                 ? <circle cx={props.cx} cy={props.cy} r={5} fill="#141414" stroke="#f5f5f5" strokeWidth={2} />
                 : <path d={`M${props.cx} ${props.cy - 6} l6 6 -6 6 -6 -6 Z`} fill="#dddddd" stroke="#141414" />;
             } : false} />
-            <Line type="linear" dataKey="spy_value" name={sample ? 'Illustrative benchmark' : 'SPY Buy & Hold'} stroke={chartColors.benchmark} strokeWidth={2} strokeDasharray="6 5" isAnimationActive={false} activeDot={{ r: 4 }} dot={props => props.payload?.isBuySharesTransaction ? <path d={`M${props.cx} ${props.cy - 7} l6 11 h-12 Z`} fill="#dddddd" stroke="#141414" /> : null} />
+            <Line type="linear" dataKey="spy_value" name={sample ? 'Illustrative benchmark' : `${benchmarkSymbol || 'SPY'} Buy & Hold`} stroke={chartColors.benchmark} strokeWidth={2} strokeDasharray="6 5" isAnimationActive={false} activeDot={{ r: 4 }} dot={props => props.payload?.isBuySharesTransaction ? <path d={`M${props.cx} ${props.cy - 7} l6 11 h-12 Z`} fill="#dddddd" stroke="#141414" /> : null} />
           </LineChart>
         </ResponsiveContainer>
       </div>
