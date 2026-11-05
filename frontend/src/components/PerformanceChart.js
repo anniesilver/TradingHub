@@ -7,6 +7,7 @@ const currency = value => `$${Number(value).toLocaleString(undefined, { maximumF
 const shortCurrency = value => Math.abs(value) >= 1000 ? `$${(value / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : currency(value);
 
 export default function PerformanceChart({ data, strategyId, tooltip, sample = false, benchmarkSymbol }) {
+  const benchmarkLabel = `${benchmarkSymbol || 'SPY'} buy & hold`;
   const id = useId();
   const [showValues, setShowValues] = useState(false);
   const last = data[data.length - 1];
@@ -16,9 +17,9 @@ export default function PerformanceChart({ data, strategyId, tooltip, sample = f
     <ExpandableChart title={sample ? 'Sample performance chart' : 'Portfolio performance chart'} sample={sample}><figure className="performance-figure" aria-labelledby={`${id}-caption`}>
       <figcaption id={`${id}-caption`} className="chart-heading">
         <div><div className="eyebrow">{sample ? 'Illustrative strategy' : 'Strategy value'}</div><div className="chart-value">{currency(last.Portfolio_Value)}</div></div>
-        <div><div className="eyebrow">{sample ? 'Illustrative benchmark' : 'SPY buy & hold'}</div><div className="chart-value chart-value-secondary">{currency(last.spy_value)}</div></div>
+        <div><div className="eyebrow">{sample ? 'Illustrative benchmark' : benchmarkLabel}</div><div className="chart-value chart-value-secondary">{currency(last.spy_value)}</div></div>
       </figcaption>
-      <div className="chart-key"><span><i className="line-key" style={{ borderColor: chartColors.strategy }} />{sample ? 'Illustrative strategy' : 'Strategy'}</span><span><i className="line-key dashed" style={{ borderColor: chartColors.benchmark }} />{sample ? 'Illustrative benchmark' : 'SPY buy & hold'}</span></div>
+      <div className="chart-key"><span><i className="line-key" style={{ borderColor: chartColors.strategy }} />{sample ? 'Illustrative strategy' : 'Strategy'}</span><span><i className="line-key dashed" style={{ borderColor: chartColors.benchmark }} />{sample ? 'Illustrative benchmark' : benchmarkLabel}</span></div>
       <div className="chart-canvas">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 16, right: 20, left: 0, bottom: 12 }} accessibilityLayer>
@@ -33,7 +34,7 @@ export default function PerformanceChart({ data, strategyId, tooltip, sample = f
                 ? <circle cx={props.cx} cy={props.cy} r={5} fill="#141414" stroke="#f5f5f5" strokeWidth={2} />
                 : <path d={`M${props.cx} ${props.cy - 6} l6 6 -6 6 -6 -6 Z`} fill="#dddddd" stroke="#141414" />;
             } : false} />
-            <Line type="linear" dataKey="spy_value" name={sample ? 'Illustrative benchmark' : `${benchmarkSymbol || 'SPY'} Buy & Hold`} stroke={chartColors.benchmark} strokeWidth={2} strokeDasharray="6 5" isAnimationActive={false} activeDot={{ r: 4 }} dot={props => props.payload?.isBuySharesTransaction ? <path d={`M${props.cx} ${props.cy - 7} l6 11 h-12 Z`} fill="#dddddd" stroke="#141414" /> : null} />
+            <Line type="linear" dataKey="spy_value" name={sample ? 'Illustrative benchmark' : benchmarkLabel} stroke={chartColors.benchmark} strokeWidth={2} strokeDasharray="6 5" isAnimationActive={false} activeDot={{ r: 4 }} dot={props => props.payload?.isBuySharesTransaction ? <path d={`M${props.cx} ${props.cy - 7} l6 11 h-12 Z`} fill="#dddddd" stroke="#141414" /> : null} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -47,7 +48,7 @@ export default function PerformanceChart({ data, strategyId, tooltip, sample = f
                 <tr>
                   <th scope="col">Date</th>
                   <th scope="col">{sample ? 'Illustrative strategy' : 'Strategy'}</th>
-                  <th scope="col">{sample ? 'Illustrative benchmark' : 'SPY buy & hold'}</th>
+                  <th scope="col">{sample ? 'Illustrative benchmark' : benchmarkLabel}</th>
                 </tr>
               </thead>
               <tbody>
