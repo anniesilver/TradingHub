@@ -69,7 +69,7 @@ class IBKRDataClient(EWrapper, EClient):
         """Handle API errors. Messages with reqId -1 are notices about the connection (data farm
         OK etc.); only an error about our request, or a lost connection, ends the wait."""
         logger.error(f"IBKR Error - ReqId: {reqId}, Code: {errorCode}, Message: {errorString}")
-        if errorCode in [502, 504]:  # Connection errors
+        if errorCode in [502, 504, 1100]:  # Connection errors (1100: IB lost its servers, reqId -1)
             self.error_occurred = True
             self.error_message = f"Connection error: {errorString}"
             self.data_received.set()
