@@ -27,7 +27,7 @@ help text in `frontend/src/pages/Dashboard.js` and `parameterHelp.js`.
 
 ## Features
 
-- **Backtests** over any date range, using market data from PostgreSQL first and IBKR for missing days
+- **Backtests** over any date range, using market data from PostgreSQL and fetching from IBKR when the database has no data for the symbol or the range's start or end is missing (gaps inside the range are not filled)
 - **Results:** account balance vs. buy & hold, annualized return, max drawdown, Sharpe ratio, trading logs,
   and strategy-specific cards (for example the Wheel summary)
 - **Per-strategy settings** with help text on every field
