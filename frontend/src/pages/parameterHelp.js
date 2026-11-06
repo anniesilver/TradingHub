@@ -50,6 +50,7 @@ export const parameterHelp = {
   call_floor_pct: 'Lowest call strike = cost basis less this percentage. 0 = never below the basis; 5 = up to 5% below it.',
   call_max_days: 'If the nearest call at the floor pays less than the minimum premium, try later expiries up to this many days out.',
   put_take_profit: 'Buy the put back once it has lost this share of its value, then sell a new put the same day. Enter 90 for 90% (bought back at 10% of the sale price); 0 = always hold to expiry.',
+  call_take_profit: 'Buy the covered call back once it has lost this share of its value, keep the shares, and sell a new call the same day. Enter 90 for 90%; 0 (the default, as in the paper bot) = hold calls to expiry.',
   min_premium: 'Do not sell an option priced below this, in dollars per share.',
   cash_secured: 'Never sell more puts than the cash on hand covers at strike x 100.',
   use_iv_filter: 'Only sell options while implied volatility is at least the minimum IV.',

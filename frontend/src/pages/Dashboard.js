@@ -428,6 +428,7 @@ function Dashboard() {
     call_floor_pct: 0.0,
     call_max_days: 90,
     put_take_profit: 0.90,
+    call_take_profit: 0.0,
     min_premium: 0.10,
     cash_secured: true,
     use_iv_filter: false,
@@ -479,7 +480,7 @@ function Dashboard() {
       'minTradeSize', 'monthlyWithdrawalRate', 'optionCommission', 'riskFreeRate',
       'stockCommission', 'volatilityScalingFactor',
       'budget', 'initial_position_pct', 'put_otm_pct', 'call_otm_pct', 'min_days_to_expiry',
-      'call_floor_pct', 'call_max_days', 'put_take_profit', 'min_premium', 'iv_min', 'strike_step', 'slippage', 'fixed_iv'
+      'call_floor_pct', 'call_max_days', 'put_take_profit', 'call_take_profit', 'min_premium', 'iv_min', 'strike_step', 'slippage', 'fixed_iv'
     ];
     
     if (numericFields.includes(name) || parameterUnits[name]?.displayScale !== undefined) {
@@ -2039,6 +2040,7 @@ function Dashboard() {
                 ['call_floor_pct', 'Call Floor Below Basis %', { min: 0, max: 1, step: 0.01 }],
                 ['call_max_days', 'Call Max Days', { min: 0, max: 365, step: 1 }],
                 ['put_take_profit', 'Put Take Profit %', { min: 0, max: 0.99, step: 0.05 }],
+                ['call_take_profit', 'Call Take Profit %', { min: 0, max: 0.99, step: 0.05 }],
                 ['min_premium', 'Min Premium ($/share)', { min: 0, max: 100, step: 0.05 }],
                 ['iv_min', 'Min IV %', { min: 0, max: 5, step: 0.01 }],
               ].map(([name, label, limits]) => (
@@ -2696,6 +2698,7 @@ function Dashboard() {
           ['Puts bought back', w.puts_bought_back ?? 0],
           ['Buy-back cost', money(w.buy_back_cost)],
           ['Calls sold', w.calls_sold],
+          ['Calls bought back', w.calls_bought_back ?? 0],
           ['Called away', w.calls_assigned],
           ['Premiums', money(w.premiums)],
           ['Dividends', money(w.dividends)],

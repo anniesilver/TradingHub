@@ -24,6 +24,7 @@ export const parameterUnits = {
   call_otm_pct: { label: 'Call OTM (%)', displayScale: 100 },
   call_floor_pct: { label: 'Call Floor Below Basis (%)', displayScale: 100 },
   put_take_profit: { label: 'Put Take Profit (%)', displayScale: 100 },
+  call_take_profit: { label: 'Call Take Profit (%)', displayScale: 100 },
   iv_min: { label: 'Min IV (%)', displayScale: 100 },
   fixed_iv: { label: 'Fixed IV (%)', displayScale: 100 },
 };
