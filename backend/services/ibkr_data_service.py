@@ -65,9 +65,16 @@ class IBKRDataClient(EWrapper, EClient):
         logger.info(f"IBKR connection established. Next valid order ID: {orderId}")
         self.connection_successful.set()
     
-    def error(self, reqId: int, errorCode: int, errorString: str, *_):
+    def error(self, reqId: int, *args):
         """Handle API errors. Messages with reqId -1 are notices about the connection (data farm
-        OK etc.); only an error about our request, or a lost connection, ends the wait."""
+        OK etc.); only an error about our request, or a lost connection, ends the wait.
+
+        ibapi 9.x/10.x call error(reqId, errorCode, errorString[, json]); newer 10.x versions
+        call error(reqId, errorTime, errorCode, errorString, json). Both are understood."""
+        if len(args) >= 3 and isinstance(args[1], int) and isinstance(args[2], str):
+            errorCode, errorString = args[1], args[2]
+        else:
+            errorCode, errorString = args[0], args[1]
         logger.error(f"IBKR Error - ReqId: {reqId}, Code: {errorCode}, Message: {errorString}")
         if errorCode in [502, 504, 1100]:  # Connection errors (1100: IB lost its servers, reqId -1)
             self.error_occurred = True
