@@ -1,23 +1,44 @@
 # TradingHub
 
-TradingHub is a web-based platform for running trading strategy simulations, visualizing performance metrics, and analyzing trading results. It provides a simple interface for backtesting trading strategies across different time periods.
+TradingHub is a web app for backtesting trading strategies: pick a strategy, set its parameters and a
+date range, and see the account balance, drawdown, trades and other results next to a buy & hold
+benchmark.
 
 ![TradingHub dashboard showing strategy settings and backtest performance](docs/images/tradinghub-dashboard.png)
 
+## Strategies
+
+The strategy code lives in the separate [algo_trading](https://github.com/anniesilver/algo_trading)
+repo (path set by `ALGO_BASE_PATH`, default `C:/ALGO/algo_trading`). Each strategy's README there
+explains how it works and every parameter the dashboard shows for it.
+
+| Strategy | Id | What it does | Parameters |
+|---|---|---|---|
+| SPY Power Cashflow | `SPY_POWER_CASHFLOW` | SPY shares on margin, monthly covered calls, dip buying, monthly withdrawals | [SPY_POWER_CASHFLOW/README.md](https://github.com/anniesilver/algo_trading/blob/main/SPY_POWER_CASHFLOW/README.md) |
+| Wheel | `WHEEL` | Cash-secured puts, then covered calls once assigned. Runs the same rules as trade-engine's paper bot (`algo_trading/shared/tradekit`) | [WHEEL/README.md](https://github.com/anniesilver/algo_trading/blob/main/WHEEL/README.md) |
+| Options Martingale | `OPTIONS_MARTIN` | **In progress.** Buys options and averages down to a profit target. Being moved onto the shared rules; the current backtest is the older version | [OPTIONS_MARTIN/README.md](https://github.com/anniesilver/algo_trading/blob/main/OPTIONS_MARTIN/README.md) |
+| S&P 500 Leader | `SPY500_LEADER` | Holds the #1 S&P 500 company by market cap and switches when leadership changes | [SPY500_LEADER/README.md](https://github.com/anniesilver/algo_trading/blob/main/SPY500_LEADER/README.md) |
+
+SPY Enhanced Cashflow appears in the strategy menu, but the backend has no runner for it yet.
+
+To add a strategy: put its code and a README with its parameters in algo_trading, add a runner in
+`backend/services/` (see `strategy_service.py` and `wheel_service.py`), and add its form fields and
+help text in `frontend/src/pages/Dashboard.js` and `parameterHelp.js`.
+
 ## Features
 
-- **Strategy Simulation**: Backtest trading strategies over custom date ranges
-- **Performance Visualization**: View account balance charts and key performance metrics
-- **Strategy Configuration**: Customize strategy parameters like symbols, option types, and risk management settings
-- **Database Storage**: Save simulation results for later review and comparison
-- **API Access**: RESTful API for programmatic access to simulation capabilities
+- **Backtests** over any date range, using market data from PostgreSQL first and IBKR for missing days
+- **Results:** account balance vs. buy & hold, annualized return, max drawdown, Sharpe ratio, trading logs,
+  and strategy-specific cards (for example the Wheel summary)
+- **Per-strategy settings** with help text on every field
+- **API:** RESTful JSON endpoints for running simulations and refreshing market data
 
 ## Tech Stack
 
 - **Backend**: Flask (Python)
 - **Database**: PostgreSQL
-- **Frontend**: React.js, Bootstrap, Chart.js
-- **API**: RESTful JSON API
+- **Frontend**: React.js, Material-UI, Recharts
+- **Market data**: Interactive Brokers (IB Gateway) and yfinance
 
 ## Installation
 
@@ -30,9 +51,10 @@ TradingHub is a web-based platform for running trading strategy simulations, vis
 
 ### Setup Instructions
 
-1. **Clone the repository**
+1. **Clone TradingHub and the strategy repo**
    ```bash
-   git clone https://github.com/yourusername/TradingHub.git
+   git clone https://github.com/anniesilver/TradingHub.git
+   git clone https://github.com/anniesilver/algo_trading.git   # strategy code, see ALGO_BASE_PATH below
    cd TradingHub
    ```
 
@@ -63,13 +85,17 @@ TradingHub is a web-based platform for running trading strategy simulations, vis
    ```
 
 5. **Configure environment variables**
+
+   Copy `backend/services/.env.example` to `backend/services/.env` and fill it in:
+   - `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`: the PostgreSQL database.
+   - `ALGO_BASE_PATH`: where the algo_trading repo is checked out (default `C:/ALGO/algo_trading`).
+   - `IBKR_HOST`, `IBKR_PORT`, `IBKR_SSH_TUNNEL`, `IBKR_CLIENT_ID`: the IB connection. IB Gateway
+     (paper) runs on the trade-engine server. With `IBKR_HOST=127.0.0.1`, `IBKR_PORT=4002` and
+     `IBKR_SSH_TUNNEL` set, the backend opens the SSH tunnel itself (needs key-based SSH login).
+
+6. **Create the tables**
    ```bash
-   # Create .env file in backend/services directory
-   echo "DB_NAME=tradinghub" > backend/services/.env
-   echo "DB_USER=postgres" >> backend/services/.env
-   echo "DB_PASSWORD=your_password" >> backend/services/.env
-   echo "DB_HOST=localhost" >> backend/services/.env
-   echo "DB_PORT=5432" >> backend/services/.env
+   python backend/init_all_db.py
    ```
 
 ## Running the Application
@@ -104,6 +130,8 @@ TradingHub is a web-based platform for running trading strategy simulations, vis
   - API Test: http://localhost:8080/api/test
   - Strategies List: http://localhost:8080/api/strategies
   - Simulation Endpoint: http://localhost:8080/api/simulate (POST)
+  - Wheel parameters (read from the shared rules): http://localhost:8080/api/strategies/WHEEL/params
+  - IB connection test: http://localhost:8080/api/market-data/test-connection
 
 ## Troubleshooting
 
@@ -114,59 +142,51 @@ TradingHub is a web-based platform for running trading strategy simulations, vis
 
 - **'Config' object has no attribute 'SYMBOL' Error:** This error occurs when the strategy configuration does not have the required SYMBOL attribute. The backend code automatically applies the SYMBOL attribute from the frontend configuration, or falls back to 'SPY' as a default value if not provided.
 
+- **Strategy import errors:** check that `ALGO_BASE_PATH` points at the algo_trading checkout and that
+  it is up to date (`git pull`). The Wheel needs its `shared/` folder.
+
+- **No history from IB (0 bars, timeouts):** check the IB Gateway messages on the trade-engine server.
+  "2105 ... ushmds broken" means no US history; restart the Gateway's Docker container.
+
 - **Port Conflicts:** If port 8080 or 3000 is already in use, check running processes and terminate any conflicting services.
 
-## Strategy Parameters
+## Common Settings
 
-TradingHub provides extensive customization through advanced strategy parameters. Below is a comprehensive guide to all available parameters:
+These fields apply to every strategy. Everything else on the form is strategy-specific: see the
+strategy's README linked under [Strategies](#strategies).
 
-### Unit Conventions
+- **Strategy**: which backtest to run.
+- **Symbol**: the ticker. A new ticker is loaded from IB the first time, which can take a minute.
+- **Start Date / End Date**: the period simulated.
+- **Initial Balance**: starting cash (the Wheel uses its **Budget** instead).
 
-Percentage inputs on the dashboard use familiar percentage values: enter `40` for 40%, `60` for 60%, or `1.5` for 1.5%. The frontend configuration and API keep these values as decimal fractions (`0.4`, `0.6`, and `0.015`, respectively). This applies to allocation percentages, interest rates, option-cost buffers, strike distance, IV thresholds, and slippage.
+### Unit conventions
 
-**Monthly Withdrawal Rate is an exception:** both the input and API use percentage points, so `1.0` means 1%, not 100%. Price thresholds and leverage remain ratios; normalized VIX thresholds remain index values divided by 100. These fields are not percentage inputs.
+Percentage inputs use familiar percentage values: enter `40` for 40%, `60` for 60%, or `1.5` for 1.5%.
+The frontend configuration and API keep these as decimal fractions (`0.4`, `0.6` and `0.015`).
 
-### Basic Configuration
-- **Symbol** (default: 'SPY') - The trading symbol/ticker for the underlying asset
-- **Option Type** (default: 'call') - Type of options to trade (call or put)
-- **Initial Balance** (default: $200,000) - Starting cash amount for the simulation
-
-### Position Management Parameters
-- **Initial Position Percent** (default: 60%; API: 0.6) - Percentage of available cash to use for initial stock position
-- **Dip Buy Percent** (default: 40%; API: 0.4) - Additional percentage of cash to deploy when buying dips
-- **Dip Trigger** (default ratio: 0.92) - Price threshold as a fraction of the recent high: 92% of that price, or an 8% drop
-- **High-VIX Dip Buy Percent** (default: 15%; API: 0.15) - Percentage of available cash to deploy during a high-VIX dip
-- **High-VIX Dip Trigger** (default ratio: 0.80) - Price threshold during high VIX: 80% of the recent high, or a 20% drop
-- **Max Position Size** (default: 10,000) - Maximum number of shares that can be held
-- **Min Trade Size** (default: 1,000) - Minimum dollar amount for a trade to be executed
-
-### Options Parameters
-- **Call Cost Buffer** (default: 5%; API: 0.05) - Safety buffer added to call option cost calculations
-- **Contract Size** (default: 100) - Number of shares per options contract (standard is 100)
-- **Covered Call Ratio** (default: 100%; API: 1.0) - Percentage of the stock position used for covered calls
-- **Min Strike Distance** (default: 1.5%; API: 0.015) - Minimum percentage distance between current price and option strike price
-- **Decrease Index / DEC_INDEX** (default ratio: 0.6) - OPTIONS_MARTIN purchase threshold at 60% of the reference option price, or a 40% drop; enter the ratio, not the drop percentage
-
-### Risk Management Parameters
-- **Max Leverage Ratio** (default: 2.0 = 2:1) - Maximum leverage ratio (position_value/account_value)
-  - 2.0 = 2:1 leverage = 50% margin requirement (Reg T compliant)
-  - IBKR allows up to 4:1 leverage (25% margin) for liquid stocks like SPY
-- **Margin Interest Rate** (default: 6%; API: 0.06) - Annual interest rate charged on borrowed funds
-- **Risk Free Rate** (default: 5%; API: 0.05) - Annual risk-free interest rate for option pricing models
-
-### Trading Costs
-- **Stock Commission** (default: $0.01) - Commission per share for stock trades
-- **Option Commission** (default: $0.65) - Commission per options contract
-- **Min Commission** (default: $1.00) - Minimum commission charged per trade
-- **Slippage Percent** (SPY500_LEADER default: 0.1%; API: 0.001) - Simulated execution-price slippage
-
-### Cash Management
-- **Monthly Withdrawal Rate** (default: 1.0%) - Monthly cash withdrawal percentage; the input and API both use `1.0` for 1%, or `0` for no withdrawals
-
-### Volatility Parameters
-- **Volatility Scaling Factor** (default multiplier: 0.15) - Factor used to scale VIX-derived volatility for option pricing; this is a multiplier, not a 15% volatility input
-- **VIX High / Deleverage Thresholds** (default normalized value: 0.25) - Each represents a VIX index level of 25, not an input of 0.25%
-- **IV Entry Threshold** (OPTIONS_MARTIN default: 30%; API: 0.30) - Maximum implied volatility for entry when the IV filter is enabled
-- **IV Exit Threshold** (OPTIONS_MARTIN default: 50%; API: 0.50) - Implied volatility level that triggers an exit when enabled
+Exceptions:
+- **Monthly Withdrawal Rate** (SPY Power Cashflow) uses percentage points in both the input and the
+  API, so `1.0` means 1%, not 100%.
+- Price thresholds (such as dip triggers) and leverage ratios are ratios, not percentages.
+- VIX thresholds are the VIX level divided by 100, so `0.25` means VIX 25.
 
 ## Project Structure
+
+```
+backend/
+  simple_app.py          Flask API server (port 8080)
+  services/
+    strategy_service.py  Loads and runs the algo_trading strategies
+    wheel_service.py     Wheel backtest on algo_trading/shared/tradekit
+    market_data.py       Database-first market data with IBKR fallback
+    ibkr_*.py            IB connection, SSH tunnel and option data
+  routes/                Auth, account, strategy and market-data routes
+  models/                SQLAlchemy models
+  tests/                 Backend tests
+frontend/
+  src/pages/Dashboard.js       Strategy forms and results
+  src/pages/parameterHelp.js   Help text for every field
+  src/services/                API calls
+docs/images/             Screenshots
+```
