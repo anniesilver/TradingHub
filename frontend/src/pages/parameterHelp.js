@@ -1,6 +1,6 @@
 // Keys match dashboard input names, including strategy-specific configuration.
 export const parameterHelp = {
-  symbol: 'Ticker of the stock or ETF used in the backtest, such as SPY.',
+  symbol: 'Ticker of the stock or ETF used in the backtest, such as SPY. Pick one or type any other; a new ticker is loaded from IB the first time, which can take a minute.',
   optionType: 'Call gives the right to buy shares; put gives the right to sell shares.',
   initialBalance: 'Starting cash for the backtest, in dollars.',
   startDate: 'First date of the historical period to simulate.',

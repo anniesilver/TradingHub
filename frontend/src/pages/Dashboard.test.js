@@ -651,3 +651,12 @@ test('completed-run charts expand without recalculating or replacing run context
   }
   expect(runSimulation).toHaveBeenCalledTimes(calls);
 }, 15000);
+
+test('any ticker can be typed, not only the listed ones', async () => {
+  render(<Dashboard />);
+  await screen.findByText('Backtest service unavailable');
+  const symbol = screen.getByLabelText('Symbol');
+  fireEvent.change(symbol, { target: { value: 'msft' } });
+  expect(symbol).toHaveValue('MSFT');
+  expect(document.querySelector('.toolbar-context').textContent).toContain('MSFT');
+});
