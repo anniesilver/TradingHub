@@ -234,7 +234,7 @@ class MarketData:
                         if df.empty:
                             raise Exception(f"Still no data available for {symbol} after extended IBKR fetch")
                 else:
-                    raise Exception(f"Failed to fetch data from IBKR for {symbol}")
+                    raise Exception(f"Failed to fetch data from IBKR for {symbol}: {ibkr_service.last_error}")
 
             # Check data coverage
             if not df.empty:

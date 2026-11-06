@@ -45,6 +45,9 @@ IBKR_CONFIG = {
 }
 
 
+HISTORY_TIMEOUT_S = 180  # longest wait for one historical data request
+
+
 class IBKRDataClient(EWrapper, EClient):
     """IBKR API client for fetching historical market data"""
     
@@ -62,13 +65,17 @@ class IBKRDataClient(EWrapper, EClient):
         logger.info(f"IBKR connection established. Next valid order ID: {orderId}")
         self.connection_successful.set()
     
-    def error(self, reqId: int, errorCode: int, errorString: str):
-        """Handle API errors"""
+    def error(self, reqId: int, errorCode: int, errorString: str, *_):
+        """Handle API errors. Messages with reqId -1 are notices about the connection (data farm
+        OK etc.); only an error about our request, or a lost connection, ends the wait."""
         logger.error(f"IBKR Error - ReqId: {reqId}, Code: {errorCode}, Message: {errorString}")
-        if errorCode in [502, 504]:  # Connection errors
+        if errorCode in [502, 504, 1100]:  # Connection errors (1100: IB lost its servers, reqId -1)
             self.error_occurred = True
             self.error_message = f"Connection error: {errorString}"
-        self.data_received.set()  # Unblock waiting threads
+            self.data_received.set()
+        elif reqId >= 0 and errorCode < 2100:  # 2100+ are warnings; the data still comes
+            self.error_message = f"IB error {errorCode}: {errorString}"
+            self.data_received.set()
     
     def historicalData(self, reqId: int, bar):
         """Receive historical data bars"""
@@ -145,18 +152,24 @@ class IBKRDataClient(EWrapper, EClient):
             
             # Initialize variable to store candle (exactly like loading_data.py)
             self.data = []
-            
+            self.error_message = ""
+            self.data_received.clear()
+
             # Request historical candles
             req_id = 0  # Use 0 like in loading_data.py (stock_list.index(i))
             self.reqHistoricalData(req_id, contract, '', period, bar_size, data_type, 1, 1, True, [])
-            
-            # sleep to allow enough time for data to be returned (extend for larger datasets)
-            time.sleep(10)
-            
-            logger.info(f"Raw data received: {self.data}")
-            
+
+            # Wait until IB says the request is complete (historicalDataEnd) or fails. Years of
+            # daily bars for a symbol IB hasn't cached can take well over 10 seconds; a fixed
+            # sleep returned nothing, or only part of the history.
+            if not self.data_received.wait(HISTORY_TIMEOUT_S):
+                raise Exception(f"IB sent no complete answer for {symbol} ({period} of {data_type}) "
+                                f"within {HISTORY_TIMEOUT_S}s ({len(self.data)} bars so far)")
+
+            logger.info(f"Received {len(self.data)} bars for {symbol}")
+
             if len(self.data) < 1:
-                raise Exception(f'faliled loading data for {symbol}. try it again')  # Exact message
+                raise Exception(f"No data from IB for {symbol}. {self.error_message}".strip())
             
             logger.info(f'finish the loading data for {symbol}')
             return self.data.copy()
@@ -179,6 +192,7 @@ class IBKRDataService:
     
     def __init__(self):
         self.client = None
+        self.last_error = ""  # why the last fetch_and_store_data failed
     
     def get_db_connection(self):
         """Get database connection"""
@@ -357,6 +371,7 @@ class IBKRDataService:
 
         except Exception as e:
             logger.error(f"Error fetching data for {symbol}: {str(e)}")
+            self.last_error = str(e)
             return False
         finally:
             if self.client:

@@ -22,6 +22,7 @@ import {
   ListItemText,
   Checkbox,
   FormControlLabel,
+  Autocomplete,
 } from '@mui/material';
 import ShowChartRoundedIcon from '@mui/icons-material/ShowChartRounded';
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
@@ -142,6 +143,8 @@ const StyledCompactTextField = styled(TextField)(({ theme }) => ({
     },
   },
 }));
+
+const SYMBOL_SUGGESTIONS = ['SPY', 'QQQ', 'TSLA', 'NVDA', 'AMZN', 'U', 'FIG'];
 
 const CompactTextField = ({ name, label, value, inputProps, InputProps, ...props }) => {
   const displayLabel = parameterUnits[name]?.label ?? label;
@@ -1641,25 +1644,26 @@ function Dashboard() {
         <ParameterGrid container>
           <Grid item xs={12} className="primary-run-action"><div className="form-actions"><Button variant="contained" color="primary" onClick={event => handleRunSimulation(event, true)} disabled={loading}>Run simulation</Button></div></Grid>
           <Grid item xs={12} sm={3} md={1.5}>
-            <CompactFormControl fullWidth size="small">
-              <InputLabel id="symbol-label">Symbol</InputLabel>
-              <CompactSelect
-                labelId="symbol-label"
-                inputProps={{ 'aria-describedby': 'symbol-help' }}
-                name="symbol"
-                value={config.symbol}
-                onChange={handleConfigChange}
-                label="Symbol"
-              >
-                <MenuItem value="SPY">SPY</MenuItem>
-                <MenuItem value="QQQ">QQQ</MenuItem>
-                <MenuItem value="TSLA">TSLA</MenuItem>
-                <MenuItem value="NVDA">NVDA</MenuItem>
-                <MenuItem value="AMZN">AMZN</MenuItem>
-                <MenuItem value="U">U</MenuItem>
-                <MenuItem value="FIG">FIG</MenuItem>
-              </CompactSelect>
-            </CompactFormControl>
+            {/* Pick a listed ticker or type any other one (it is loaded from IB the first time) */}
+            <ParameterField name="symbol" label="Symbol">
+            <Autocomplete
+              freeSolo
+              fullWidth
+              size="small"
+              options={SYMBOL_SUGGESTIONS}
+              value={config.symbol}
+              inputValue={config.symbol}
+              onInputChange={(event, value) => setConfig(prev => ({ ...prev, symbol: (value || '').toUpperCase().trim() }))}
+              renderInput={params => (
+                <TextField
+                  {...params}
+                  label="Symbol"
+                  name="symbol"
+                  inputProps={{ ...params.inputProps, 'aria-describedby': 'symbol-help', maxLength: 10 }}
+                />
+              )}
+            />
+            </ParameterField>
           </Grid>
           {/* Power Cashflow always writes calls; keep other strategies unchanged. */}
           {selectedStrategy !== 'SPY_POWER_CASHFLOW' && selectedStrategy !== 'WHEEL' && <Grid item xs={12} sm={3} md={1.5}>
