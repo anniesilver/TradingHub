@@ -660,3 +660,23 @@ test('any ticker can be typed, not only the listed ones', async () => {
   expect(symbol).toHaveValue('MSFT');
   expect(document.querySelector('.toolbar-context').textContent).toContain('MSFT');
 });
+
+test('call take profit has an on/off switch, off by default', async () => {
+  render(<Dashboard />);
+  await screen.findByText('Backtest service unavailable');
+  fireEvent.click(screen.getByRole('button', { name: /Wheel/i }));
+  await screen.findByText('Backtest service unavailable');
+  const details = screen.queryByText('Advanced strategy parameters');
+  if (details) fireEvent.click(details);
+  const toggle = await screen.findByRole('checkbox', { name: /Take profit on calls/i });
+  const level = screen.getByLabelText(/^Call Take Profit/);
+  expect(toggle).not.toBeChecked();
+  expect(level).toBeDisabled();
+  fireEvent.click(toggle);
+  expect(toggle).toBeChecked();
+  expect(level).toBeEnabled();
+  expect(Number(level.value)).toBeGreaterThan(0);
+  fireEvent.click(toggle);
+  expect(level).toBeDisabled();
+  expect(Number(level.value)).toBe(0);
+});

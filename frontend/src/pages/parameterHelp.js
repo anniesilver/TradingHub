@@ -53,6 +53,7 @@ export const parameterHelp = {
   call_take_profit: 'Buy the covered call back once it has lost this share of its value, keep the shares, and sell a new call the same day. Enter 90 for 90%; 0 (the default, as in the paper bot) = hold calls to expiry.',
   min_premium: 'Do not sell an option priced below this, in dollars per share.',
   cash_secured: 'Never sell more puts than the cash on hand covers at strike x 100.',
+  call_take_profit_on: 'Turn on buying covered calls back early (sets Call Take Profit to 90%, which you can change). Off = hold calls to expiry, as the paper bot does.',
   use_iv_filter: 'Only sell options while implied volatility is at least the minimum IV.',
   iv_min: 'Minimum implied volatility for selling when the IV filter is on. Enter 20 for 20% (stored as 0.20).',
   iv_source: 'Volatility for Black-Scholes prices: market IV (VIX for SPY, the stock\'s own 30-day IV from IB for others, realized volatility on missing days), realized volatility, or a fixed IV.',

@@ -2053,7 +2053,8 @@ function Dashboard() {
                     name={name}
                     value={config[name]}
                     onChange={handleConfigChange}
-                    disabled={name === 'iv_min' && !config.use_iv_filter}
+                    disabled={(name === 'iv_min' && !config.use_iv_filter)
+                      || (name === 'call_take_profit' && !(Number(config.call_take_profit) > 0))}
                     InputProps={{ inputProps: limits }}
                   />
                 </Grid>
@@ -2061,16 +2062,22 @@ function Dashboard() {
               {[
                 ['cash_secured', 'Cash-secured puts'],
                 ['use_iv_filter', 'Sell only when IV is high enough'],
+                ['call_take_profit_on', 'Take profit on calls (off in the paper bot)'],
               ].map(([name, label]) => (
                 <Grid item xs={12} sm={6} md={3} key={name}>
                   <ParameterField name={name} label={label}>
                     <FormControlLabel
                       control={
                         <Checkbox
-                          checked={!!config[name]}
+                          checked={name === 'call_take_profit_on' ? Number(config.call_take_profit) > 0 : !!config[name]}
                           inputProps={{ 'aria-describedby': `${name}-help` }}
                           onChange={(e) => {
                             const checked = e.target.checked;
+                            if (name === 'call_take_profit_on') {
+                              // The switch only sets the level: on = 90% (editable), off = 0
+                              setConfig(prev => ({ ...prev, call_take_profit: checked ? 0.9 : 0 }));
+                              return;
+                            }
                             setConfig(prev => ({ ...prev, [name]: checked }));
                           }}
                         />
@@ -2696,10 +2703,12 @@ function Dashboard() {
           ['Puts sold', w.puts_sold],
           ['Puts assigned', w.puts_assigned],
           ['Puts bought back', w.puts_bought_back ?? 0],
-          ['Buy-back cost', money(w.buy_back_cost)],
+          ['Puts expired worthless', w.puts_expired ?? '—'],
           ['Calls sold', w.calls_sold],
-          ['Calls bought back', w.calls_bought_back ?? 0],
           ['Called away', w.calls_assigned],
+          ['Calls bought back', w.calls_bought_back ?? 0],
+          ['Calls expired worthless', w.calls_expired ?? '—'],
+          ['Buy-back cost', money(w.buy_back_cost)],
           ['Premiums', money(w.premiums)],
           ['Dividends', money(w.dividends)],
           ['Commissions', money(w.commissions)],
