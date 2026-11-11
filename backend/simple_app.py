@@ -9,6 +9,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from services.strategy_service import import_strategy, run_spy_power_cashflow, run_options_martin, run_spy500_leader
 from services.wheel_service import run_wheel, wheel_params
+from services.options_martin_service import options_martin_params, run_options_martin_kit
 from routes.market_data import market_data_bp
 
 
@@ -71,6 +72,16 @@ def get_wheel_params():
         return jsonify(wheel_params())
     except Exception as e:
         logger.error(f"Error reading Wheel parameters: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/strategies/OPTIONS_MARTIN/params", methods=["GET"])
+def get_options_martin_params():
+    """The OPTIONS_MARTIN rules' parameters (defaults, ranges, help) straight from algo_trading/shared."""
+    try:
+        return jsonify(options_martin_params())
+    except Exception as e:
+        logger.error(f"Error reading OPTIONS_MARTIN parameters: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -153,8 +164,23 @@ def run_simulation():
                 logger.error(traceback.format_exc())
                 return jsonify({"error": f"Strategy execution failed: {str(e)}"}), 500
 
+        # OPTIONS_MARTIN runs the shared tradekit rules too; the old simulator is OPTIONS_MARTIN_LEGACY
+        if data["strategy_type"] == "OPTIONS_MARTIN":
+            try:
+                results = run_options_martin_kit(data["config"], start_date, end_date, initial_balance)
+                return jsonify(results)
+            except ValueError as e:
+                logger.error(f"OPTIONS_MARTIN settings error: {str(e)}")
+                return jsonify({"error": str(e)}), 400
+            except Exception as e:
+                logger.error(f"OPTIONS_MARTIN execution error: {str(e)}")
+                logger.error(traceback.format_exc())
+                return jsonify({"error": f"Strategy execution failed: {str(e)}"}), 500
+
         # Import strategy modules
-        TradingSimulator, OptionStrategy, success = import_strategy(data["strategy_type"])
+        legacy = data["strategy_type"] == "OPTIONS_MARTIN_LEGACY"
+        TradingSimulator, OptionStrategy, success = import_strategy(
+            "OPTIONS_MARTIN" if legacy else data["strategy_type"])
         if not success:
             return jsonify({"error": "Failed to import strategy modules"}), 500
 
@@ -178,8 +204,8 @@ def run_simulation():
                     return jsonify(results)
                 else:
                     return jsonify({"error": "Strategy simulation failed"}), 500
-            elif data["strategy_type"] == "OPTIONS_MARTIN":
-                logger.info("Running OPTIONS_MARTIN simulation with real option data...")
+            elif legacy:
+                logger.info("Running the old OPTIONS_MARTIN simulator with real option data...")
                 results = run_options_martin(
                     TradingSimulator,
                     OptionStrategy,

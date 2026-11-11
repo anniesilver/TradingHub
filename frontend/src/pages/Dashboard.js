@@ -40,7 +40,9 @@ import {
   ResponsiveContainer,
   ComposedChart,
 } from 'recharts';
-import { runSimulation } from '../services/simulationService';
+import { runSimulation, getStrategyParams } from '../services/simulationService';
+import OptionsMartinSettings, { initialOptionsMartinConfig } from '../components/OptionsMartinSettings';
+import OptionsMartinResults from '../components/OptionsMartinResults';
 import ParameterField from '../components/ParameterField';
 import SimulationTransition, { WaveBackdrop } from '../components/WaveSurface';
 import PerformanceChart from '../components/PerformanceChart';
@@ -332,7 +334,12 @@ const AVAILABLE_STRATEGIES = [
   {
     id: 'OPTIONS_MARTIN',
     name: 'Options Martingale',
-    description: 'Pure Martingale averaging-down strategy for option contracts'
+    description: 'Buy an option, top up as it falls, sell at a profit target. Same rules as the paper bot'
+  },
+  {
+    id: 'OPTIONS_MARTIN_LEGACY',
+    name: 'Options Martingale (old simulator)',
+    description: 'The old OPTIONS_MARTIN simulator on one fixed contract with real option data'
   },
   {
     id: 'SPY500_LEADER',
@@ -371,8 +378,13 @@ function Dashboard() {
     sharpeRiskFreeRate: 0,
     ivStatistics: null,  // IV stats for OPTIONS_MARTIN
     wheelSummary: null,  // WHEEL cycles, assignments, cost basis
-    wheelNotes: null     // WHEEL data/pricing notes
+    wheelNotes: null,    // WHEEL data/pricing notes
+    omSummary: null,     // OPTIONS_MARTIN rounds, wins, P&L
+    omRounds: null,      // OPTIONS_MARTIN one row per round
   });
+  // OPTIONS_MARTIN runs the shared rules: its settings come from the rules' own parameter list
+  const [omSchema, setOmSchema] = useState(null);
+  const [omConfig, setOmConfig] = useState(null);
   const [config, setConfig] = useState({
     symbol: 'SPY',
     optionType: 'call',
@@ -463,8 +475,14 @@ function Dashboard() {
   };
 
   // The Wheel starts with its budget (a rule parameter shared with the paper bot), not initialBalance.
-  const startingCash = selectedStrategy === 'WHEEL' ? config.budget : config.initialBalance;
-  const runConfigFor = (cfg) => (selectedStrategy === 'WHEEL' ? { ...cfg, initialBalance: cfg.budget } : cfg);
+  const omCash = omConfig ? (Number(omConfig.cash) || Number(omConfig.round_budget) || 0) : 0;
+  const startingCash = selectedStrategy === 'WHEEL' ? config.budget
+    : selectedStrategy === 'OPTIONS_MARTIN' ? omCash : config.initialBalance;
+  const runConfigFor = (cfg) => {
+    if (selectedStrategy === 'WHEEL') return { ...cfg, initialBalance: cfg.budget };
+    if (selectedStrategy === 'OPTIONS_MARTIN') return { ...cfg, initialBalance: omCash, optionsMartin: omConfig };
+    return cfg;
+  };
 
   const handleConfigChange = (event) => {
     const { name, value } = event.target;
@@ -573,6 +591,8 @@ function Dashboard() {
       let ivStatistics = null;
       let wheelSummary = null;
       let wheelNotes = null;
+      let omSummary = null;
+      let omRounds = null;
       console.log('🔍 Checking for IV statistics metadata...');
       console.log('🔍 parsedData keys:', Object.keys(parsedData));
       console.log('🔍 parsedData sample (first 3 keys):', Object.keys(parsedData).slice(0, 3));
@@ -583,6 +603,8 @@ function Dashboard() {
         ivStatistics = parsedData.__metadata__.iv_statistics || null;
         wheelSummary = parsedData.__metadata__.wheel_summary || null;
         wheelNotes = parsedData.__metadata__.data_notes || null;
+        omSummary = parsedData.__metadata__.options_martin_summary || null;
+        omRounds = parsedData.__metadata__.options_martin_rounds || null;
         console.log('✅ Extracted IV statistics:', ivStatistics);
         // Remove metadata from parsedData so it doesn't interfere with date processing
         delete parsedData.__metadata__;
@@ -1396,7 +1418,9 @@ function Dashboard() {
         sharpeRiskFreeRate: sharpeRiskFreeRate,  // Annual risk-free fraction used for the Sharpe ratio
         ivStatistics: ivStatistics,  // IV stats for OPTIONS_MARTIN
         wheelSummary: wheelSummary,
-        wheelNotes: wheelNotes
+        wheelNotes: wheelNotes,
+        omSummary: omSummary,
+        omRounds: omRounds
       });
       
       // Indicate success
@@ -1461,10 +1485,33 @@ function Dashboard() {
     }
   };
 
+  // OPTIONS_MARTIN: load the rules' settings once (starting from the paper bot's), then run
   useEffect(() => {
+    if (selectedStrategy !== 'OPTIONS_MARTIN' || omSchema) return;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => getStrategyParams('OPTIONS_MARTIN'))
+      .then(schema => {
+        if (cancelled) return;
+        const initial = initialOptionsMartinConfig(schema);
+        setOmSchema(schema);
+        setOmConfig(initial);
+        setConfig(prev => ({ ...prev, symbol: initial.underlying || prev.symbol }));
+      })
+      .catch(err => {
+        if (cancelled) return;
+        setError(err?.response?.data?.error || err?.message || 'Could not load the Options Martingale settings');
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedStrategy, omSchema]);
+
+  const omReady = omConfig !== null;
+  useEffect(() => {
+    if (selectedStrategy === 'OPTIONS_MARTIN' && !omReady) return;  // waits for its settings
     handleRunSimulation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStrategy]);
+  }, [selectedStrategy, omReady]);
 
   // Helper function to extract first month with trading activity
   // eslint-disable-next-line no-unused-vars
@@ -1667,7 +1714,7 @@ function Dashboard() {
             </ParameterField>
           </Grid>
           {/* Power Cashflow always writes calls; keep other strategies unchanged. */}
-          {selectedStrategy !== 'SPY_POWER_CASHFLOW' && selectedStrategy !== 'WHEEL' && <Grid item xs={12} sm={3} md={1.5}>
+          {selectedStrategy !== 'SPY_POWER_CASHFLOW' && selectedStrategy !== 'WHEEL' && selectedStrategy !== 'OPTIONS_MARTIN' && <Grid item xs={12} sm={3} md={1.5}>
             <CompactFormControl fullWidth size="small">
               <InputLabel id="optionType-label">Option Type</InputLabel>
               <CompactSelect
@@ -1694,7 +1741,7 @@ function Dashboard() {
               onChange={handleConfigChange}
               InputProps={{ inputProps: { min: 1000, step: 1000 } }}
             />
-          </Grid> : <Grid item xs={12} sm={3} md={1.5}>
+          </Grid> : selectedStrategy === 'OPTIONS_MARTIN' ? null : <Grid item xs={12} sm={3} md={1.5}>
             <CompactTextField
               fullWidth
               size="small"
@@ -1735,7 +1782,7 @@ function Dashboard() {
             <details className="advanced-settings">
               <summary>Advanced strategy parameters</summary>
               <ParameterGrid container>
-          {selectedStrategy !== 'WHEEL' && (<>
+          {selectedStrategy !== 'WHEEL' && selectedStrategy !== 'OPTIONS_MARTIN' && (<>
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactTextField
               fullWidth
@@ -2133,8 +2180,13 @@ function Dashboard() {
             </>
           )}
 
-          {/* OPTIONS_MARTIN Specific Parameters */}
+          {/* OPTIONS_MARTIN: the shared rules' parameters (same as the paper bot) + backtest settings */}
           {selectedStrategy === 'OPTIONS_MARTIN' && (
+            <OptionsMartinSettings schema={omSchema} value={omConfig} onChange={setOmConfig} />
+          )}
+
+          {/* The old OPTIONS_MARTIN simulator's parameters */}
+          {selectedStrategy === 'OPTIONS_MARTIN_LEGACY' && (
             <>
               <Grid item xs={12}>
                 <Typography variant="h6" gutterBottom mt={2} mb={1}>
@@ -2436,7 +2488,7 @@ function Dashboard() {
             {/* Tab content for Performance Chart */}
             <TabPanel value={activeTab} index={0}>
               <div className="performance-overview"><PerformanceSummary data={data} resultContext={resultContext} /><div className="portfolio-chart">
-              <PerformanceChart data={data.chartData} strategyId={selectedStrategy} tooltip={<CustomTooltip />} benchmarkSymbol={selectedStrategy === 'WHEEL' ? data.wheelSummary?.underlying : 'SPY'} /><details className="transaction-key"><summary>Transaction markers</summary>
+              <PerformanceChart data={data.chartData} strategyId={selectedStrategy} tooltip={<CustomTooltip />} benchmarkSymbol={selectedStrategy === 'WHEEL' ? data.wheelSummary?.underlying : selectedStrategy === 'OPTIONS_MARTIN' ? data.omSummary?.underlying : 'SPY'} /><details className="transaction-key"><summary>Transaction markers</summary>
               {/* Custom legend for transaction markers */}
               {selectedStrategy === 'SPY500_LEADER' ? (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2, p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
@@ -2750,10 +2802,13 @@ function Dashboard() {
         console.log('🎯 IV Card Render Check:');
         console.log('  selectedStrategy:', selectedStrategy);
         console.log('  data.ivStatistics:', data.ivStatistics);
-        console.log('  Should show:', selectedStrategy === 'OPTIONS_MARTIN' && data.ivStatistics);
+        console.log('  Should show:', selectedStrategy === 'OPTIONS_MARTIN_LEGACY' && data.ivStatistics);
         return null;
       })()}
-      {selectedStrategy === 'OPTIONS_MARTIN' && data.ivStatistics && (
+      {selectedStrategy === 'OPTIONS_MARTIN' && data.omSummary && (
+        <OptionsMartinResults summary={data.omSummary} rounds={data.omRounds} notes={data.wheelNotes} />
+      )}
+      {selectedStrategy === 'OPTIONS_MARTIN_LEGACY' && data.ivStatistics && (
         <Grid container spacing={2} sx={{ mb: 2 }}>
           <Grid item xs={12}>
             <Paper elevation={2} sx={{ p: 2 }}>
