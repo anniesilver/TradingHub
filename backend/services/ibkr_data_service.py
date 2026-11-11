@@ -6,6 +6,10 @@ import threading
 import time
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+except ImportError:  # Python 3.8: IB times are read as New York time (the Gateway's zone)
+    ZoneInfo = None
 
 import pandas as pd
 import psycopg2
@@ -43,6 +47,22 @@ IBKR_CONFIG = {
     "port": int(os.environ.get("IBKR_PORT", "4002")),
     "client_id": int(os.environ.get("IBKR_CLIENT_ID", "123")),
 }
+
+
+NY = ZoneInfo("America/New_York") if ZoneInfo else None
+
+
+def parse_ib_time(text: str) -> datetime:
+    """IB bar time -> naive New York time. IB sends '20251029' (daily), '20251029 09:30:00'
+    (intraday, the Gateway's time zone, New York on the server) or, from newer versions,
+    '20251029 09:30:00 US/Eastern' (with its zone)."""
+    parts = text.split()
+    if len(parts) == 1:
+        return datetime.strptime(parts[0], "%Y%m%d")
+    when = datetime.strptime(" ".join(parts[:2]), "%Y%m%d %H:%M:%S")
+    if len(parts) >= 3 and parts[2] not in ("US/Eastern", "America/New_York") and ZoneInfo:
+        when = when.replace(tzinfo=ZoneInfo(parts[2])).astimezone(NY).replace(tzinfo=None)
+    return when
 
 
 HISTORY_TIMEOUT_S = 180  # longest wait for one historical data request
@@ -122,7 +142,9 @@ class IBKRDataClient(EWrapper, EClient):
         time.sleep(1)  # Sleep interval to allow time for connection to server
         return True
     
-    def fetch_historical_data(self, symbol: str, period: str = "10 Y", bar_size: str = "1 day") -> List[Dict]:
+    def fetch_historical_data(self, symbol: str, period: str = "10 Y", bar_size: str = "1 day",
+                              end_datetime: str = "") -> List[Dict]:
+        """end_datetime: '' = now, else IB's 'YYYYMMDD-HH:MM:SS' (UTC)."""
         """Fetch historical data for a symbol - exact approach from loading_data.py"""
         try:
             logger.info(f'getting {symbol}')
@@ -164,7 +186,8 @@ class IBKRDataClient(EWrapper, EClient):
 
             # Request historical candles
             req_id = 0  # Use 0 like in loading_data.py (stock_list.index(i))
-            self.reqHistoricalData(req_id, contract, '', period, bar_size, data_type, 1, 1, True, [])
+            self.reqHistoricalData(req_id, contract, end_datetime, period, bar_size, data_type, 1, 1,
+                                   end_datetime == "", [])
 
             # Wait until IB says the request is complete (historicalDataEnd) or fails. Years of
             # daily bars for a symbol IB hasn't cached can take well over 10 seconds; a fixed
@@ -305,15 +328,10 @@ class IBKRDataService:
                     # IBKR returns different formats for daily vs intraday:
                     # Daily: '20240101'
                     # Intraday: '20240101  09:30:00' or '20240101 09:30:00'
-                    date_str = bar['date'].strip()
+                    date_str = str(bar['date']).strip()
 
                     try:
-                        # Try intraday format first (with time)
-                        if ' ' in date_str:
-                            date_obj = datetime.strptime(date_str, '%Y%m%d %H:%M:%S')
-                        else:
-                            # Daily format (date only)
-                            date_obj = datetime.strptime(date_str, '%Y%m%d')
+                        date_obj = parse_ib_time(date_str)
                     except ValueError:
                         logger.error(f"Could not parse date: {date_str}")
                         continue
@@ -384,6 +402,33 @@ class IBKRDataService:
             if self.client:
                 self.client.disconnect_from_ibkr()
     
+    def fetch_intraday_range(self, symbol: str, start: datetime, end: datetime, bar_size: str = "5 mins") -> int:
+        """Download intraday bars for [start, end] from IB in 3-week pieces (IB limits how much
+        intraday history one request returns) and store them. Returns how many bars came in."""
+        total = 0
+        self.client = IBKRDataClient(IBKR_CONFIG["client_id"])
+        if not self.client.connect_to_ibkr(IBKR_CONFIG["host"], IBKR_CONFIG["port"]):
+            raise Exception("Failed to connect to IBKR")
+        try:
+            now_ny = datetime.now(NY).replace(tzinfo=None) if NY else datetime.now()
+            piece_end = min(end + timedelta(days=1), now_ny)
+            while piece_end > start:
+                # IB's end time with a zone: '20251029 16:00:00 US/Eastern'
+                ib_end = piece_end.strftime("%Y%m%d %H:%M:%S") + " US/Eastern"
+                logger.info(f"Fetching 3 W of {bar_size} {symbol} bars ending {piece_end:%Y-%m-%d}")
+                try:
+                    rows = self.client.fetch_historical_data(symbol, "3 W", bar_size, ib_end)
+                except Exception as e:  # e.g. nothing that far back: stop going back
+                    logger.warning(f"No {symbol} {bar_size} bars before {piece_end:%Y-%m-%d}: {e}")
+                    break
+                self.save_data_to_db(symbol, rows, bar_size)
+                total += len(rows)
+                piece_end -= timedelta(days=14)   # pieces overlap: IB sometimes leaves gaps at the edges
+                time.sleep(3)                     # IB pacing
+        finally:
+            self.client.disconnect_from_ibkr()
+        return total
+
     def get_market_data(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
         """Get market data with DB-first approach, fallback to IBKR"""
         try:

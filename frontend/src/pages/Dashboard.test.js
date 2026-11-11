@@ -7,10 +7,10 @@ import Dashboard, { CustomTooltip } from './Dashboard';
 import App from '../App';
 import { createWorkspaceTheme } from '../theme';
 import { chartColors } from '../components/chartColors';
-import { runSimulation } from '../services/simulationService';
+import { runSimulation, getStrategyParams } from '../services/simulationService';
 import { computeSharpeRatio } from './performanceMetrics';
 
-jest.mock('../services/simulationService', () => ({ runSimulation: jest.fn() }));
+jest.mock('../services/simulationService', () => ({ runSimulation: jest.fn(), getStrategyParams: jest.fn() }));
 
 const originalResizeObserver = global.ResizeObserver;
 test('configured starting capital preserves cents without requesting another simulation', async () => {
@@ -52,7 +52,7 @@ test('only Power Cashflow hides its unused fields, without losing their values',
   await screen.findByText('Backtest service unavailable');
   const labels = ['Option Type', 'Max Position Size', 'Min Trade Size'];
   labels.forEach(label => expect(screen.queryByLabelText(label)).not.toBeInTheDocument());
-  for (const strategy of ['SPY Enhanced Cashflow', 'Options Martingale', 'S&P 500 Leader']) {
+  for (const strategy of ['SPY Enhanced Cashflow', 'Options Martingale (old simulator)', 'S&P 500 Leader']) {
     fireEvent.click(screen.getByRole('button', { name: strategy }));
     await screen.findByText('Backtest service unavailable');
     labels.forEach(label => expect(screen.getByLabelText(label)).toBeInTheDocument());
@@ -120,7 +120,7 @@ const summaryRun = {
   '2026-10-09': { Portfolio_Value: 204000, spy_value: 202000, Cash_Balance: 9000, Margin_Ratio: 0.1, Premiums_Received: 300, Interest_Paid: 30, Dividends_Received: 0, Trading_Log: 'Monthly withdrawal: $1,000.00' },
 };
 
-test.each(['SPY Power Cashflow', 'SPY Enhanced Cashflow', 'Options Martingale', 'S&P 500 Leader'])(
+test.each(['SPY Power Cashflow', 'SPY Enhanced Cashflow', 'Options Martingale (old simulator)', 'S&P 500 Leader'])(
   'shows all eight metrics in Performance, retains Premium context, and keeps Logs transactional for %s', async strategy => {
     const leader = strategy === 'S&P 500 Leader';
     const response = leader ? Object.fromEntries(Object.entries(summaryRun).map(([date, row], index) => [date, {
@@ -331,7 +331,7 @@ test('only explicit runs launch a fullscreen wave; navigation cancels it', async
   render(<Dashboard />);
   await screen.findByText('Backtest service unavailable');
   expect(screen.queryByTestId('simulation-transition')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Options Martingale' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Options Martingale (old simulator)' }));
   expect(screen.queryByTestId('simulation-transition')).not.toBeInTheDocument();
   await screen.findByText('Backtest service unavailable');
   fireEvent.click(screen.getByRole('button', { name: /run simulation/i }));
@@ -350,7 +350,7 @@ afterEach(() => {
 test.each([
   'SPY Power Cashflow',
   'SPY Enhanced Cashflow',
-  'Options Martingale',
+  'Options Martingale (old simulator)',
   'S&P 500 Leader',
 ])('every parameter has compact, associated help for %s', async (strategy) => {
   const { container } = render(<Dashboard />);
@@ -481,7 +481,7 @@ test('does not percentage-scale price ratios, normalized VIX, leverage, multipli
 
 test('shows IV thresholds in percent and submits decimal fractions', async () => {
   const { container } = render(<Dashboard />);
-  fireEvent.click(screen.getByText('Options Martingale'));
+  fireEvent.click(screen.getByText('Options Martingale (old simulator)'));
   await screen.findByText('Backtest service unavailable');
   const entry = container.querySelector('input[name="IV_ENTRY_THRESHOLD"]');
   const exit = container.querySelector('input[name="IV_EXIT_THRESHOLD"]');
@@ -501,7 +501,7 @@ test('shows IV thresholds in percent and submits decimal fractions', async () =>
   await waitFor(() => expect(runSimulation).toHaveBeenLastCalledWith(expect.objectContaining({
     IV_ENTRY_THRESHOLD: 0.35,
     IV_EXIT_THRESHOLD: 0.55,
-    strategyId: 'OPTIONS_MARTIN',
+    strategyId: 'OPTIONS_MARTIN_LEGACY',
   })));
 });
 
@@ -545,7 +545,7 @@ test('formats a margin ratio as a percentage without changing currency series', 
 
 test('IV help stays available when its entry threshold is disabled', async () => {
   render(<Dashboard />);
-  fireEvent.click(screen.getByText('Options Martingale'));
+  fireEvent.click(screen.getByText('Options Martingale (old simulator)'));
   await screen.findByText('Backtest service unavailable');
   fireEvent.click(screen.getByText('Advanced strategy parameters'));
   fireEvent.click(screen.getByRole('checkbox', { name: 'Enable IV Entry Filter' }));
@@ -679,4 +679,45 @@ test('call take profit has an on/off switch, off by default', async () => {
   fireEvent.click(toggle);
   expect(level).toBeDisabled();
   expect(Number(level.value)).toBe(0);
+});
+
+const OM_SCHEMA = {
+  rules: [
+    { name: 'underlying', type: 'str', default: 'SPY', min: null, max: null, choices: null, help: 'symbol' },
+    { name: 'pick_rule', type: 'str', default: 'atm', min: null, max: null, choices: ['atm', 'otm_pct', 'fixed'], help: 'how to pick' },
+    { name: 'otm_pct', type: 'float', default: 0.02, min: 0, max: 0.2, choices: null, help: 'how far OTM' },
+    { name: 'max_top_ups', type: 'int', default: 5, min: 0, max: 20, choices: null, help: 'top-ups' },
+    { name: 'round_budget', type: 'float', default: 2000, min: 100, max: 1000000, choices: null, help: 'budget' },
+    { name: 'weekly_only', type: 'bool', default: false, min: null, max: null, choices: null, help: 'weekly' },
+  ],
+  backtest: { strike_step: 2.5, slippage: 0, risk_free_rate: 0.05, fill_mode: 'next_open', cash: 0, price_iv_mult: 1 },
+  presets: { paper_bot: { underlying: 'TSLA', pick_rule: 'otm_pct', otm_pct: 0.1, max_top_ups: 4, round_budget: 1900, weekly_only: true } },
+};
+
+test('Options Martingale builds its settings from the shared rules and starts from the paper bot', async () => {
+  getStrategyParams.mockResolvedValue(OM_SCHEMA);
+  const { container } = render(<Dashboard />);
+  await screen.findByText('Backtest service unavailable');
+  fireEvent.click(screen.getByText('Options Martingale'));
+  await waitFor(() => expect(runSimulation).toHaveBeenLastCalledWith(expect.objectContaining({
+    strategyId: 'OPTIONS_MARTIN',
+    symbol: 'TSLA',
+    initialBalance: 1900,
+    optionsMartin: expect.objectContaining({ pick_rule: 'otm_pct', otm_pct: 0.1, max_top_ups: 4, weekly_only: true,
+      strike_step: 2.5, price_iv_mult: 1 }),
+  })));
+  expect(getStrategyParams).toHaveBeenCalledWith('OPTIONS_MARTIN');
+  expect(container.querySelector('input[name="om_underlying"]')).toBeNull();  // the Symbol field is the underlying
+  const topUps = container.querySelector('input[name="om_max_top_ups"]');
+  expect(topUps).toHaveValue(4);
+  fireEvent.change(topUps, { target: { value: '2' } });
+  fireEvent.click(screen.getByRole('button', { name: /rule defaults/i }));
+  expect(container.querySelector('input[name="om_max_top_ups"]')).toHaveValue(5);
+  fireEvent.click(screen.getByRole('button', { name: /paper bot settings/i }));
+  fireEvent.change(container.querySelector('input[name="om_max_top_ups"]'), { target: { value: '3' } });
+  await waitFor(() => expect(screen.getByRole('button', { name: /run simulation/i })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: /run simulation/i }));
+  await waitFor(() => expect(runSimulation).toHaveBeenLastCalledWith(expect.objectContaining({
+    optionsMartin: expect.objectContaining({ max_top_ups: 3, round_budget: 1900 }),
+  })));
 });

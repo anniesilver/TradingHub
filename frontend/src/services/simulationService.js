@@ -56,6 +56,15 @@ axios.interceptors.response.use(
 );
 
 /**
+ * The rules' parameters of a strategy that runs the shared tradekit rules (defaults, ranges, help)
+ * @param {string} strategyId - e.g. 'OPTIONS_MARTIN'
+ */
+export const getStrategyParams = async (strategyId) => {
+  const response = await axios.get(`${API_BASE_URL}/strategies/${strategyId}/params`);
+  return response.data;
+};
+
+/**
  * Fetches available trading strategies from the backend
  * @param {number} limit - Maximum number of strategies to return
  * @param {number} offset - Offset for pagination
@@ -163,8 +172,14 @@ export const runSimulation = async (config) => {
       });
     }
 
-    // OPTIONS_MARTIN specific parameters
+    // OPTIONS_MARTIN: the shared rules' own parameter names (algo_trading/shared/tradekit/rules/options_martin.py)
+    // + backtest settings, as one object built by components/OptionsMartinSettings.js
     if (config.strategyId === 'OPTIONS_MARTIN') {
+      payload.config = { ...(config.optionsMartin || {}), underlying: config.symbol || 'TSLA' };
+    }
+
+    // The old OPTIONS_MARTIN simulator (one fixed contract)
+    if (config.strategyId === 'OPTIONS_MARTIN_LEGACY') {
       payload.config.STRIKE = config.STRIKE !== undefined ? config.STRIKE : 680.0;
       payload.config.RIGHT = config.RIGHT || 'C';
       payload.config.EXPIRATION = config.EXPIRATION || getDefaultExpiration();
