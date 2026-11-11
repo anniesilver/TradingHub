@@ -6,7 +6,10 @@ import threading
 import time
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
-from zoneinfo import ZoneInfo
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+except ImportError:  # Python 3.8: IB times are read as New York time (the Gateway's zone)
+    ZoneInfo = None
 
 import pandas as pd
 import psycopg2
@@ -46,7 +49,7 @@ IBKR_CONFIG = {
 }
 
 
-NY = ZoneInfo("America/New_York")
+NY = ZoneInfo("America/New_York") if ZoneInfo else None
 
 
 def parse_ib_time(text: str) -> datetime:
@@ -57,7 +60,7 @@ def parse_ib_time(text: str) -> datetime:
     if len(parts) == 1:
         return datetime.strptime(parts[0], "%Y%m%d")
     when = datetime.strptime(" ".join(parts[:2]), "%Y%m%d %H:%M:%S")
-    if len(parts) >= 3 and parts[2] not in ("US/Eastern", "America/New_York"):
+    if len(parts) >= 3 and parts[2] not in ("US/Eastern", "America/New_York") and ZoneInfo:
         when = when.replace(tzinfo=ZoneInfo(parts[2])).astimezone(NY).replace(tzinfo=None)
     return when
 
@@ -407,9 +410,11 @@ class IBKRDataService:
         if not self.client.connect_to_ibkr(IBKR_CONFIG["host"], IBKR_CONFIG["port"]):
             raise Exception("Failed to connect to IBKR")
         try:
-            piece_end = min(end + timedelta(days=1), datetime.now(NY).replace(tzinfo=None))
+            now_ny = datetime.now(NY).replace(tzinfo=None) if NY else datetime.now()
+            piece_end = min(end + timedelta(days=1), now_ny)
             while piece_end > start:
-                ib_end = piece_end.replace(tzinfo=NY).astimezone(ZoneInfo("UTC")).strftime("%Y%m%d-%H:%M:%S")
+                # IB's end time with a zone: '20251029 16:00:00 US/Eastern'
+                ib_end = piece_end.strftime("%Y%m%d %H:%M:%S") + " US/Eastern"
                 logger.info(f"Fetching 3 W of {bar_size} {symbol} bars ending {piece_end:%Y-%m-%d}")
                 try:
                     rows = self.client.fetch_historical_data(symbol, "3 W", bar_size, ib_end)

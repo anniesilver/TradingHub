@@ -71,3 +71,17 @@ def test_strings_from_the_page_are_converted():
     got = oms._rule_params({"round_budget": "1900", "max_top_ups": "4.0", "weekly_only": "true",
                             "underlying": "tsla", "otm_pct": ""}, OptionsMartin)
     assert got == {"round_budget": 1900.0, "max_top_ups": 4, "weekly_only": True, "underlying": "TSLA"}
+
+
+def test_holes_inside_the_cached_bars_are_downloaded(monkeypatch):
+    """Two earlier runs over separate months leave a hole in the middle: fetch it too."""
+    import types
+    days = [d for d in pd.bdate_range("2026-01-05", "2026-01-30").append(pd.bdate_range("2026-06-01", "2026-06-30"))]
+    have = pd.DatetimeIndex([d + pd.Timedelta(hours=9, minutes=30) for d in days])
+    df = pd.DataFrame({"open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 0}, index=have)
+    fetched = []
+    fake = types.SimpleNamespace(get_data_from_db=lambda *a: df,
+                                 fetch_intraday_range=lambda name, a, b, i: fetched.append((a.date(), b.date())))
+    monkeypatch.setitem(sys.modules, "ibkr_data_service", types.SimpleNamespace(ibkr_service=fake))
+    oms._ensure_intraday("TSLA", datetime(2026, 1, 5), datetime(2026, 6, 30), "5 mins")
+    assert fetched == [(datetime(2026, 1, 30).date(), datetime(2026, 6, 1).date())]   # Jan 30 -> Jun 1

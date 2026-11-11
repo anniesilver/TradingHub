@@ -86,6 +86,11 @@ def _ensure_intraday(name: str, start: datetime, end: datetime, interval: str) -
         first, last = df.index.min().to_pydatetime(), df.index.max().to_pydatetime()
         if (first - start).days > GAP_DAYS:
             missing.append((start, first))
+        # holes inside, e.g. from two earlier runs over separate months
+        times = df.index.sort_values()
+        for a, b in zip(times[:-1], times[1:]):
+            if (b - a).days > GAP_DAYS:
+                missing.append((a.to_pydatetime(), b.to_pydatetime()))
         if (want_end - last).days > GAP_DAYS:
             missing.append((last, end))
     for a, b in missing:
