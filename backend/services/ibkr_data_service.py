@@ -66,6 +66,11 @@ def parse_ib_time(text: str) -> datetime:
 
 
 HISTORY_TIMEOUT_S = 180  # longest wait for one historical data request
+FARM_DOWN_WAIT_S = 30    # with IB's history server reported down, give up after this long
+
+
+class HistoryServerDown(Exception):
+    """The Gateway reports its historical data server (HMDS farm) as broken, so IB won't answer."""
 
 
 class IBKRDataClient(EWrapper, EClient):
@@ -79,6 +84,7 @@ class IBKRDataClient(EWrapper, EClient):
         self.connection_successful = threading.Event()
         self.error_occurred = False
         self.error_message = ""
+        self.hmds_down = set()   # history farms the Gateway reports broken (2105), e.g. 'ushmds'
         
     def nextValidId(self, orderId: int):
         """Called when connection is established"""
@@ -96,6 +102,12 @@ class IBKRDataClient(EWrapper, EClient):
         else:
             errorCode, errorString = args[0], args[1]
         logger.error(f"IBKR Error - ReqId: {reqId}, Code: {errorCode}, Message: {errorString}")
+        if errorCode in (2105, 2106, 2107) and "HMDS" in errorString.upper():
+            farm = errorString.rsplit(":", 1)[-1].strip()
+            if errorCode == 2105:   # "HMDS data farm connection is broken:ushmds"
+                self.hmds_down.add(farm)
+            else:                   # 2106 OK, 2107 inactive but available on demand
+                self.hmds_down.discard(farm)
         if errorCode in [502, 504, 1100]:  # Connection errors (1100: IB lost its servers, reqId -1)
             self.error_occurred = True
             self.error_message = f"Connection error: {errorString}"
@@ -191,7 +203,18 @@ class IBKRDataClient(EWrapper, EClient):
             # Wait until IB says the request is complete (historicalDataEnd) or fails. Years of
             # daily bars for a symbol IB hasn't cached can take well over 10 seconds; a fixed
             # sleep returned nothing, or only part of the history.
-            if not self.data_received.wait(HISTORY_TIMEOUT_S):
+            waited = 0
+            while not self.data_received.wait(1):
+                waited += 1
+                if self.hmds_down and not self.data and waited >= FARM_DOWN_WAIT_S:
+                    self.cancelHistoricalData(req_id)
+                    raise HistoryServerDown(
+                        f"IB's historical data server is down ({', '.join(sorted(self.hmds_down))} broken, "
+                        f"IB code 2105), so IB isn't answering history requests. Restart the IB Gateway "
+                        f"or try again later.")
+                if waited >= HISTORY_TIMEOUT_S:
+                    break
+            if not self.data_received.is_set():
                 raise Exception(f"IB sent no complete answer for {symbol} ({period} of {data_type}) "
                                 f"within {HISTORY_TIMEOUT_S}s ({len(self.data)} bars so far)")
 
@@ -417,6 +440,8 @@ class IBKRDataService:
                 logger.info(f"Fetching 3 W of {bar_size} {symbol} bars ending {piece_end:%Y-%m-%d}")
                 try:
                     rows = self.client.fetch_historical_data(symbol, "3 W", bar_size, ib_end)
+                except HistoryServerDown:
+                    raise
                 except Exception as e:  # e.g. nothing that far back: stop going back
                     logger.warning(f"No {symbol} {bar_size} bars before {piece_end:%Y-%m-%d}: {e}")
                     break
