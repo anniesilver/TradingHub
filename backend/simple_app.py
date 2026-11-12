@@ -86,6 +86,24 @@ def get_options_martin_params():
         return jsonify({"error": str(e)}), 500
 
 
+def _from_this_pc() -> bool:
+    """Paper-test routes change what the server trades, so only TradingHub's own page may call
+    them: a browser always sends Origin on cross-site requests, and any other website's is refused
+    (CORS(app) above allows every origin for the read-only routes)."""
+    origin = request.headers.get("Origin")
+    if origin is None:
+        return True  # not from a web page (e.g. curl on this PC)
+    from urllib.parse import urlparse
+    return urlparse(origin).hostname in ("localhost", "127.0.0.1")
+
+
+@app.before_request
+def guard_paper_test():
+    if request.path.startswith("/api/paper-test") and not _from_this_pc():
+        return jsonify({"error": "paper tests can only be started from TradingHub on this PC"}), 403
+    return None
+
+
 @app.route("/api/paper-test/<strategy_id>", methods=["GET"])
 def paper_test_status(strategy_id):
     """The strategy's paper test on the trade-engine server: what runs, what it holds."""

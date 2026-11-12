@@ -59,3 +59,14 @@ def test_server_errors_come_back_as_messages(monkeypatch):
     monkeypatch.setattr(pts.subprocess, "run", FakeRun({"ok": False, "error": "push algo_trading first"}))
     with pytest.raises(pts.PaperTestError, match="push algo_trading first"):
         pts.status("OPTIONS_MARTIN")
+
+
+def test_routes_refuse_other_websites(monkeypatch):
+    simple_app = pytest.importorskip("simple_app", reason="needs the full backend environment (ibapi, psycopg2)")
+
+    monkeypatch.setattr(pts.subprocess, "run", FakeRun({"ok": True, "message": "dropped"}))
+    client = simple_app.app.test_client()
+    bad = client.post("/api/paper-test/WHEEL/cancel", headers={"Origin": "https://evil.example"})
+    assert bad.status_code == 403
+    ok = client.post("/api/paper-test/WHEEL/cancel", headers={"Origin": "http://localhost:3000"})
+    assert ok.status_code == 200 and ok.get_json()["message"] == "dropped"
