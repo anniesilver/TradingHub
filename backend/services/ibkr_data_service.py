@@ -106,7 +106,7 @@ class IBKRDataClient(EWrapper, EClient):
     
     def historicalData(self, reqId: int, bar):
         """Receive historical data bars"""
-        logger.info(f"Received bar: reqId={reqId}, date={bar.date}, close={bar.close}")
+        logger.debug(f"Received bar: reqId={reqId}, date={bar.date}, close={bar.close}")
         self.data.append({
             'date': bar.date,
             'open': bar.open,
