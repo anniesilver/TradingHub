@@ -7,10 +7,10 @@ import Dashboard, { CustomTooltip } from './Dashboard';
 import App from '../App';
 import { createWorkspaceTheme } from '../theme';
 import { chartColors } from '../components/chartColors';
-import { runSimulation, getStrategyParams } from '../services/simulationService';
+import { runSimulation, getStrategyParams, getLiveSettings } from '../services/simulationService';
 import { computeSharpeRatio } from './performanceMetrics';
 
-jest.mock('../services/simulationService', () => ({ runSimulation: jest.fn(), getStrategyParams: jest.fn() }));
+jest.mock('../services/simulationService', () => ({ runSimulation: jest.fn(), getStrategyParams: jest.fn(), getLiveSettings: jest.fn() }));
 
 const originalResizeObserver = global.ResizeObserver;
 test('configured starting capital preserves cents without requesting another simulation', async () => {
@@ -691,11 +691,13 @@ const OM_SCHEMA = {
     { name: 'weekly_only', type: 'bool', default: false, min: null, max: null, choices: null, help: 'weekly' },
   ],
   backtest: { strike_step: 2.5, slippage: 0, risk_free_rate: 0.05, fill_mode: 'next_open', cash: 0, price_iv_mult: 1 },
-  presets: { paper_bot: { underlying: 'TSLA', pick_rule: 'otm_pct', otm_pct: 0.1, max_top_ups: 4, round_budget: 1900, weekly_only: true } },
+  presets: {},
 };
+const OM_LIVE = { underlying: 'TSLA', pick_rule: 'otm_pct', otm_pct: 0.1, max_top_ups: 4, round_budget: 1900, weekly_only: true };
 
-test('Options Martingale builds its settings from the shared rules and starts from the paper bot', async () => {
+test('Options Martingale builds its settings from the shared rules and starts from what runs live', async () => {
   getStrategyParams.mockResolvedValue(OM_SCHEMA);
+  getLiveSettings.mockResolvedValue({ values: OM_LIVE, since: '2026-11-12T09:20:00-05:00', label: 'weekly' });
   const { container } = render(<Dashboard />);
   await screen.findByText('Backtest service unavailable');
   fireEvent.click(screen.getByText('Options Martingale'));
@@ -713,11 +715,49 @@ test('Options Martingale builds its settings from the shared rules and starts fr
   fireEvent.change(topUps, { target: { value: '2' } });
   fireEvent.click(screen.getByRole('button', { name: /rule defaults/i }));
   expect(container.querySelector('input[name="om_max_top_ups"]')).toHaveValue(5);
-  fireEvent.click(screen.getByRole('button', { name: /paper bot settings/i }));
+  fireEvent.click(screen.getByRole('button', { name: /live settings/i }));
+  expect(screen.getByText('Live on the server · weekly since 2026-11-12')).toBeInTheDocument();
   fireEvent.change(container.querySelector('input[name="om_max_top_ups"]'), { target: { value: '3' } });
   await waitFor(() => expect(screen.getByRole('button', { name: /run simulation/i })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: /run simulation/i }));
   await waitFor(() => expect(runSimulation).toHaveBeenLastCalledWith(expect.objectContaining({
     optionsMartin: expect.objectContaining({ max_top_ups: 3, round_budget: 1900 }),
   })));
+});
+
+const WHEEL_SCHEMA = {
+  rules: [
+    { name: 'underlying', type: 'str', default: 'SPY', min: null, max: null, choices: null, help: '' },
+    { name: 'budget', type: 'float', default: 100000, min: 1000, max: 1e8, choices: null, help: '' },
+    { name: 'put_otm_pct', type: 'float', default: 0.05, min: 0, max: 0.5, choices: null, help: '' },
+    { name: 'call_floor_pct', type: 'float', default: 0, min: 0, max: 1, choices: null, help: '' },
+  ],
+  backtest: {},
+};
+
+test('Wheel opens with the live settings and can switch to the rule defaults', async () => {
+  getStrategyParams.mockImplementation(id => Promise.resolve(id === 'WHEEL' ? WHEEL_SCHEMA : OM_SCHEMA));
+  getLiveSettings.mockResolvedValue({ values: { underlying: 'AMZN', budget: 30000, put_otm_pct: 0.05, call_floor_pct: 0.1 }, since: null, label: '' });
+  render(<Dashboard />);
+  await screen.findByText('Backtest service unavailable');
+  fireEvent.click(screen.getByRole('button', { name: /^Wheel/i }));
+  await waitFor(() => expect(runSimulation).toHaveBeenLastCalledWith(expect.objectContaining({
+    strategyId: 'WHEEL', symbol: 'AMZN', budget: 30000, call_floor_pct: 0.1,
+  })));
+  expect(getLiveSettings).toHaveBeenCalledWith('WHEEL', WHEEL_SCHEMA);
+  expect(screen.getByText('Live on the server')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /rule defaults/i }));
+  await waitFor(() => expect(screen.getByLabelText('Symbol')).toHaveValue('SPY'));
+  fireEvent.click(screen.getByRole('button', { name: /live settings/i }));
+  await waitFor(() => expect(screen.getByLabelText('Symbol')).toHaveValue('AMZN'));
+});
+
+test('Wheel falls back to the rule defaults when the server cannot be reached', async () => {
+  getStrategyParams.mockImplementation(id => Promise.resolve(id === 'WHEEL' ? WHEEL_SCHEMA : OM_SCHEMA));
+  getLiveSettings.mockRejectedValue(new Error('timed out'));
+  render(<Dashboard />);
+  await screen.findByText('Backtest service unavailable');
+  fireEvent.click(screen.getByRole('button', { name: /^Wheel/i }));
+  expect(await screen.findByText(/Server not reachable, so these are the rule defaults \(timed out\)/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /live settings/i })).toBeDisabled();
 });

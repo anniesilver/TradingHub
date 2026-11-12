@@ -142,9 +142,22 @@ export const kitStrategyConfig = (config) => {
 };
 
 /** The strategy's paper test on the trade-engine server: what runs and what it holds. */
-export const getPaperTest = async (strategyId) => {
-  const response = await axios.get(`${API_BASE_URL}/paper-test/${strategyId}`);
+export const getPaperTest = async (strategyId, { quotes = true } = {}) => {
+  const response = await axios.get(`${API_BASE_URL}/paper-test/${strategyId}`, { params: quotes ? {} : { quotes: 0 } });
   return response.data;
+};
+
+/**
+ * The rule settings the strategy runs with on the server right now, filled in with the rules'
+ * defaults (the live bot uses a rule's default for anything its config doesn't set).
+ * schema: from getStrategyParams. Returns { values, since, label } or throws if the server can't be reached.
+ */
+export const getLiveSettings = async (strategyId, schema) => {
+  const status = await getPaperTest(strategyId, { quotes: false });
+  const live = status.config || {};
+  const values = {};
+  schema.rules.forEach(p => { values[p.name] = p.name in live ? live[p.name] : p.default; });
+  return { values, since: status.test?.started || null, label: status.test?.label || '' };
 };
 
 /**

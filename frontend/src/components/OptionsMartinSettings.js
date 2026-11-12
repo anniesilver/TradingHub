@@ -36,14 +36,16 @@ function Help({ id, text }) {
 
 const label = name => name.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
 
+// Starts from what the paper bot runs now (schema.presets.live, from the server), or the
+// rules' defaults when the server can't be reached.
 export function initialOptionsMartinConfig(schema) {
   const cfg = {};
   schema.rules.forEach(p => { cfg[p.name] = p.default; });
-  Object.assign(cfg, schema.backtest, schema.presets?.paper_bot || {});
+  Object.assign(cfg, schema.backtest, schema.presets?.live || {});
   return cfg;
 }
 
-export default function OptionsMartinSettings({ schema, value, onChange }) {
+export default function OptionsMartinSettings({ schema, value, onChange, source }) {
   if (!schema || !value) {
     return <Grid item xs={12}><Typography variant="body2" color="text.secondary">Loading the rules' settings…</Typography></Grid>;
   }
@@ -55,7 +57,7 @@ export default function OptionsMartinSettings({ schema, value, onChange }) {
   };
   const applyPreset = (preset) => {
     const base = initialOptionsMartinConfig({ ...schema, presets: {} });
-    onChange(preset ? { ...base, ...schema.presets.paper_bot } : base);
+    onChange(preset ? { ...base, ...schema.presets.live } : base);
   };
 
   return (
@@ -63,8 +65,9 @@ export default function OptionsMartinSettings({ schema, value, onChange }) {
       <Grid item xs={12}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 1, mb: 1 }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>Options Martingale rules (same as the paper bot)</Typography>
-          <Button size="small" variant="outlined" onClick={() => applyPreset(true)}>Paper bot settings</Button>
+          <Button size="small" variant="outlined" onClick={() => applyPreset(true)} disabled={!schema.presets?.live}>Live settings</Button>
           <Button size="small" variant="text" onClick={() => applyPreset(false)}>Rule defaults</Button>
+          {source && <Typography variant="caption" color="text.secondary">{source}</Typography>}
         </Box>
       </Grid>
       {schema.rules.filter(p => p.name !== 'underlying').map(p => {  // the Symbol field above is the underlying
