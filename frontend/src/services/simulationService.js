@@ -121,6 +121,62 @@ export const getSimulations = async (limit = 10, offset = 0) => {
  * @param {number} config.SLIPPAGE_PERCENT - SPY500_LEADER slippage fraction (default: 0.001 = 0.1%)
  * @returns {Promise<Object>} Simulation results
  */
+/**
+ * The settings of a strategy that runs the shared tradekit rules, under the rules' own names
+ * (algo_trading/shared/tradekit/rules/<strategy>.py) plus the backtest-only settings.
+ * The backtest and the paper test both send this.
+ */
+export const kitStrategyConfig = (config) => {
+  if (config.strategyId === 'WHEEL') {
+    const keys = ['budget', 'initial_position_pct', 'put_otm_pct', 'call_otm_pct', 'min_days_to_expiry',
+      'call_floor_pct', 'call_max_days', 'put_take_profit', 'call_take_profit', 'min_premium', 'cash_secured', 'use_iv_filter', 'iv_min',
+      'strike_step', 'slippage', 'iv_source', 'fixed_iv'];
+    const out = { underlying: config.symbol || 'SPY', risk_free_rate: config.riskFreeRate };
+    keys.forEach(key => {
+      if (config[key] !== undefined) out[key] = config[key];
+    });
+    return out;
+  }
+  // OPTIONS_MARTIN: one object built by components/OptionsMartinSettings.js
+  return { ...(config.optionsMartin || {}), underlying: config.symbol || 'TSLA' };
+};
+
+/** The strategy's paper test on the trade-engine server: what runs and what it holds. */
+export const getPaperTest = async (strategyId, { quotes = true } = {}) => {
+  const response = await axios.get(`${API_BASE_URL}/paper-test/${strategyId}`, { params: quotes ? {} : { quotes: 0 } });
+  return response.data;
+};
+
+/**
+ * The rule settings the strategy runs with on the server right now, filled in with the rules'
+ * defaults (the live bot uses a rule's default for anything its config doesn't set).
+ * schema: from getStrategyParams. Returns { values, since, label } or throws if the server can't be reached.
+ */
+export const getLiveSettings = async (strategyId, schema) => {
+  const status = await getPaperTest(strategyId, { quotes: false });
+  const live = status.config || {};
+  const values = {};
+  schema.rules.forEach(p => { values[p.name] = p.name in live ? live[p.name] : p.default; });
+  return { values, since: status.test?.started || null, label: status.test?.label || '' };
+};
+
+/**
+ * Start a paper test with these settings. closeOut: close whatever the strategy holds first
+ * (at the price available), then start.
+ */
+export const startPaperTest = async (config, { dryRun = false, closeOut = false, label = '' } = {}) => {
+  const response = await axios.post(`${API_BASE_URL}/paper-test/${config.strategyId}/start`, {
+    config: kitStrategyConfig(config), dry_run: dryRun, close_out: closeOut, label,
+  });
+  return response.data;
+};
+
+/** Drop a paper test that is still waiting for its close-out. */
+export const cancelPaperTest = async (strategyId) => {
+  const response = await axios.post(`${API_BASE_URL}/paper-test/${strategyId}/cancel`);
+  return response.data;
+};
+
 export const runSimulation = async (config) => {
   try {
     if (!config) {
@@ -161,21 +217,9 @@ export const runSimulation = async (config) => {
       end_date: config.endDate || new Date().toISOString().split('T')[0]
     };
 
-    // WHEEL: the rules' own parameter names (algo_trading/shared/tradekit/rules/wheel.py) + backtest settings
-    if (config.strategyId === 'WHEEL') {
-      const keys = ['budget', 'initial_position_pct', 'put_otm_pct', 'call_otm_pct', 'min_days_to_expiry',
-        'call_floor_pct', 'call_max_days', 'put_take_profit', 'call_take_profit', 'min_premium', 'cash_secured', 'use_iv_filter', 'iv_min',
-        'strike_step', 'slippage', 'iv_source', 'fixed_iv'];
-      payload.config = { underlying: config.symbol || 'SPY', risk_free_rate: config.riskFreeRate };
-      keys.forEach(key => {
-        if (config[key] !== undefined) payload.config[key] = config[key];
-      });
-    }
-
-    // OPTIONS_MARTIN: the shared rules' own parameter names (algo_trading/shared/tradekit/rules/options_martin.py)
-    // + backtest settings, as one object built by components/OptionsMartinSettings.js
-    if (config.strategyId === 'OPTIONS_MARTIN') {
-      payload.config = { ...(config.optionsMartin || {}), underlying: config.symbol || 'TSLA' };
+    // WHEEL and OPTIONS_MARTIN: the shared tradekit rules' own parameter names + backtest settings
+    if (config.strategyId === 'WHEEL' || config.strategyId === 'OPTIONS_MARTIN') {
+      payload.config = kitStrategyConfig(config);
     }
 
     // The old OPTIONS_MARTIN simulator (one fixed contract)

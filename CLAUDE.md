@@ -43,6 +43,7 @@ TradingHub is a full-stack web application for trading strategy simulation and b
 - **Strategy Service** (`backend/services/strategy_service.py`) - Core trading strategy logic and simulation engine
 - **Wheel Service** (`backend/services/wheel_service.py`) - WHEEL backtest: runs the rules shared with trade-engine's paper bot from `<ALGO_BASE_PATH>/shared/tradekit` (once a day, Black-Scholes on a made-up weekly chain)
 - **Options Martin Service** (`backend/services/options_martin_service.py`) - OPTIONS_MARTIN backtest: the shared tradekit rules on 5-min stock bars + the stock's 5-min 30-day IV (downloaded from IB in 3-week pieces the first time), Black-Scholes option prices, weekly roll like the paper bot. The old fixed-contract simulator is OPTIONS_MARTIN_LEGACY
+- **Paper Test Service** (`backend/services/paper_test_service.py`) - "Start paper test" button (WHEEL, OPTIONS_MARTIN): sends the page's rule parameters + the local algo_trading commit to trade-engine's `autotrader/papertest.py` over SSH (TRADE_ENGINE_SSH, default IBKR_SSH_TUNNEL). One test per strategy; positions still held are closed first. Routes: `GET /api/paper-test/<id>`, `POST /api/paper-test/<id>/start|cancel`
 - **Models** (`backend/models/`) - SQLAlchemy database models for users and products
 - **Routes** (`backend/routes/`) - API route handlers for auth, accounts, and strategies
 - **Database**: PostgreSQL with Flask-SQLAlchemy ORM

@@ -40,8 +40,9 @@ import {
   ResponsiveContainer,
   ComposedChart,
 } from 'recharts';
-import { runSimulation, getStrategyParams } from '../services/simulationService';
+import { runSimulation, getStrategyParams, getLiveSettings } from '../services/simulationService';
 import OptionsMartinSettings, { initialOptionsMartinConfig } from '../components/OptionsMartinSettings';
+import PaperTestButton from '../components/PaperTestButton';
 import OptionsMartinResults from '../components/OptionsMartinResults';
 import ParameterField from '../components/ParameterField';
 import SimulationTransition, { WaveBackdrop } from '../components/WaveSurface';
@@ -353,6 +354,9 @@ const AVAILABLE_STRATEGIES = [
   }
 ];
 
+// "Live on the server · 7% OTM since 2026-11-12" under the strategy's settings
+const liveSourceText = (live) => `Live on the server${live.label ? ` · ${live.label}` : ''}${live.since ? ` since ${live.since.slice(0, 10)}` : ''}`;
+
 function Dashboard() {
   const [strategyMenuOpen, setStrategyMenuOpen] = useState(false);
   const strategyMenuButton = useRef(null);
@@ -385,6 +389,11 @@ function Dashboard() {
   // OPTIONS_MARTIN runs the shared rules: its settings come from the rules' own parameter list
   const [omSchema, setOmSchema] = useState(null);
   const [omConfig, setOmConfig] = useState(null);
+  const [omSource, setOmSource] = useState('');
+  // WHEEL and OPTIONS_MARTIN open with what the paper bot runs now on the server (rule defaults if unreachable)
+  const [wheelSchema, setWheelSchema] = useState(null);
+  const [wheelLive, setWheelLive] = useState(null);
+  const [wheelSource, setWheelSource] = useState('');
   const [config, setConfig] = useState({
     symbol: 'SPY',
     optionType: 'call',
@@ -1485,12 +1494,23 @@ function Dashboard() {
     }
   };
 
-  // OPTIONS_MARTIN: load the rules' settings once (starting from the paper bot's), then run
+  // OPTIONS_MARTIN: load the rules' settings once (starting from what the paper bot runs now), then run
   useEffect(() => {
     if (selectedStrategy !== 'OPTIONS_MARTIN' || omSchema) return;
     let cancelled = false;
     Promise.resolve()
       .then(() => getStrategyParams('OPTIONS_MARTIN'))
+      .then(async rules => {
+        let schema = { ...rules, presets: {} };
+        try {
+          const live = await getLiveSettings('OPTIONS_MARTIN', rules);
+          schema = { ...schema, presets: { live: live.values } };
+          if (!cancelled) setOmSource(liveSourceText(live));
+        } catch (err) {
+          if (!cancelled) setOmSource(`Server not reachable, so these are the rule defaults (${err?.response?.data?.error || err?.message || 'no answer'})`);
+        }
+        return schema;
+      })
       .then(schema => {
         if (cancelled) return;
         const initial = initialOptionsMartinConfig(schema);
@@ -1506,12 +1526,46 @@ function Dashboard() {
     return () => { cancelled = true; };
   }, [selectedStrategy, omSchema]);
 
+  // WHEEL: the rules' parameters with the paper bot's live values, once
+  const wheelValuesOf = (values) => ({ ...values, symbol: values.underlying || 'SPY' });
+  useEffect(() => {
+    if (selectedStrategy !== 'WHEEL' || wheelSchema) return;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => getStrategyParams('WHEEL'))
+      .then(async rules => {
+        let live = null;
+        try {
+          live = await getLiveSettings('WHEEL', rules);
+          if (!cancelled) setWheelSource(liveSourceText(live));
+        } catch (err) {
+          if (!cancelled) setWheelSource(`Server not reachable, so these are the rule defaults (${err?.response?.data?.error || err?.message || 'no answer'})`);
+        }
+        if (cancelled) return;
+        const defaults = {};
+        rules.rules.forEach(p => { defaults[p.name] = p.default; });
+        setWheelLive(live ? live.values : null);
+        setConfig(prev => ({ ...prev, ...wheelValuesOf(live ? live.values : defaults) }));
+        setWheelSchema(rules);
+      })
+      .catch(() => { if (!cancelled) setWheelSchema({ rules: [] }); });  // keep the page's own values
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStrategy, wheelSchema]);
+  const applyWheelPreset = (live) => {
+    const defaults = {};
+    (wheelSchema?.rules || []).forEach(p => { defaults[p.name] = p.default; });
+    setConfig(prev => ({ ...prev, ...wheelValuesOf(live && wheelLive ? wheelLive : defaults) }));
+  };
+
   const omReady = omConfig !== null;
+  const wheelReady = wheelSchema !== null;
   useEffect(() => {
     if (selectedStrategy === 'OPTIONS_MARTIN' && !omReady) return;  // waits for its settings
+    if (selectedStrategy === 'WHEEL' && !wheelReady) return;
     handleRunSimulation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStrategy, omReady]);
+  }, [selectedStrategy, omReady, wheelReady]);
 
   // Helper function to extract first month with trading activity
   // eslint-disable-next-line no-unused-vars
@@ -1690,7 +1744,7 @@ function Dashboard() {
       <Paper key={selectedStrategy} component="form" data-strategy={selectedStrategy} className="scenario-surface workspace-panel" sx={{ mb: 2, p: 2 }}>
         <div className="scenario-heading"><Typography component="h2" variant="subtitle2">Run settings</Typography><span>Historical simulation · No trades placed</span></div>
         <ParameterGrid container>
-          <Grid item xs={12} className="primary-run-action"><div className="form-actions"><Button variant="contained" color="primary" onClick={event => handleRunSimulation(event, true)} disabled={loading}>Run simulation</Button></div></Grid>
+          <Grid item xs={12} className="primary-run-action"><div className="form-actions"><Button variant="contained" color="primary" onClick={event => handleRunSimulation(event, true)} disabled={loading}>Run simulation</Button>{(selectedStrategy === 'WHEEL' || selectedStrategy === 'OPTIONS_MARTIN') && <PaperTestButton strategyId={selectedStrategy} config={runConfigFor(config)} disabled={loading || (selectedStrategy === 'OPTIONS_MARTIN' && !omConfig)} />}</div></Grid>
           <Grid item xs={12} sm={3} md={1.5}>
             {/* Pick a listed ticker or type any other one (it is loaded from IB the first time) */}
             <ParameterField name="symbol" label="Symbol">
@@ -2075,9 +2129,14 @@ function Dashboard() {
           {selectedStrategy === 'WHEEL' && (
             <>
               <Grid item xs={12}>
-                <Typography variant="subtitle2" sx={{ mt: 1, mb: 1, fontWeight: 'bold' }}>
-                  Wheel rules (same as the paper bot)
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 1, mb: 1 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                    Wheel rules (same as the paper bot)
+                  </Typography>
+                  <Button size="small" variant="outlined" onClick={() => applyWheelPreset(true)} disabled={!wheelLive}>Live settings</Button>
+                  <Button size="small" variant="text" onClick={() => applyWheelPreset(false)} disabled={!wheelSchema?.rules?.length}>Rule defaults</Button>
+                  {wheelSource && <Typography variant="caption" color="text.secondary">{wheelSource}</Typography>}
+                </Box>
               </Grid>
               {[
                 ['initial_position_pct', 'Initial Position %', { min: 0.01, max: 1, step: 0.05 }],
@@ -2182,7 +2241,7 @@ function Dashboard() {
 
           {/* OPTIONS_MARTIN: the shared rules' parameters (same as the paper bot) + backtest settings */}
           {selectedStrategy === 'OPTIONS_MARTIN' && (
-            <OptionsMartinSettings schema={omSchema} value={omConfig} onChange={setOmConfig} />
+            <OptionsMartinSettings schema={omSchema} value={omConfig} onChange={setOmConfig} source={omSource} />
           )}
 
           {/* The old OPTIONS_MARTIN simulator's parameters */}

@@ -10,6 +10,7 @@ from flask_cors import CORS
 from services.strategy_service import import_strategy, run_spy_power_cashflow, run_options_martin, run_spy500_leader
 from services.wheel_service import run_wheel, wheel_params
 from services.options_martin_service import options_martin_params, run_options_martin_kit
+from services import paper_test_service
 from routes.market_data import market_data_bp
 
 
@@ -83,6 +84,59 @@ def get_options_martin_params():
     except Exception as e:
         logger.error(f"Error reading OPTIONS_MARTIN parameters: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+
+def _from_this_pc() -> bool:
+    """Paper-test routes change what the server trades, so only TradingHub's own page may call
+    them: a browser always sends Origin on cross-site requests, and any other website's is refused
+    (CORS(app) above allows every origin for the read-only routes)."""
+    origin = request.headers.get("Origin")
+    if origin is None:
+        return True  # not from a web page (e.g. curl on this PC)
+    from urllib.parse import urlparse
+    return urlparse(origin).hostname in ("localhost", "127.0.0.1")
+
+
+@app.before_request
+def guard_paper_test():
+    if request.path.startswith("/api/paper-test") and not _from_this_pc():
+        return jsonify({"error": "paper tests can only be started from TradingHub on this PC"}), 403
+    return None
+
+
+@app.route("/api/paper-test/<strategy_id>", methods=["GET"])
+def paper_test_status(strategy_id):
+    """The strategy's paper test on the trade-engine server: what runs, what it holds."""
+    try:
+        return jsonify(paper_test_service.status(strategy_id, quotes=request.args.get("quotes", "1") != "0"))
+    except paper_test_service.PaperTestError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Paper test status error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/paper-test/<strategy_id>/start", methods=["POST"])
+def paper_test_start(strategy_id):
+    """Start a paper test with the page's parameters. close_out: close what it holds first."""
+    data = request.get_json() or {}
+    try:
+        return jsonify(paper_test_service.start(strategy_id, data.get("config") or {}, data.get("dry_run", False),
+                                                data.get("close_out", False), data.get("label", "")))
+    except paper_test_service.PaperTestError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Paper test start error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/paper-test/<strategy_id>/cancel", methods=["POST"])
+def paper_test_cancel(strategy_id):
+    """Drop a test that is still waiting for its close-out."""
+    try:
+        return jsonify(paper_test_service.cancel(strategy_id))
+    except paper_test_service.PaperTestError as e:
+        return jsonify({"error": str(e)}), 400
 
 
 @app.route("/api/simulate", methods=["POST"])
