@@ -137,6 +137,10 @@ export const kitStrategyConfig = (config) => {
     });
     return out;
   }
+  // SPY_POWER_CASHFLOW_RULES: one object built by components/SpyCashflowSettings.js
+  if (config.strategyId === 'SPY_POWER_CASHFLOW_RULES') {
+    return { ...(config.spyCashflow || {}), underlying: 'SPY' };
+  }
   // OPTIONS_MARTIN: one object built by components/OptionsMartinSettings.js
   return { ...(config.optionsMartin || {}), underlying: config.symbol || 'TSLA' };
 };
@@ -218,7 +222,7 @@ export const runSimulation = async (config) => {
     };
 
     // WHEEL and OPTIONS_MARTIN: the shared tradekit rules' own parameter names + backtest settings
-    if (config.strategyId === 'WHEEL' || config.strategyId === 'OPTIONS_MARTIN') {
+    if (config.strategyId === 'WHEEL' || config.strategyId === 'OPTIONS_MARTIN' || config.strategyId === 'SPY_POWER_CASHFLOW_RULES') {
       payload.config = kitStrategyConfig(config);
     }
 
