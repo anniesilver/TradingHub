@@ -171,6 +171,12 @@ export const startPaperTest = async (config, { dryRun = false, closeOut = false,
   return response.data;
 };
 
+/** Every paper test of this strategy so far (refreshed from the server first). */
+export const getPaperTestHistory = async (strategyId) => {
+  const response = await axios.get(`${API_BASE_URL}/paper-tests`, { params: { strategy: strategyId } });
+  return response.data;
+};
+
 /** Drop a paper test that is still waiting for its close-out. */
 export const cancelPaperTest = async (strategyId) => {
   const response = await axios.post(`${API_BASE_URL}/paper-test/${strategyId}/cancel`);
