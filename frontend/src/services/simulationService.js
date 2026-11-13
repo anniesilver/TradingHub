@@ -109,7 +109,7 @@ export const getSimulations = async (limit = 10, offset = 0) => {
  * @param {number} config.minCommission - Minimum commission in dollars per trade (default: 1.0)
  * @param {number} config.minStrikeDistance - Minimum strike-distance fraction (default: 0.015 = 1.5%)
  * @param {number} config.minTradeSize - Minimum trade value in dollars (default: 1000)
- * @param {number} config.monthlyWithdrawalRate - Monthly withdrawal percentage points (default: 1.0 = 1%)
+ * @param {number} config.monthlyWithdrawalRate - Monthly withdrawal percentage points (default: 0.6 = 0.6%)
  * @param {number} config.optionCommission - Dollars per option contract (default: 0.65)
  * @param {number} config.riskFreeRate - Annual risk-free fraction (default: 0.05 = 5%)
  * @param {number} config.stockCommission - Dollars per stock share (default: 0.01)
@@ -210,7 +210,7 @@ export const runSimulation = async (config) => {
         MIN_COMMISSION: config.minCommission !== undefined ? config.minCommission : 1.0,
         MIN_STRIKE_DISTANCE: config.minStrikeDistance !== undefined ? config.minStrikeDistance : 0.015,
         MIN_TRADE_SIZE: config.minTradeSize !== undefined ? config.minTradeSize : 1000,
-        MONTHLY_WITHDRAWAL_RATE: config.monthlyWithdrawalRate !== undefined ? config.monthlyWithdrawalRate : 1.0,
+        MONTHLY_WITHDRAWAL_RATE: config.monthlyWithdrawalRate !== undefined ? config.monthlyWithdrawalRate : 0.6,
         OPTION_COMMISSION: config.optionCommission !== undefined ? config.optionCommission : 0.65,
         RISK_FREE_RATE: config.riskFreeRate !== undefined ? config.riskFreeRate : 0.05,
         STOCK_COMMISSION: config.stockCommission !== undefined ? config.stockCommission : 0.01,

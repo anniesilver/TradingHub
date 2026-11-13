@@ -394,7 +394,7 @@ test('shows human percentages while preserving the original API defaults', async
     minStrikeDistance: [1.5, 0.015],
     riskFreeRate: [5, 0.05],
     // This API field already uses percentage points, not a fraction.
-    monthlyWithdrawalRate: [1, 1],
+    monthlyWithdrawalRate: [0.6, 0.6],
   };
   Object.entries(percentages).forEach(([name, [displayValue]]) => {
     const input = container.querySelector(`input[name="${name}"]`);
