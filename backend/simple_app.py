@@ -27,6 +27,9 @@ def is_port_in_use(port):
 
 # Configure detailed logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+# The IB library logs its socket polling ("socket timeout from recvMsg", "queue.get: empty") at
+# DEBUG many times a second; show only its warnings and errors.
+logging.getLogger("ibapi").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
