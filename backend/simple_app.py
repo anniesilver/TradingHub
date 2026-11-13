@@ -10,6 +10,7 @@ from flask_cors import CORS
 from services.strategy_service import import_strategy, run_spy_power_cashflow, run_options_martin, run_spy500_leader
 from services.wheel_service import run_wheel, wheel_params
 from services.options_martin_service import options_martin_params, run_options_martin_kit
+from services.spy_power_cashflow_service import run_spy_power_cashflow_rules, spy_power_cashflow_params
 from services import paper_test_service
 from routes.market_data import market_data_bp
 
@@ -73,6 +74,16 @@ def get_wheel_params():
         return jsonify(wheel_params())
     except Exception as e:
         logger.error(f"Error reading Wheel parameters: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/strategies/SPY_POWER_CASHFLOW_RULES/params", methods=["GET"])
+def get_spy_power_cashflow_params():
+    """The SPY_POWER_CASHFLOW rules' parameters (defaults, ranges, help) straight from algo_trading/shared."""
+    try:
+        return jsonify(spy_power_cashflow_params())
+    except Exception as e:
+        logger.error(f"Error reading SPY_POWER_CASHFLOW parameters: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -240,6 +251,19 @@ def run_simulation():
                 return jsonify({"error": str(e)}), 400
             except Exception as e:
                 logger.error(f"WHEEL execution error: {str(e)}")
+                logger.error(traceback.format_exc())
+                return jsonify({"error": f"Strategy execution failed: {str(e)}"}), 500
+
+        # SPY_POWER_CASHFLOW on the shared rules; the old simulator stays as SPY_POWER_CASHFLOW
+        if data["strategy_type"] == "SPY_POWER_CASHFLOW_RULES":
+            try:
+                results = run_spy_power_cashflow_rules(data["config"], start_date, end_date, initial_balance)
+                return jsonify(results)
+            except ValueError as e:
+                logger.error(f"SPY_POWER_CASHFLOW_RULES settings error: {str(e)}")
+                return jsonify({"error": str(e)}), 400
+            except Exception as e:
+                logger.error(f"SPY_POWER_CASHFLOW_RULES execution error: {str(e)}")
                 logger.error(traceback.format_exc())
                 return jsonify({"error": f"Strategy execution failed: {str(e)}"}), 500
 

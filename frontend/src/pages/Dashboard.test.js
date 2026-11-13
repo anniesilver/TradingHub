@@ -35,7 +35,7 @@ test('compact strategy navigation closes with Escape or a selection and returns 
   expect(menu).toHaveFocus();
   expect(runSimulation).toHaveBeenCalledTimes(calls);
   fireEvent.click(menu);
-  fireEvent.click(screen.getByRole('button', { name: 'SPY Power Cashflow' }));
+  fireEvent.click(screen.getByRole('button', { name: 'SPY Power Cashflow (old)' }));
   expect(menu).toHaveAttribute('aria-expanded', 'false');
   expect(menu).toHaveFocus();
   expect(runSimulation).toHaveBeenCalledTimes(calls);
@@ -61,7 +61,7 @@ test('only Power Cashflow hides its unused fields, without losing their values',
   fireEvent.change(screen.getByLabelText('Min Trade Size'), { target: { value: '2400' } });
   fireEvent.mouseDown(screen.getByLabelText('Option Type'));
   fireEvent.click(screen.getByRole('option', { name: 'Put' }));
-  fireEvent.click(screen.getByRole('button', { name: 'SPY Power Cashflow' }));
+  fireEvent.click(screen.getByRole('button', { name: 'SPY Power Cashflow (old)' }));
   await screen.findByText('Backtest service unavailable');
   labels.forEach(label => expect(screen.queryByLabelText(label)).not.toBeInTheDocument());
   expect(runSimulation.mock.calls.at(-1)[0]).toEqual(expect.objectContaining({
@@ -85,8 +85,8 @@ test('strategy navigation and header occupy separate in-flow grid cells', async 
   expect(main).toHaveAttribute('id', 'analysis-workspace');
   expect(within(main).getByLabelText('Configured scenario')).toHaveTextContent('SPY');
   expect(container.querySelector('.MuiDrawer-paper')).toBeNull();
-  expect(within(rail).getByRole('button', { name: 'SPY Power Cashflow' })).toHaveAttribute('aria-current', 'page');
-  expect(within(main).getByRole('heading', { name: 'SPY Power Cashflow' })).toBeVisible();
+  expect(within(rail).getByRole('button', { name: 'SPY Power Cashflow (old)' })).toHaveAttribute('aria-current', 'page');
+  expect(within(main).getByRole('heading', { name: 'SPY Power Cashflow (old)' })).toBeVisible();
   const run = screen.getByRole('button', { name: 'Run simulation' });
   expect(run.closest('.form-actions').firstElementChild).toBe(run);
   expect(run.closest('.MuiGrid-container').firstElementChild).toBe(run.closest('.primary-run-action'));
@@ -120,7 +120,7 @@ const summaryRun = {
   '2026-10-09': { Portfolio_Value: 204000, spy_value: 202000, Cash_Balance: 9000, Margin_Ratio: 0.1, Premiums_Received: 300, Interest_Paid: 30, Dividends_Received: 0, Trading_Log: 'Monthly withdrawal: $1,000.00' },
 };
 
-test.each(['SPY Power Cashflow', 'SPY Enhanced Cashflow', 'Options Martingale (old simulator)', 'S&P 500 Leader'])(
+test.each(['SPY Power Cashflow (old)', 'SPY Enhanced Cashflow', 'Options Martingale (old simulator)', 'S&P 500 Leader'])(
   'shows all eight metrics in Performance, retains Premium context, and keeps Logs transactional for %s', async strategy => {
     const leader = strategy === 'S&P 500 Leader';
     const response = leader ? Object.fromEntries(Object.entries(summaryRun).map(([date, row], index) => [date, {
@@ -130,7 +130,7 @@ test.each(['SPY Power Cashflow', 'SPY Enhanced Cashflow', 'Options Martingale (o
     }])) : summaryRun;
     runSimulation.mockResolvedValue(response);
     render(<Dashboard />);
-    if (strategy !== 'SPY Power Cashflow') fireEvent.click(screen.getByRole('button', { name: strategy }));
+    if (strategy !== 'SPY Power Cashflow (old)') fireEvent.click(screen.getByRole('button', { name: strategy }));
     const summary = await screen.findByRole('region', { name: 'Performance summary' });
     const row = name => within(summary).getByText(name).closest('.performance-cash-row');
     expect(summary.querySelectorAll('.performance-cash-row.performance-metric')).toHaveLength(5);
@@ -232,10 +232,10 @@ afterAll(() => {
 test('labels the historical workspace and exposes session-only accessibility preferences', async () => {
   const { container } = render(<Dashboard />);
   await screen.findByText('Backtest service unavailable');
-  expect(screen.getByRole('heading', { level: 1, name: 'SPY Power Cashflow' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { level: 1, name: 'SPY Power Cashflow (old)' })).toBeInTheDocument();
   expect(within(screen.getByRole('main')).getByText('Historical research')).toBeInTheDocument();
   expect(screen.getByRole('navigation', { name: 'Trading strategies' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /^SPY Power Cashflow/ })).toHaveAttribute('aria-current', 'page');
+  expect(screen.getByRole('button', { name: 'SPY Power Cashflow (old)' })).toHaveAttribute('aria-current', 'page');
   expect(screen.getByRole('link', { name: 'Skip to analysis' })).toHaveAttribute('href', '#analysis-workspace');
   fireEvent.click(screen.getByRole('checkbox', { name: 'Solid surfaces' }));
   fireEvent.click(screen.getByRole('checkbox', { name: 'Reduce motion' }));
@@ -323,7 +323,7 @@ test('strategy descriptions remain available in an initially collapsed guide', a
   await screen.findByText('Backtest service unavailable');
   const guide = screen.getByText('Strategy guide').closest('details');
   expect(guide).not.toHaveAttribute('open');
-  expect(guide).toHaveTextContent('Original covered call strategy with leveraged positions');
+  expect(guide).toHaveTextContent('The original SPY Power Cashflow simulator, kept for comparison');
   expect(container.querySelector('nav .MuiListItemText-secondary')).not.toBeInTheDocument();
 });
 
@@ -348,13 +348,13 @@ afterEach(() => {
 });
 
 test.each([
-  'SPY Power Cashflow',
+  'SPY Power Cashflow (old)',
   'SPY Enhanced Cashflow',
   'Options Martingale (old simulator)',
   'S&P 500 Leader',
 ])('every parameter has compact, associated help for %s', async (strategy) => {
   const { container } = render(<Dashboard />);
-  if (strategy !== 'SPY Power Cashflow') {
+  if (strategy !== 'SPY Power Cashflow (old)') {
     fireEvent.click(screen.getByText(strategy));
   }
   await screen.findByText('Backtest service unavailable');

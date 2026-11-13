@@ -45,6 +45,7 @@ import OptionsMartinSettings, { initialOptionsMartinConfig } from '../components
 import PaperTestButton from '../components/PaperTestButton';
 import PaperTestHistory from '../components/PaperTestHistory';
 import OptionsMartinResults from '../components/OptionsMartinResults';
+import SpyCashflowSettings, { SpyCashflowResults, initialSpyCashflowConfig } from '../components/SpyCashflowSettings';
 import ParameterField from '../components/ParameterField';
 import SimulationTransition, { WaveBackdrop } from '../components/WaveSurface';
 import PerformanceChart from '../components/PerformanceChart';
@@ -324,9 +325,14 @@ export const CustomTooltip = ({ active, payload, label }) => {
 
 const AVAILABLE_STRATEGIES = [
   {
-    id: 'SPY_POWER_CASHFLOW',
+    id: 'SPY_POWER_CASHFLOW_RULES',
     name: 'SPY Power Cashflow',
-    description: 'Original covered call strategy with leveraged positions'
+    description: 'Covered calls on leveraged SPY. Same rules as the paper bot'
+  },
+  {
+    id: 'SPY_POWER_CASHFLOW',
+    name: 'SPY Power Cashflow (old)',
+    description: 'The original SPY Power Cashflow simulator, kept for comparison'
   },
   {
     id: 'SPY_ENHANCED_CASHFLOW',
@@ -386,7 +392,11 @@ function Dashboard() {
     wheelNotes: null,    // WHEEL data/pricing notes
     omSummary: null,     // OPTIONS_MARTIN rounds, wins, P&L
     omRounds: null,      // OPTIONS_MARTIN one row per round
+    spySummary: null,    // SPY_POWER_CASHFLOW_RULES calls, dip buys, withdrawals
   });
+  // SPY_POWER_CASHFLOW on the shared rules: settings from the rules' own parameter list
+  const [spySchema, setSpySchema] = useState(null);
+  const [spyConfig, setSpyConfig] = useState(null);
   // OPTIONS_MARTIN runs the shared rules: its settings come from the rules' own parameter list
   const [omSchema, setOmSchema] = useState(null);
   const [omConfig, setOmConfig] = useState(null);
@@ -487,10 +497,12 @@ function Dashboard() {
   // The Wheel starts with its budget (a rule parameter shared with the paper bot), not initialBalance.
   const omCash = omConfig ? (Number(omConfig.cash) || Number(omConfig.round_budget) || 0) : 0;
   const startingCash = selectedStrategy === 'WHEEL' ? config.budget
-    : selectedStrategy === 'OPTIONS_MARTIN' ? omCash : config.initialBalance;
+    : selectedStrategy === 'OPTIONS_MARTIN' ? omCash
+    : selectedStrategy === 'SPY_POWER_CASHFLOW_RULES' ? Number(spyConfig?.budget) || 0 : config.initialBalance;
   const runConfigFor = (cfg) => {
     if (selectedStrategy === 'WHEEL') return { ...cfg, initialBalance: cfg.budget };
     if (selectedStrategy === 'OPTIONS_MARTIN') return { ...cfg, initialBalance: omCash, optionsMartin: omConfig };
+    if (selectedStrategy === 'SPY_POWER_CASHFLOW_RULES') return { ...cfg, symbol: 'SPY', initialBalance: Number(spyConfig?.budget) || 0, spyCashflow: spyConfig };
     return cfg;
   };
 
@@ -603,6 +615,7 @@ function Dashboard() {
       let wheelNotes = null;
       let omSummary = null;
       let omRounds = null;
+      let spySummary = null;
       console.log('🔍 Checking for IV statistics metadata...');
       console.log('🔍 parsedData keys:', Object.keys(parsedData));
       console.log('🔍 parsedData sample (first 3 keys):', Object.keys(parsedData).slice(0, 3));
@@ -615,6 +628,7 @@ function Dashboard() {
         wheelNotes = parsedData.__metadata__.data_notes || null;
         omSummary = parsedData.__metadata__.options_martin_summary || null;
         omRounds = parsedData.__metadata__.options_martin_rounds || null;
+        spySummary = parsedData.__metadata__.spy_cashflow_summary || null;
         console.log('✅ Extracted IV statistics:', ivStatistics);
         // Remove metadata from parsedData so it doesn't interfere with date processing
         delete parsedData.__metadata__;
@@ -1430,7 +1444,8 @@ function Dashboard() {
         wheelSummary: wheelSummary,
         wheelNotes: wheelNotes,
         omSummary: omSummary,
-        omRounds: omRounds
+        omRounds: omRounds,
+        spySummary: spySummary
       });
       
       // Indicate success
@@ -1559,14 +1574,35 @@ function Dashboard() {
     setConfig(prev => ({ ...prev, ...wheelValuesOf(live && wheelLive ? wheelLive : defaults) }));
   };
 
+  // SPY_POWER_CASHFLOW_RULES: load the rules' settings once, then run
+  useEffect(() => {
+    if (selectedStrategy !== 'SPY_POWER_CASHFLOW_RULES' || spySchema) return;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => getStrategyParams('SPY_POWER_CASHFLOW_RULES'))
+      .then(schema => {
+        if (cancelled) return;
+        setSpySchema(schema);
+        setSpyConfig(initialSpyCashflowConfig(schema));
+      })
+      .catch(err => {
+        if (cancelled) return;
+        setError(err?.response?.data?.error || err?.message || 'Could not load the SPY Power Cashflow settings');
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedStrategy, spySchema]);
+
   const omReady = omConfig !== null;
+  const spyReady = spyConfig !== null;
   const wheelReady = wheelSchema !== null;
   useEffect(() => {
     if (selectedStrategy === 'OPTIONS_MARTIN' && !omReady) return;  // waits for its settings
     if (selectedStrategy === 'WHEEL' && !wheelReady) return;
+    if (selectedStrategy === 'SPY_POWER_CASHFLOW_RULES' && !spyReady) return;
     handleRunSimulation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStrategy, omReady, wheelReady]);
+  }, [selectedStrategy, omReady, wheelReady, spyReady]);
 
   // Helper function to extract first month with trading activity
   // eslint-disable-next-line no-unused-vars
@@ -1769,7 +1805,7 @@ function Dashboard() {
             </ParameterField>
           </Grid>
           {/* Power Cashflow always writes calls; keep other strategies unchanged. */}
-          {selectedStrategy !== 'SPY_POWER_CASHFLOW' && selectedStrategy !== 'WHEEL' && selectedStrategy !== 'OPTIONS_MARTIN' && <Grid item xs={12} sm={3} md={1.5}>
+          {selectedStrategy !== 'SPY_POWER_CASHFLOW' && selectedStrategy !== 'SPY_POWER_CASHFLOW_RULES' && selectedStrategy !== 'WHEEL' && selectedStrategy !== 'OPTIONS_MARTIN' && <Grid item xs={12} sm={3} md={1.5}>
             <CompactFormControl fullWidth size="small">
               <InputLabel id="optionType-label">Option Type</InputLabel>
               <CompactSelect
@@ -1796,7 +1832,7 @@ function Dashboard() {
               onChange={handleConfigChange}
               InputProps={{ inputProps: { min: 1000, step: 1000 } }}
             />
-          </Grid> : selectedStrategy === 'OPTIONS_MARTIN' ? null : <Grid item xs={12} sm={3} md={1.5}>
+          </Grid> : (selectedStrategy === 'OPTIONS_MARTIN' || selectedStrategy === 'SPY_POWER_CASHFLOW_RULES') ? null : <Grid item xs={12} sm={3} md={1.5}>
             <CompactTextField
               fullWidth
               size="small"
@@ -1837,7 +1873,7 @@ function Dashboard() {
             <details className="advanced-settings">
               <summary>Advanced strategy parameters</summary>
               <ParameterGrid container>
-          {selectedStrategy !== 'WHEEL' && selectedStrategy !== 'OPTIONS_MARTIN' && (<>
+          {selectedStrategy !== 'WHEEL' && selectedStrategy !== 'OPTIONS_MARTIN' && selectedStrategy !== 'SPY_POWER_CASHFLOW_RULES' && (<>
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactTextField
               fullWidth
@@ -2243,6 +2279,11 @@ function Dashboard() {
           {/* OPTIONS_MARTIN: the shared rules' parameters (same as the paper bot) + backtest settings */}
           {selectedStrategy === 'OPTIONS_MARTIN' && (
             <OptionsMartinSettings schema={omSchema} value={omConfig} onChange={setOmConfig} source={omSource} />
+          )}
+
+          {/* SPY_POWER_CASHFLOW on the shared rules (same as the paper bot) + backtest settings */}
+          {selectedStrategy === 'SPY_POWER_CASHFLOW_RULES' && (
+            <SpyCashflowSettings schema={spySchema} value={spyConfig} onChange={setSpyConfig} />
           )}
 
           {/* The old OPTIONS_MARTIN simulator's parameters */}
@@ -2865,6 +2906,9 @@ function Dashboard() {
         console.log('  Should show:', selectedStrategy === 'OPTIONS_MARTIN_LEGACY' && data.ivStatistics);
         return null;
       })()}
+      {selectedStrategy === 'SPY_POWER_CASHFLOW_RULES' && data.spySummary && (
+        <SpyCashflowResults summary={data.spySummary} />
+      )}
       {selectedStrategy === 'OPTIONS_MARTIN' && data.omSummary && (
         <OptionsMartinResults summary={data.omSummary} rounds={data.omRounds} notes={data.wheelNotes} />
       )}
