@@ -150,6 +150,31 @@ def paper_test_cancel(strategy_id):
         return jsonify({"error": str(e)}), 400
 
 
+@app.route("/api/paper-tests", methods=["GET"])
+def paper_tests_history():
+    """Every paper test so far (finished and running, legacy runs included), from the database.
+    ?strategy=WHEEL|OPTIONS_MARTIN|<server name>  ?trades=1 adds every trade
+    ?sync=0 skips copying the latest from the trade-engine server first."""
+    from services import paper_test_history_service as history
+
+    strategy = request.args.get("strategy") or None
+    if strategy:
+        strategy = paper_test_service.SERVER_NAMES.get(strategy, strategy)
+    sync_error = None
+    if request.args.get("sync", "1") != "0":
+        try:
+            history.sync()
+        except Exception as e:  # server unreachable: still show what the database has
+            sync_error = str(e)
+            logger.warning(f"Paper test history sync failed: {e}")
+    try:
+        tests = history.list_tests(strategy, with_trades=request.args.get("trades") == "1")
+    except Exception as e:
+        logger.error(f"Paper test history error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"tests": tests, "sync_error": sync_error})
+
+
 @app.route("/api/simulate", methods=["POST"])
 def run_simulation():
     logger.info("Simulation endpoint called")

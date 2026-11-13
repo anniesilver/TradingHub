@@ -43,6 +43,7 @@ import {
 import { runSimulation, getStrategyParams, getLiveSettings } from '../services/simulationService';
 import OptionsMartinSettings, { initialOptionsMartinConfig } from '../components/OptionsMartinSettings';
 import PaperTestButton from '../components/PaperTestButton';
+import PaperTestHistory from '../components/PaperTestHistory';
 import OptionsMartinResults from '../components/OptionsMartinResults';
 import SpyCashflowSettings, { SpyCashflowResults, initialSpyCashflowConfig } from '../components/SpyCashflowSettings';
 import ParameterField from '../components/ParameterField';
@@ -1780,7 +1781,7 @@ function Dashboard() {
       <Paper key={selectedStrategy} component="form" data-strategy={selectedStrategy} className="scenario-surface workspace-panel" sx={{ mb: 2, p: 2 }}>
         <div className="scenario-heading"><Typography component="h2" variant="subtitle2">Run settings</Typography><span>Historical simulation · No trades placed</span></div>
         <ParameterGrid container>
-          <Grid item xs={12} className="primary-run-action"><div className="form-actions"><Button variant="contained" color="primary" onClick={event => handleRunSimulation(event, true)} disabled={loading}>Run simulation</Button>{(selectedStrategy === 'WHEEL' || selectedStrategy === 'OPTIONS_MARTIN') && <PaperTestButton strategyId={selectedStrategy} config={runConfigFor(config)} disabled={loading || (selectedStrategy === 'OPTIONS_MARTIN' && !omConfig)} />}</div></Grid>
+          <Grid item xs={12} className="primary-run-action"><div className="form-actions"><Button variant="contained" color="primary" onClick={event => handleRunSimulation(event, true)} disabled={loading}>Run simulation</Button>{(selectedStrategy === 'WHEEL' || selectedStrategy === 'OPTIONS_MARTIN') && <PaperTestButton strategyId={selectedStrategy} config={runConfigFor(config)} disabled={loading || (selectedStrategy === 'OPTIONS_MARTIN' && !omConfig)} />}{(selectedStrategy === 'WHEEL' || selectedStrategy === 'OPTIONS_MARTIN') && <PaperTestHistory strategyId={selectedStrategy} />}</div></Grid>
           <Grid item xs={12} sm={3} md={1.5}>
             {/* Pick a listed ticker or type any other one (it is loaded from IB the first time) */}
             <ParameterField name="symbol" label="Symbol">
