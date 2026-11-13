@@ -232,7 +232,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
     shares = p.budget / days[0].close if days[0].close > 0 else 0.0
     bench = {}
     for d in days:
-        if d.dividend and d.close > 0:
+        if d.dividend and d.close > 0 and d.date != days[0].date:   # bought at the first close: after its ex-date
             shares *= 1 + d.dividend / d.close
         bench[d.date] = shares * d.close
 

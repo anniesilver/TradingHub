@@ -3,6 +3,7 @@
 Needs algo_trading next to TradingHub (or ALGO_BASE_PATH pointing at it) for tradekit.
 """
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -29,7 +30,11 @@ def test_runs_the_shared_rules_and_returns_dashboard_days(monkeypatch):
     days = sorted(out)
     first = out[days[0]]
     # 60% of 500k at 500 = 600 shares, then 6 calls at 500 x 1.0225 -> 510
-    assert first["Trading_Log"].startswith("BUY 600 SPY @ 500.00 (FIRST BUY); SELL 6 SPY 510C 2025-01-31")
+    assert first["Trading_Log"].startswith("Buy: 600 shares at $500.00 (FIRST BUY); Sell call: 6 SPY 510C 2025-01-31")
+    # an expiry closes the call without looking like a share purchase (the chart marks those)
+    expiry = out["2025-01-31"]["Trading_Log"]
+    assert "Close call: 6 SPY 510C 2025-01-31 @ 0.00 (EXPIRED)" in expiry
+    assert not re.search(r"(?:buy|bought|purchase[d]?)(?:\s+|:\s*)\d", expiry.replace("Buy: ", "", 0), re.I)
     assert first["Shares"] == 600 and first["Margin_Ratio"] == pytest.approx(0.6, abs=0.01)
     s = meta["spy_cashflow_summary"]
     assert s["calls_sold"] == 3 and s["calls_expired"] == 3 and s["budget"] == 500_000
