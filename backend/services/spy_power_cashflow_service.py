@@ -85,11 +85,19 @@ def run_spy_power_cashflow_rules(config: dict, start_dt: datetime, end_dt: datet
 
 
 def _log_text(t) -> str:
-    """A trade for the Trading_Log; cash moves in the words the dashboard looks for."""
+    """A trade for the Trading_Log, in the words the dashboard looks for: a share purchase as
+    "Buy: N shares at $P" (the chart marks those), a withdrawal as "Monthly withdrawal: $X".
+    Closing a call (bought back or expired) must not read as "BUY n ...", or the chart would
+    mark every month's expiry as a share purchase."""
     if t.side == "CASH":
         what = "Monthly withdrawal" if t.reason == "WITHDRAW" else t.reason.capitalize()
         return f"{what}: ${t.price:,.2f}"
-    return t.text()
+    if " " not in t.contract:   # the stock
+        verb = "Buy" if t.side == "BUY" else "Sell"
+        return f"{verb}: {t.qty} shares at ${t.price:.2f} ({t.reason})"
+    if t.side == "BUY":
+        return f"Close call: {t.qty} {t.contract} @ {t.price:.2f} ({t.reason})"
+    return f"Sell call: {t.qty} {t.contract} @ {t.price:.2f} ({t.reason})"
 
 
 def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dict[str, dict]:
@@ -97,7 +105,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
     shares = p.budget / days[0].close if days[0].close > 0 else 0.0
     bench = {}
     for d in days:
-        if d.dividend and d.close > 0:
+        if d.dividend and d.close > 0 and d.date != days[0].date:   # bought at the first close: after its ex-date
             shares *= 1 + d.dividend / d.close
         bench[d.date] = shares * d.close
 
