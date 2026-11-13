@@ -425,7 +425,7 @@ function Dashboard() {
     minCommission: 1.0,
     minStrikeDistance: 0.015,
     minTradeSize: 1000,
-    monthlyWithdrawalRate: 1.0,
+    monthlyWithdrawalRate: 0.6,
     optionCommission: 0.65,
     riskFreeRate: 0.05,
     stockCommission: 0.01,
