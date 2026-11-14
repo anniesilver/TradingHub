@@ -323,6 +323,8 @@ export const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
+// SPY Enhanced Cashflow and the old Options Martingale simulator are no longer listed
+// (Annie, 2026-11-14); their backend code is still there.
 const AVAILABLE_STRATEGIES = [
   {
     id: 'SPY_POWER_CASHFLOW_RULES',
@@ -335,19 +337,9 @@ const AVAILABLE_STRATEGIES = [
     description: 'The original SPY Power Cashflow simulator, kept for comparison'
   },
   {
-    id: 'SPY_ENHANCED_CASHFLOW',
-    name: 'SPY Enhanced Cashflow',
-    description: 'Enhanced strategy with intelligent dip buying and defensive overlays'
-  },
-  {
     id: 'OPTIONS_MARTIN',
     name: 'Options Martingale',
     description: 'Buy an option, top up as it falls, sell at a profit target. Same rules as the paper bot'
-  },
-  {
-    id: 'OPTIONS_MARTIN_LEGACY',
-    name: 'Options Martingale (old simulator)',
-    description: 'The old OPTIONS_MARTIN simulator on one fixed contract with real option data'
   },
   {
     id: 'SPY500_LEADER',

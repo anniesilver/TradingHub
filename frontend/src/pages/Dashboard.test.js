@@ -29,7 +29,7 @@ test('compact strategy navigation closes with Escape or a selection and returns 
   const calls = runSimulation.mock.calls.length;
   fireEvent.click(menu);
   expect(menu).toHaveAttribute('aria-expanded', 'true');
-  screen.getByRole('button', { name: 'SPY Enhanced Cashflow' }).focus();
+  screen.getByRole('button', { name: 'S&P 500 Leader' }).focus();
   fireEvent.keyDown(document.activeElement, { key: 'Escape' });
   expect(menu).toHaveAttribute('aria-expanded', 'false');
   expect(menu).toHaveFocus();
@@ -40,11 +40,11 @@ test('compact strategy navigation closes with Escape or a selection and returns 
   expect(menu).toHaveFocus();
   expect(runSimulation).toHaveBeenCalledTimes(calls);
   fireEvent.click(menu);
-  fireEvent.click(screen.getByRole('button', { name: 'SPY Enhanced Cashflow' }));
+  fireEvent.click(screen.getByRole('button', { name: 'S&P 500 Leader' }));
   await screen.findByText('Backtest service unavailable');
   expect(menu).toHaveAttribute('aria-expanded', 'false');
   expect(menu).toHaveFocus();
-  expect(screen.getByRole('button', { name: 'SPY Enhanced Cashflow' })).toHaveAttribute('aria-current', 'page');
+  expect(screen.getByRole('button', { name: 'S&P 500 Leader' })).toHaveAttribute('aria-current', 'page');
 });
 
 test('only Power Cashflow hides its unused fields, without losing their values', async () => {
@@ -52,7 +52,7 @@ test('only Power Cashflow hides its unused fields, without losing their values',
   await screen.findByText('Backtest service unavailable');
   const labels = ['Option Type', 'Max Position Size', 'Min Trade Size'];
   labels.forEach(label => expect(screen.queryByLabelText(label)).not.toBeInTheDocument());
-  for (const strategy of ['SPY Enhanced Cashflow', 'Options Martingale (old simulator)', 'S&P 500 Leader']) {
+  for (const strategy of ['S&P 500 Leader']) {
     fireEvent.click(screen.getByRole('button', { name: strategy }));
     await screen.findByText('Backtest service unavailable');
     labels.forEach(label => expect(screen.getByLabelText(label)).toBeInTheDocument());
@@ -67,7 +67,7 @@ test('only Power Cashflow hides its unused fields, without losing their values',
   expect(runSimulation.mock.calls.at(-1)[0]).toEqual(expect.objectContaining({
     maxPositionSize: 12000, minTradeSize: 2400, optionType: 'put',
   }));
-  fireEvent.click(screen.getByRole('button', { name: 'SPY Enhanced Cashflow' }));
+  fireEvent.click(screen.getByRole('button', { name: 'S&P 500 Leader' }));
   await screen.findByText('Backtest service unavailable');
   expect(screen.getByLabelText('Max Position Size')).toHaveValue(12000);
   expect(screen.getByLabelText('Min Trade Size')).toHaveValue(2400);
@@ -120,7 +120,7 @@ const summaryRun = {
   '2026-10-09': { Portfolio_Value: 204000, spy_value: 202000, Cash_Balance: 9000, Margin_Ratio: 0.1, Premiums_Received: 300, Interest_Paid: 30, Dividends_Received: 0, Trading_Log: 'Monthly withdrawal: $1,000.00' },
 };
 
-test.each(['SPY Power Cashflow (old)', 'SPY Enhanced Cashflow', 'Options Martingale (old simulator)', 'S&P 500 Leader'])(
+test.each(['SPY Power Cashflow (old)', 'S&P 500 Leader'])(
   'shows all eight metrics in Performance, retains Premium context, and keeps Logs transactional for %s', async strategy => {
     const leader = strategy === 'S&P 500 Leader';
     const response = leader ? Object.fromEntries(Object.entries(summaryRun).map(([date, row], index) => [date, {
@@ -331,7 +331,7 @@ test('only explicit runs launch a fullscreen wave; navigation cancels it', async
   render(<Dashboard />);
   await screen.findByText('Backtest service unavailable');
   expect(screen.queryByTestId('simulation-transition')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Options Martingale (old simulator)' }));
+  fireEvent.click(screen.getByRole('button', { name: 'S&P 500 Leader' }));
   expect(screen.queryByTestId('simulation-transition')).not.toBeInTheDocument();
   await screen.findByText('Backtest service unavailable');
   fireEvent.click(screen.getByRole('button', { name: /run simulation/i }));
@@ -349,8 +349,6 @@ afterEach(() => {
 
 test.each([
   'SPY Power Cashflow (old)',
-  'SPY Enhanced Cashflow',
-  'Options Martingale (old simulator)',
   'S&P 500 Leader',
 ])('every parameter has compact, associated help for %s', async (strategy) => {
   const { container } = render(<Dashboard />);
@@ -479,32 +477,6 @@ test('does not percentage-scale price ratios, normalized VIX, leverage, multipli
   })));
 });
 
-test('shows IV thresholds in percent and submits decimal fractions', async () => {
-  const { container } = render(<Dashboard />);
-  fireEvent.click(screen.getByText('Options Martingale (old simulator)'));
-  await screen.findByText('Backtest service unavailable');
-  const entry = container.querySelector('input[name="IV_ENTRY_THRESHOLD"]');
-  const exit = container.querySelector('input[name="IV_EXIT_THRESHOLD"]');
-  expect(entry).toHaveValue(30);
-  expect(exit).toHaveValue(50);
-  expect(entry.labels[0]).toHaveTextContent('%');
-  expect(exit.labels[0]).toHaveTextContent('%');
-  expect(runSimulation).toHaveBeenLastCalledWith(expect.objectContaining({
-    IV_ENTRY_THRESHOLD: 0.3,
-    IV_EXIT_THRESHOLD: 0.5,
-    INC_INDEX: 2,
-    DEC_INDEX: 0.6,
-  }));
-  fireEvent.change(entry, { target: { value: '35' } });
-  fireEvent.change(exit, { target: { value: '55' } });
-  fireEvent.click(screen.getByRole('button', { name: /run simulation/i }));
-  await waitFor(() => expect(runSimulation).toHaveBeenLastCalledWith(expect.objectContaining({
-    IV_ENTRY_THRESHOLD: 0.35,
-    IV_EXIT_THRESHOLD: 0.55,
-    strategyId: 'OPTIONS_MARTIN_LEGACY',
-  })));
-});
-
 test('shows leader allocation and fractional slippage in percent', async () => {
   const { container } = render(<Dashboard />);
   fireEvent.click(screen.getByText('S&P 500 Leader'));
@@ -541,19 +513,6 @@ test('formats a margin ratio as a percentage without changing currency series', 
   expect(screen.getByText('Margin Ratio: 40.00%')).toBeInTheDocument();
   expect(screen.getByText('Strategy: $40.00')).toBeInTheDocument();
   expect(screen.queryByText('Margin Ratio: $0.40')).not.toBeInTheDocument();
-});
-
-test('IV help stays available when its entry threshold is disabled', async () => {
-  render(<Dashboard />);
-  fireEvent.click(screen.getByText('Options Martingale (old simulator)'));
-  await screen.findByText('Backtest service unavailable');
-  fireEvent.click(screen.getByText('Advanced strategy parameters'));
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Enable IV Entry Filter' }));
-  const threshold = screen.getByLabelText(/^IV Entry Threshold/);
-  expect(threshold).toBeDisabled();
-  expect(threshold).toHaveAccessibleDescription(expect.stringContaining('30%'));
-  userEvent.click(screen.getByRole('button', { name: /^Help for IV Entry Threshold/ }));
-  expect(await screen.findByRole('tooltip')).toHaveTextContent('30%');
 });
 
 test('hover reveals help and leaving hides it', async () => {
