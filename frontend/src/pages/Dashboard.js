@@ -1115,7 +1115,13 @@ function Dashboard() {
         /\$?([\d,]+(?:\.\d+)?)\s+cost/i
       ];
 
-      tradingLogs.forEach(entry => {
+      // Backtests that report the cost per day (Call_Closure_Cost, e.g. SPY Power Cashflow on
+      // the shared rules) are summed directly; the others are read from the trading log text.
+      const closureDays = Object.entries(parsedData)
+        .filter(([date, values]) => date !== '__metadata__' && values && values.Call_Closure_Cost !== undefined);
+      if (closureDays.length > 0) {
+        totalAssignedCost = closureDays.reduce((sum, [, values]) => sum + (Number(values.Call_Closure_Cost) || 0), 0);
+      } else tradingLogs.forEach(entry => {
         const logLower = entry.log.toLowerCase();
         const isBuyback = logLower.includes('bought back') && logLower.includes('cost');
         const isAssignment = logLower.includes('assigned') && logLower.includes('cost');
