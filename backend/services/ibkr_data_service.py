@@ -154,8 +154,10 @@ class IBKRDataClient(EWrapper, EClient):
         return True
     
     def fetch_historical_data(self, symbol: str, period: str = "10 Y", bar_size: str = "1 day",
-                              end_datetime: str = "") -> List[Dict]:
-        """end_datetime: '' = now, else IB's 'YYYYMMDD-HH:MM:SS' (UTC)."""
+                              end_datetime: str = "", what_to_show: Optional[str] = None) -> List[Dict]:
+        """end_datetime: '' = now, else IB's 'YYYYMMDD-HH:MM:SS' (UTC).
+        what_to_show: overrides the data type picked below (e.g. 'TRADES' for a stock: IB's
+        MIDPOINT daily bars for SPY only start in Jan 2004, its TRADES bars in 1993)."""
         """Fetch historical data for a symbol - exact approach from loading_data.py"""
         try:
             logger.info(f'getting {symbol}')
@@ -190,6 +192,9 @@ class IBKRDataClient(EWrapper, EClient):
                 contract.exchange = 'SMART'
                 data_type = "MIDPOINT"
             
+            if what_to_show:
+                data_type = what_to_show
+
             # Initialize variable to store candle (exactly like loading_data.py)
             self.data = []
             self.error_message = ""
@@ -331,16 +336,29 @@ class IBKRDataService:
         finally:
             conn.close()
     
-    def save_data_to_db(self, symbol: str, data: List[Dict], bar_interval: str = '1 day'):
+    def save_data_to_db(self, symbol: str, data: List[Dict], bar_interval: str = '1 day',
+                        keep_existing: bool = False) -> int:
         """Save market data to database
 
         Args:
             symbol: Trading symbol
             data: List of bar data dictionaries
             bar_interval: Bar interval (default: '1 day')
+            keep_existing: True leaves bars already in the DB as they are (only adds new dates)
+
+        Returns:
+            int: how many rows were inserted or updated
         """
+        on_conflict = "DO NOTHING" if keep_existing else """DO UPDATE SET
+                            open = EXCLUDED.open,
+                            high = EXCLUDED.high,
+                            low = EXCLUDED.low,
+                            close = EXCLUDED.close,
+                            volume = EXCLUDED.volume,
+                            updated_at = CURRENT_TIMESTAMP"""
+        written = 0
         if not data:
-            return
+            return 0
 
         conn = self.get_db_connection()
         try:
@@ -358,25 +376,21 @@ class IBKRDataService:
                         logger.error(f"Could not parse date: {date_str}")
                         continue
 
-                    cursor.execute("""
+                    cursor.execute(f"""
                         INSERT INTO market_data (symbol, date, open, high, low, close, volume, bar_interval)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (symbol, date, bar_interval)
-                        DO UPDATE SET
-                            open = EXCLUDED.open,
-                            high = EXCLUDED.high,
-                            low = EXCLUDED.low,
-                            close = EXCLUDED.close,
-                            volume = EXCLUDED.volume,
-                            updated_at = CURRENT_TIMESTAMP
+                        {on_conflict}
                     """, (
                         symbol, date_obj, bar['open'], bar['high'],
                         bar['low'], bar['close'], bar['volume'], bar_interval
                     ))
+                    written += cursor.rowcount
 
                 conn.commit()
-                logger.info(f"Saved {len(data)} records to DB for {symbol} (interval={bar_interval})")
-                
+                logger.info(f"Saved {written} of {len(data)} records to DB for {symbol} (interval={bar_interval})")
+            return written
+
         except Exception as e:
             conn.rollback()
             logger.error(f"Error saving data to DB: {str(e)}")
@@ -424,6 +438,37 @@ class IBKRDataService:
             if self.client:
                 self.client.disconnect_from_ibkr()
     
+    def fetch_daily_before(self, symbol: str, before: datetime, start: datetime,
+                           client_id: Optional[int] = None) -> List[Dict]:
+        """Daily bars from `start` up to `before` (one request, ending at `before`). Stocks are
+        asked for TRADES: IB's MIDPOINT daily bars (what fetch_and_store_data uses) only go
+        back to Jan 2004 for SPY, its TRADES bars to 1993. Returns the bars; saves nothing."""
+        years = max(1, int((before - start).days / 365.25) + 1)
+        what = None if symbol == "VIX" or symbol.endswith("_IV") else "TRADES"
+        client = IBKRDataClient(client_id if client_id is not None else IBKR_CONFIG["client_id"])
+        if not client.connect_to_ibkr(IBKR_CONFIG["host"], IBKR_CONFIG["port"]):
+            raise Exception("Failed to connect to IBKR")
+        try:
+            logger.info(f"Fetching {years} Y of daily {symbol} bars ending {before:%Y-%m-%d}")
+            rows = client.fetch_historical_data(symbol, f"{years} Y", "1 day",
+                                                before.strftime("%Y%m%d-00:00:00"), what)
+        finally:
+            client.disconnect_from_ibkr()
+        return [r for r in rows if parse_ib_time(str(r["date"]).strip()) >= start]
+
+    def fill_daily_history_before(self, symbol: str, before: datetime, start: datetime) -> int:
+        """Add the daily bars IB has between `start` and `before` to the DB, keeping rows
+        already there. Returns how many were added (0 when IB has nothing that early)."""
+        try:
+            rows = self.fetch_daily_before(symbol, before, start)
+        except HistoryServerDown:
+            raise
+        except Exception as e:  # e.g. IB has nothing that early (VIX starts Oct 2005 on IB)
+            logger.warning(f"No daily {symbol} bars before {before:%Y-%m-%d} from IB: {e}")
+            self.last_error = str(e)
+            return 0
+        return self.save_data_to_db(symbol, rows, "1 day", keep_existing=True)
+
     def fetch_intraday_range(self, symbol: str, start: datetime, end: datetime, bar_size: str = "5 mins") -> int:
         """Download intraday bars for [start, end] from IB in 3-week pieces (IB limits how much
         intraday history one request returns) and store them. Returns how many bars came in."""

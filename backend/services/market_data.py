@@ -253,10 +253,22 @@ class MarketData:
                 if start_gap > 10 or end_gap > 10:
                     logger.warning(f"Data gaps detected for {symbol}: start_gap={start_gap}, end_gap={end_gap}")
 
-                    # Try to fetch more data if gaps are significant
-                    logger.info(f"Attempting to fetch additional data for {symbol}")
-                    if ibkr_service.fetch_and_store_data(symbol, "20 Y"):  # Fetch longer history
-                        df = ibkr_service.get_data_from_db(symbol, start_date, end_date)
+                if start_gap > 10 and bar_interval == '1 day':
+                    # The DB starts later than asked: ask IB for the years before its first bar
+                    # (a "20 Y" request ending today never reaches further back than 20 years).
+                    # VIX on IB only starts in Oct 2005; earlier VIX comes from
+                    # backend/import_long_history.py (CBOE's history).
+                    added = ibkr_service.fill_daily_history_before(
+                        symbol, df.index.min().to_pydatetime(), start_dt.to_pydatetime())
+                    if added:
+                        df = ibkr_service.get_data_from_db(symbol, start_date, end_date, bar_interval)
+                    logger.info(f"Added {added} earlier {symbol} bars; DB now starts "
+                                f"{df.index.min():%Y-%m-%d}")
+
+                if end_gap > 10 and bar_interval == '1 day':
+                    logger.info(f"Attempting to fetch recent data for {symbol}")
+                    if ibkr_service.fetch_and_store_data(symbol, "20 Y", bar_interval):
+                        df = ibkr_service.get_data_from_db(symbol, start_date, end_date, bar_interval)
                         logger.info(f"After additional fetch: {len(df)} records available")
 
             return df
