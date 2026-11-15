@@ -100,6 +100,20 @@ def _log_text(t) -> str:
     return f"Sell call: {t.qty} {t.contract} @ {t.price:.2f} ({t.reason})"
 
 
+def _call_closure_cost(trades, close: float, underlying: str) -> float:
+    """What closing in-the-money calls cost on one day (the "ITM call closure costs" on the
+    results page): calls bought back (price x 100 + commission, the same as the rules'
+    `buybacks`) plus, for calls assigned at expiry, what the shares were worth above the
+    strike they went at ((close - strike) x shares)."""
+    cost = 0.0
+    for t in trades:
+        if t.side == "BUY" and " " in t.contract and t.reason not in ("EXPIRED", "ASSIGNED"):
+            cost += t.qty * t.price * 100 + t.commission
+        elif t.contract == underlying and t.side == "SELL" and t.reason.startswith("ASSIGNED"):
+            cost += max(close - t.price, 0.0) * t.qty
+    return cost
+
+
 def _is_margin_interest(t) -> bool:
     """The daily margin interest charge. It is still taken from cash and counted in
     Interest_Paid and the summary; it is only kept out of the Trading_Log, which is for the
@@ -139,6 +153,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
             "Premiums_Received": round(daily("premiums"), 2),
             "Dividends_Received": round(daily("dividends"), 2),
             "Commissions_Paid": round(daily("commissions"), 2),
+            "Call_Closure_Cost": round(_call_closure_cost(r.trades, r.close, p.underlying), 2),
             "Open_Positions": len(calls) + (1 if r.shares else 0),
             "Closed_Positions": 0,
             "Shares": r.shares,

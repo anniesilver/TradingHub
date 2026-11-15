@@ -165,6 +165,23 @@ test.each(['SPY Power Cashflow (old)', 'S&P 500 Leader'])(
   }
 );
 
+test('ITM call closure costs add up the per-day Call_Closure_Cost when the backtest reports it', async () => {
+  // SPY Power Cashflow on the shared rules logs buybacks as "Close call: ..." without a cost
+  // in the text, and sends the cost per day instead.
+  runSimulation.mockResolvedValue({
+    ...summaryRun,
+    '2026-09-15': { ...summaryRun['2026-09-15'], Call_Closure_Cost: 1050.65,
+      Trading_Log: 'Close call: 5 SPY 575C 2026-09-15 @ 2.10 (MONTH END ITM: buy back, keep shares)' },
+    '2026-10-09': { ...summaryRun['2026-10-09'], Call_Closure_Cost: 0 },
+    '2026-09-11': { ...summaryRun['2026-09-11'], Call_Closure_Cost: 0 },
+    '2026-09-14': { ...summaryRun['2026-09-14'], Call_Closure_Cost: 200 },
+  });
+  render(<Dashboard />);
+  const summary = await screen.findByRole('region', { name: 'Performance summary' });
+  const row = within(summary).getByText('ITM call closure costs').closest('.performance-cash-row');
+  expect(row).toHaveTextContent('$1,250.65');
+});
+
 test('the summary retains this run’s risk-free rate after editing the next scenario', async () => {
   runSimulation.mockResolvedValue(summaryRun);
   render(<Dashboard />);

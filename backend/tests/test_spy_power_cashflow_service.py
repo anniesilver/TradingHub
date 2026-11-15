@@ -64,3 +64,15 @@ def test_params_list_every_rule_but_the_underlying():
     names = [p["name"] for p in params["rules"]]
     assert "underlying" not in names and "max_leverage" in names and "month_end_buyback_buffer" in names
     assert params["backtest"]["strike_step"] == 1.0
+
+
+def test_itm_call_buybacks_are_reported_per_day(monkeypatch):
+    # a rising price puts the month's calls in the money, so the rules buy them back at month end
+    monkeypatch.setattr(wheel_service, "_market_data_class", lambda: fake_market_data(lambda i: 500.0 + 1.5 * i))
+    out = svc.run_spy_power_cashflow_rules({}, datetime(2025, 1, 2), datetime(2025, 6, 30), initial_balance=500_000)
+    meta = out.pop("__metadata__")
+    s = meta["spy_cashflow_summary"]
+    assert s["calls_bought_back"] > 0 and s["buybacks"] > 0
+    assert sum(v["Call_Closure_Cost"] for v in out.values()) == pytest.approx(s["buybacks"], abs=0.5)
+    days_with_cost = [d for d, v in out.items() if v["Call_Closure_Cost"] > 0]
+    assert days_with_cost and all("Close call:" in out[d]["Trading_Log"] for d in days_with_cost)
