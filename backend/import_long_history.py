@@ -9,7 +9,7 @@ So this script takes
   - VIX before that from CBOE's own daily history file (VIX_History.csv, from 1990), and
   - SPY from IB as TRADES bars, ending a few weeks after the DB's first bar.
 
-Rows already in the database are KEPT: only dates the DB doesn't have are added. On the
+Rows already in the database are KEPT: only dates before the DB's first bar are added. On the
 dates both sources share, the script prints how far apart they are, as a sanity check.
 
 Usage (Annie's PC, TradingHub's venv, IB Gateway reachable as in backend/services/.env):
@@ -102,7 +102,9 @@ def import_one(symbol: str, rows: List[Dict], start: datetime, dry_run: bool) ->
     print(f"{symbol}: DB has {len(db)} daily bars" + (f" from {first:%Y-%m-%d}" if first is not None else ""))
     compare(f"{symbol} check", rows, db)
     have = set(db.index.date) if not db.empty else set()
-    add = [r for r in rows if parse_ib_time(str(r["date"])) >= start
+    # Only dates before the DB's first bar: holes later on are left alone, so post-2006
+    # VIX stays all IB's (CBOE and IB disagree on a few days, e.g. 2026-01-16 by 16%)
+    add = [r for r in rows if start <= parse_ib_time(str(r["date"])) < (first or datetime.max)
            and parse_ib_time(str(r["date"])).date() not in have]
     if add:
         span = f"{parse_ib_time(add[0]['date']):%Y-%m-%d} to {parse_ib_time(add[-1]['date']):%Y-%m-%d}"
