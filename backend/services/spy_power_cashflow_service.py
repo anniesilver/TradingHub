@@ -100,6 +100,13 @@ def _log_text(t) -> str:
     return f"Sell call: {t.qty} {t.contract} @ {t.price:.2f} ({t.reason})"
 
 
+def _is_margin_interest(t) -> bool:
+    """The daily margin interest charge. It is still taken from cash and counted in
+    Interest_Paid and the summary; it is only kept out of the Trading_Log, which is for the
+    key trades (calls, dip buys, deleverage sells, withdrawals)."""
+    return t.side == "CASH" and t.reason == "MARGIN INTEREST"
+
+
 def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dict[str, dict]:
     # Buy & hold SPY with the same money, dividends reinvested at the ex-date close
     shares = p.budget / days[0].close if days[0].close > 0 else 0.0
@@ -136,7 +143,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
             "Closed_Positions": 0,
             "Shares": r.shares,
             "Option_Value": round(r.option_value, 2),
-            "Trading_Log": "; ".join(_log_text(t) for t in r.trades),
+            "Trading_Log": "; ".join(_log_text(t) for t in r.trades if not _is_margin_interest(t)),
         }
         prev = r
 

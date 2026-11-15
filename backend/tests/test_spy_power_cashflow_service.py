@@ -43,6 +43,16 @@ def test_runs_the_shared_rules_and_returns_dashboard_days(monkeypatch):
     assert meta["strategy"] == "SPY_POWER_CASHFLOW_RULES" and meta["data_notes"]["iv_name"] == "VIX"
 
 
+def test_margin_interest_is_charged_but_not_in_the_trading_log(monkeypatch):
+    # a falling price makes the rules buy dips on margin, so interest is charged every day
+    monkeypatch.setattr(wheel_service, "_market_data_class", lambda: fake_market_data(lambda i: 500.0 - 0.8 * i))
+    out = svc.run_spy_power_cashflow_rules({}, datetime(2025, 1, 2), datetime(2025, 6, 30), initial_balance=500_000)
+    meta = out.pop("__metadata__")
+    assert meta["spy_cashflow_summary"]["interest"] > 0
+    assert sum(v["Interest_Paid"] for v in out.values()) == pytest.approx(meta["spy_cashflow_summary"]["interest"], abs=0.5)
+    assert not any("Margin interest" in v["Trading_Log"] for v in out.values())
+
+
 def test_settings_are_validated(monkeypatch):
     monkeypatch.setattr(wheel_service, "_market_data_class", lambda: fake_market_data(lambda i: 500.0))
     with pytest.raises(ValueError):
