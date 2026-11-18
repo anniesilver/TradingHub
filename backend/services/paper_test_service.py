@@ -93,7 +93,10 @@ def rule_params(strategy_id: str, config: dict) -> dict:
             config["budget"] = config["initialBalance"]
     elif strategy_id == "POOR_COVERED_CALL":
         from services.poor_covered_call_service import _rule_params, _tradekit
-        Rules = _tradekit()[-1]
+        Rules = _tradekit()[3]
+        if str(config.get("underlying") or "SPY").upper().strip() != "SPY":
+            raise PaperTestError("The Poor Covered Call paper bot trades SPY only (its live checks use VIX "
+                                 "and SPY's option chain). Set the symbol back to SPY to start a paper test.")
     else:
         from services.options_martin_service import _rule_params, _tradekit
         Rules = _tradekit()[-1]

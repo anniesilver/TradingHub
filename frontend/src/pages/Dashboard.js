@@ -57,7 +57,7 @@ import { parameterUnits, toDisplayValue, toStoredValue, toDisplayInputProps } fr
 import { computeSharpeRatio } from './performanceMetrics';
 
 // These run on SPY only: their option prices come from VIX, so the Symbol box is locked to SPY
-const SPY_ONLY_STRATEGIES = ['SPY_POWER_CASHFLOW_RULES', 'POOR_COVERED_CALL'];
+const SPY_ONLY_STRATEGIES = ['SPY_POWER_CASHFLOW_RULES'];
 
 // Helper function to calculate the 3rd Friday of a month (standard options expiration)
 
@@ -153,7 +153,10 @@ const StyledCompactTextField = styled(TextField)(({ theme }) => ({
   },
 }));
 
-const SYMBOL_SUGGESTIONS = ['SPY', 'QQQ', 'TSLA', 'NVDA', 'AMZN', 'U', 'FIG'];
+// SPY + the 27 tickers of the ticker research (their daily prices and 30-day IV are in the DB) + a few more.
+// Any other ticker can be typed: it is loaded from IB the first time.
+const SYMBOL_SUGGESTIONS = ['SPY', 'QQQ', 'IWM', 'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'AVGO', 'NFLX', 'TSLA',
+  'AMD', 'PLTR', 'COIN', 'MSTR', 'HOOD', 'SMCI', 'MU', 'UBER', 'SHOP', 'JPM', 'XOM', 'KO', 'SOFI', 'INTC', 'BAC', 'U', 'FIG'];
 
 const CompactTextField = ({ name, label, value, inputProps, InputProps, ...props }) => {
   const displayLabel = parameterUnits[name]?.label ?? label;
@@ -509,7 +512,7 @@ function Dashboard() {
     if (selectedStrategy === 'WHEEL') return { ...cfg, initialBalance: cfg.budget };
     if (selectedStrategy === 'OPTIONS_MARTIN') return { ...cfg, initialBalance: omCash, optionsMartin: omConfig };
     if (selectedStrategy === 'SPY_POWER_CASHFLOW_RULES') return { ...cfg, symbol: 'SPY', initialBalance: Number(spyConfig?.budget) || 0, spyCashflow: spyConfig };
-    if (selectedStrategy === 'POOR_COVERED_CALL') return { ...cfg, symbol: 'SPY', initialBalance: Number(pccConfig?.budget) || 0, poorCoveredCall: pccConfig };
+    if (selectedStrategy === 'POOR_COVERED_CALL') return { ...cfg, initialBalance: Number(pccConfig?.budget) || 0, poorCoveredCall: pccConfig };
     return cfg;
   };
 
@@ -1836,7 +1839,8 @@ function Dashboard() {
                   label="Symbol"
                   helperText={SPY_ONLY_STRATEGIES.includes(selectedStrategy) ? 'SPY only (priced with VIX)' : undefined}
                   name="symbol"
-                  inputProps={{ ...params.inputProps, 'aria-describedby': 'symbol-help', maxLength: 10 }}
+                  inputProps={{ ...params.inputProps, 'aria-describedby': SPY_ONLY_STRATEGIES.includes(selectedStrategy) ? 'symbol-help symbol-spy-only' : 'symbol-help', maxLength: 10 }}
+                  FormHelperTextProps={{ id: 'symbol-spy-only' }}
                 />
               )}
             />
@@ -2633,7 +2637,7 @@ function Dashboard() {
             {/* Tab content for Performance Chart */}
             <TabPanel value={activeTab} index={0}>
               <div className="performance-overview"><PerformanceSummary data={data} resultContext={resultContext} /><div className="portfolio-chart">
-              <PerformanceChart data={data.chartData} strategyId={selectedStrategy} tooltip={<CustomTooltip />} benchmarkSymbol={selectedStrategy === 'WHEEL' ? data.wheelSummary?.underlying : selectedStrategy === 'OPTIONS_MARTIN' ? data.omSummary?.underlying : 'SPY'} /><details className="transaction-key"><summary>Transaction markers</summary>
+              <PerformanceChart data={data.chartData} strategyId={selectedStrategy} tooltip={<CustomTooltip />} benchmarkSymbol={selectedStrategy === 'WHEEL' ? data.wheelSummary?.underlying : selectedStrategy === 'OPTIONS_MARTIN' ? data.omSummary?.underlying : selectedStrategy === 'POOR_COVERED_CALL' ? data.pccSummary?.underlying : 'SPY'} /><details className="transaction-key"><summary>Transaction markers</summary>
               {/* Custom legend for transaction markers */}
               {selectedStrategy === 'SPY500_LEADER' ? (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2, p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>

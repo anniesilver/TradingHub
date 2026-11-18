@@ -1,10 +1,11 @@
 """POOR_COVERED_CALL backtests on the shared rules (algo_trading/shared/tradekit).
 
-A poor man's covered call on SPY: a deep in-the-money call about a year out instead of 100
-shares, and a monthly call sold against it. The rules (tradekit/rules/poor_covered_call.py)
-are the very file trade-engine's paper bot runs; the engine (tradekit/daily.py) decides at
-the close, one order at a time, like the bot from 15:45. SPY's daily bars and VIX are loaded
-the same way as SPY Power Cashflow's.
+A poor man's covered call: a deep in-the-money call about a year out instead of 100 shares,
+and a monthly call sold against it. The rules (tradekit/rules/poor_covered_call.py) are the
+very file trade-engine's paper bot runs (on SPY only); the engine (tradekit/daily.py) decides
+at the close, one order at a time, like the bot from 15:45. Any ticker backtests: SPY is
+priced with VIX, another stock with its own 30-day IV from IB (loaded like WHEEL's), and the
+ticker-dependent settings left blank are filled in by tradekit's poor_covered_call_auto.
 """
 
 from __future__ import annotations
@@ -23,20 +24,21 @@ STRATEGY_ID = "POOR_COVERED_CALL"
 
 def _tradekit():
     try:
-        from tradekit.backtests import (POOR_COVERED_CALL_DEFAULTS, poor_covered_call_backtest,
-                                        poor_covered_call_summary)
+        from tradekit.backtests import (POOR_COVERED_CALL_DEFAULTS, poor_covered_call_auto,
+                                        poor_covered_call_backtest, poor_covered_call_summary)
         from tradekit.rules.poor_covered_call import PoorCoveredCall
     except ImportError as e:
         raise RuntimeError(
             f"Could not import the POOR_COVERED_CALL rules from {SHARED_PATH} ({e}). Pull the latest "
             f"algo_trading or set ALGO_BASE_PATH in backend/services/.env."
         ) from e
-    return POOR_COVERED_CALL_DEFAULTS, poor_covered_call_backtest, poor_covered_call_summary, PoorCoveredCall
+    return (POOR_COVERED_CALL_DEFAULTS, poor_covered_call_backtest, poor_covered_call_summary, PoorCoveredCall,
+            poor_covered_call_auto)
 
 
 def poor_covered_call_params() -> dict:
     """The rules' parameters and the backtest's own settings, with defaults and ranges."""
-    defaults, _, _, Rules = _tradekit()
+    defaults, _, _, Rules, _ = _tradekit()
     rules = [{"name": p.name, "type": p.type.__name__, "default": p.default, "min": p.lo, "max": p.hi,
               "choices": list(p.choices) if p.choices else None, "help": p.help}
              for p in Rules.PARAMS if p.name != "underlying"]
@@ -46,18 +48,21 @@ def poor_covered_call_params() -> dict:
 def run_poor_covered_call(config: dict, start_dt: datetime, end_dt: datetime,
                           initial_balance: Optional[float] = None) -> dict:
     """Run the shared rules and return {date: {...}} in the dashboard's format, plus __metadata__."""
-    defaults, backtest, summarize, Rules = _tradekit()
+    defaults, backtest, summarize, Rules, auto = _tradekit()
     config = dict(config or {})
     if "budget" not in config and initial_balance:
         config["budget"] = initial_balance
     params = _rule_params(config, Rules)
+    params["underlying"] = str(config.get("underlying") or "SPY").upper().strip()
     p = Rules(params).p     # validates every value against its range
     settings = {k: float(config[k]) if config.get(k) not in (None, "") else v for k, v in defaults.items()}
     settings["long_days"] = int(settings["long_days"])
 
     start, end = start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
     days, notes = load_days(p.underlying, start, end, "market")
-    logger.info(f"POOR_COVERED_CALL {start}..{end}: {len(days)} days, IV {notes}")
+    # blank ticker-dependent settings: SPY's fixed values, or from the stock's own prices and IV
+    settings.update({k: v for k, v in auto(days, p.underlying).items() if settings.get(k) is None})
+    logger.info(f"POOR_COVERED_CALL {p.underlying} {start}..{end}: {len(days)} days, IV {notes}, {settings}")
     bt = backtest(days, params, **settings)
     return to_dashboard(bt, days, p, notes, summarize(bt), settings)
 
@@ -73,7 +78,7 @@ def _log_text(t) -> str:
 
 
 def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dict[str, dict]:
-    # Buy & hold SPY with the same money, dividends reinvested at the ex-date close
+    # Buy & hold the same ticker with the same money, dividends reinvested at the ex-date close
     shares = p.budget / days[0].close if days[0].close > 0 else 0.0
     bench = {}
     for d in days:
@@ -102,7 +107,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
             "High": day.high,
             "Low": day.low,
             "VIX": round(r.iv, 4) if r.iv is not None else 0.0,
-            "Margin_Ratio": round(exposure / r.equity, 4) if r.equity > 0 else 0.0,   # SPY exposure per $ equity
+            "Margin_Ratio": round(exposure / r.equity, 4) if r.equity > 0 else 0.0,   # stock exposure per $ equity
             "spy_value": round(bench.get(r.date, 0.0), 2),
             "Interest_Paid": 0.0,
             "Withdrawal": 0.0,
@@ -125,6 +130,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
     years = max((final.date - bt.results[0].date).days / 365.25, 1e-9)
     summary = dict(summary)
     summary.update({
+        "underlying": p.underlying,
         "budget": p.budget,
         "final_value": round(final.equity, 2),
         "benchmark_final_value": round(bench.get(final.date, 0.0), 2),
@@ -134,7 +140,8 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
     out["__metadata__"] = {
         "strategy": STRATEGY_ID,
         "pcc_summary": summary,
-        "data_notes": dict(notes, **settings, pricing="Black-Scholes with SPY's dividend yield: monthly calls at VIX x short_iv_mult, "
+        "data_notes": dict(notes, **settings, pricing=f"Black-Scholes with {p.underlying}'s dividend yield: monthly calls at "
+                                                      f"{'VIX' if p.underlying == 'SPY' else 'its 30-day IV'} x short_iv_mult, "
                                                       "the year-out call at a damped long-dated IV; no skew; "
                                                       "half-spreads paid as slippage"),
     }

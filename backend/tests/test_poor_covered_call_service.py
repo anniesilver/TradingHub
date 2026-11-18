@@ -45,7 +45,29 @@ def test_params_and_paper_test_mapping():
     schema = svc.poor_covered_call_params()
     names = [p["name"] for p in schema["rules"]]
     assert "size" in names and "harvest_at" in names and "underlying" not in names
-    assert schema["backtest"]["long_slippage"] == 0.40
+    assert schema["backtest"]["long_slippage"] is None          # auto: $0.40 for SPY, by price for a stock
     assert paper_test_service.server_name("POOR_COVERED_CALL") == "poor_covered_call"
     params = paper_test_service.rule_params("POOR_COVERED_CALL", {"budget": 60000, "size": "1.25"})
     assert params["size"] == 1.25 and params["budget"] == 60000.0 and params["long_itm_pct"] == 0.2
+    with pytest.raises(paper_test_service.PaperTestError, match="SPY only"):
+        paper_test_service.rule_params("POOR_COVERED_CALL", {"budget": 60000, "underlying": "AMZN"})
+
+
+def test_another_ticker_runs_on_its_own_iv_and_benchmark(monkeypatch):
+    import pandas as pd
+    monkeypatch.setattr(wheel_service, "_market_data_class", lambda: fake_market_data(lambda i: 200.0 + i * 0.2))
+    monkeypatch.setattr(wheel_service, "_load_stock_iv",
+                        lambda sym, start, end: pd.Series(0.35, index=pd.bdate_range(start, end)))
+    monkeypatch.setattr(wheel_service, "_load_dividends", lambda sym, start, end: pd.Series(dtype=float))
+    out = svc.run_poor_covered_call({"underlying": "amzn"}, datetime(2025, 1, 2), datetime(2025, 6, 30),
+                                    initial_balance=60_000)
+    meta = out.pop("__metadata__")
+    days = sorted(out)
+    first = out[days[0]]["Trading_Log"]
+    long_k = int(out[days[0]]["Close"] * 0.8 // 2.5 * 2.5)   # $2.50 strikes between $100 and $250
+    assert first.startswith(f"Buy call: 4 AMZN {long_k}C 2026-")   # 60k x 1.5 / (100 x ~207) = 4.3 -> 4
+    assert meta["pcc_summary"]["underlying"] == "AMZN"
+    notes = meta["data_notes"]
+    assert notes["iv_name"].startswith("AMZN 30-day") and notes["short_iv_mult"] == 1.0
+    assert notes["long_iv_base"] == 0.35 and notes["dividend_yield"] == 0.0 and 0.40 < notes["long_slippage"] < 0.46   # 0.2% of ~220
+    assert out[days[0]]["spy_value"] == pytest.approx(60_000)   # buy & hold AMZN with the same money

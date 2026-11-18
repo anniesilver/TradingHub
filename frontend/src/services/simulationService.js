@@ -139,7 +139,7 @@ export const kitStrategyConfig = (config) => {
   }
   // POOR_COVERED_CALL: one object built by components/SpyCashflowSettings.js
   if (config.strategyId === 'POOR_COVERED_CALL') {
-    return { ...(config.poorCoveredCall || {}), underlying: 'SPY' };
+    return { ...(config.poorCoveredCall || {}), underlying: config.symbol || 'SPY' };
   }
   // SPY_POWER_CASHFLOW_RULES: one object built by components/SpyCashflowSettings.js
   if (config.strategyId === 'SPY_POWER_CASHFLOW_RULES') {

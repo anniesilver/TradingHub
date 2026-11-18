@@ -35,13 +35,15 @@ export function initialSpyCashflowConfig(schema) {
 
 // POOR_COVERED_CALL's backtest-only settings (tradekit.backtests.POOR_COVERED_CALL_DEFAULTS)
 export const PCC_BACKTEST_FIELDS = [
-  ['short_iv_mult', 'Short call IV (x VIX)', "The monthly calls are priced at VIX x this. Out-of-the-money SPY calls trade near SPY's own IV, about 0.8 x VIX.", { min: 0.1, step: 0.05 }],
-  ['long_slippage', 'Long call slippage ($/share)', "Half the year-out call's bid/ask spread, paid on each purchase and sale.", { min: 0, step: 0.05 }],
-  ['short_slippage', 'Short call slippage ($/share)', "Half the monthly call's spread.", { min: 0, step: 0.01 }],
+  // Blank = auto from the ticker: SPY 0.8 x VIX, $0.40 / $0.05, 1.3%, 0.17; another stock 1.0 x its own IV,
+  // slippage 0.2% / 0.05% of its price, its own dividend yield, its median IV
+  ['short_iv_mult', 'Short call IV (x VIX or own IV)', "The monthly calls are priced at the 30-day IV x this: VIX for SPY, the stock's own IV otherwise. Blank = auto: 0.8 for SPY (its calls trade near SPY's own IV, about 0.8 x VIX), 1.0 for a stock.", { min: 0.1, step: 0.05 }],
+  ['long_slippage', 'Long call slippage ($/share)', "Half the year-out call's bid/ask spread, paid on each purchase and sale. Blank = auto: $0.40 for SPY, 0.2% of the price for a stock.", { min: 0, step: 0.05 }],
+  ['short_slippage', 'Short call slippage ($/share)', "Half the monthly call's spread. Blank = auto: $0.05 for SPY, 0.05% of the price (at least $0.05) for a stock.", { min: 0, step: 0.01 }],
   ['risk_free_rate', 'Risk-free rate', 'For Black-Scholes, e.g. 0.04 = 4%.', { min: 0, step: 0.005 }],
-  ['dividend_yield', 'Dividend yield', "SPY's, for Black-Scholes.", { min: 0, step: 0.001 }],
-  ['long_iv_base', 'Long IV base', 'Year-out IV = base + damp x (VIX - base).', { min: 0, step: 0.01 }],
-  ['long_iv_damp', 'Long IV damp', 'How much of a VIX move the year-out IV follows (0.35 = 35%).', { min: 0, step: 0.05 }],
+  ['dividend_yield', 'Dividend yield', "For Black-Scholes. Blank = auto: 1.3% for SPY, the stock's own dividends a year / its average price.", { min: 0, step: 0.001 }],
+  ['long_iv_base', 'Long IV base', "Year-out IV = base + damp x (30-day IV - base). Blank = auto: 0.17 for SPY, the stock's median IV over the run.", { min: 0, step: 0.01 }],
+  ['long_iv_damp', 'Long IV damp', 'How much of a 30-day IV move the year-out IV follows (0.35 = 35%).', { min: 0, step: 0.05 }],
 ];
 
 export default function SpyCashflowSettings({ schema, value, onChange, title = 'SPY Power Cashflow rules (same as the paper bot)',
@@ -97,6 +99,7 @@ export default function SpyCashflowSettings({ schema, value, onChange, title = '
         <Grid item xs={12} sm={3} md={1.5} key={name}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <TextField fullWidth size="small" type="number" label={text} name={`${prefix}_${name}`} value={value[name] ?? ''}
+              placeholder="auto" InputLabelProps={{ shrink: true }}
               onChange={e => set(name, e.target.value === '' ? '' : Number(e.target.value))} inputProps={limits} />
             <Help text={help} />
           </Box>
@@ -160,7 +163,7 @@ export function PoorCoveredCallResults({ summary }) {
     ['Final value', money(s.final_value)],
     ['Per year', pct(s.cagr)],
     ['Worst drawdown', pct(s.max_drawdown_pct)],
-    ['SPY buy & hold', money(s.benchmark_final_value)],
+    [`${s.underlying || 'SPY'} buy & hold`, money(s.benchmark_final_value)],
     ['Calls sold', s.calls_sold],
     ['Harvests', s.harvests],
     ['Month-end buybacks', s.month_end_buybacks],
