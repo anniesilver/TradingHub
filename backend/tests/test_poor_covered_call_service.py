@@ -36,6 +36,8 @@ def test_runs_the_shared_rules_and_returns_dashboard_days(monkeypatch):
     assert "shares" not in " ".join(out[d]["Trading_Log"] for d in days)   # no share trades
     s = meta["pcc_summary"]
     assert s["budget"] == 60_000 and s["calls_sold"] >= 5 and s["long_qty"] == 2
+    total = sum(out[d]["Premiums_Received"] for d in days)
+    assert total == pytest.approx(s["premiums"], abs=1.0)              # short calls only, not long-call roll sales
     assert 1.6 < out[days[0]]["Margin_Ratio"] < 1.9                # SPY exposure per $1 of equity
 
 
