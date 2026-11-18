@@ -97,6 +97,7 @@ def run_poor_covered_call(config: dict, start_dt: datetime, end_dt: datetime,
     params["underlying"] = str(config.get("underlying") or "SPY").upper().strip()
     p = Rules(params).p     # validates every value against its range
     settings = {k: float(config[k]) if config.get(k) not in (None, "") else v for k, v in defaults.items()}
+    # (park_cash, the paper bot's SGOV sweep, isn't a backtest setting: the backtest's cash earns cash_rate either way)
     settings["long_days"] = int(settings["long_days"])
 
     start, end = start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")

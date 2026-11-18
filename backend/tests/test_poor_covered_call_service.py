@@ -113,3 +113,11 @@ def test_cash_earns_interest_and_the_rates_note_says_where_from(monkeypatch):
     none = svc.run_poor_covered_call({"cash_rate": 0}, datetime(2025, 1, 2), datetime(2025, 6, 30),
                                      initial_balance=60_000)["__metadata__"]["pcc_summary"]
     assert none["cash_interest"] == 0
+
+
+def test_paper_test_sends_the_sgov_sweep_setting():
+    off = paper_test_service.rule_params("POOR_COVERED_CALL", {"budget": 60000})
+    assert off["park_symbol"] == ""
+    on = paper_test_service.rule_params("POOR_COVERED_CALL", {"budget": 60000, "park_cash": True,
+                                                              "cash_reserve_pct": 0.05})
+    assert on["park_symbol"] == "SGOV" and on["park_reserve_pct"] == 0.05

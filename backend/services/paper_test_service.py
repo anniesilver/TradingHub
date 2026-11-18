@@ -101,16 +101,22 @@ def rule_params(strategy_id: str, config: dict) -> dict:
         from services.options_martin_service import _rule_params, _tradekit
         Rules = _tradekit()[-1]
     try:
-        return Rules(_rule_params(config, Rules)).p.as_dict()
+        params = Rules(_rule_params(config, Rules)).p.as_dict()
     except ValueError as e:
         raise PaperTestError(str(e))
+    if strategy_id == "POOR_COVERED_CALL":   # the bot's cash sweep into SGOV (not a rule parameter)
+        on = str(config.get("park_cash", "")).lower() in ("1", "true", "yes", "on")
+        params["park_symbol"] = "SGOV" if on else ""
+        if config.get("cash_reserve_pct") not in (None, ""):
+            params["park_reserve_pct"] = float(config["cash_reserve_pct"])
+    return params
 
 
 def backtest_settings(strategy_id: str, config: dict) -> dict:
     """The page's backtest-only settings, kept with the test for comparing later."""
     keep = ("strike_step", "slippage", "risk_free_rate", "fill_mode", "cash", "price_iv_mult", "iv_source",
             "fixed_iv", "long_slippage", "short_slippage", "dividend_yield", "long_iv_base", "long_iv_damp",
-            "long_days", "short_iv_mult", "cash_rate", "cash_rate_fee")
+            "long_days", "short_iv_mult", "cash_rate", "cash_rate_fee", "cash_reserve_pct", "park_cash")
     return {k: config[k] for k in keep if k in config}
 
 
