@@ -24,14 +24,14 @@ STRATEGY_ID = "SPY_POWER_CASHFLOW_RULES"
 
 def _tradekit():
     try:
-        from tradekit.backtests import BACKTEST_DEFAULTS, spy_power_cashflow_backtest, spy_power_cashflow_summary
+        from tradekit.backtests import SPY_POWER_CASHFLOW_DEFAULTS, spy_power_cashflow_backtest, spy_power_cashflow_summary
         from tradekit.rules.spy_power_cashflow import SpyPowerCashflow
     except ImportError as e:
         raise RuntimeError(
             f"Could not import the SPY_POWER_CASHFLOW rules from {SHARED_PATH} ({e}). Pull the latest "
             f"algo_trading or set ALGO_BASE_PATH in backend/services/.env."
         ) from e
-    return BACKTEST_DEFAULTS, spy_power_cashflow_backtest, spy_power_cashflow_summary, SpyPowerCashflow
+    return SPY_POWER_CASHFLOW_DEFAULTS, spy_power_cashflow_backtest, spy_power_cashflow_summary, SpyPowerCashflow
 
 
 def spy_power_cashflow_params() -> dict:
@@ -73,15 +73,20 @@ def run_spy_power_cashflow_rules(config: dict, start_dt: datetime, end_dt: datet
     strike_step = float(config.get("strike_step", defaults["strike_step"]))
     slippage = float(config.get("slippage", defaults["slippage"]))
     rate = float(config.get("risk_free_rate", defaults["risk_free_rate"]))
+    iv_mult = float(config.get("short_iv_mult", defaults["short_iv_mult"]))
     if strike_step <= 0:
         raise ValueError("strike_step must be above 0")
+    if iv_mult <= 0:
+        raise ValueError("short_iv_mult must be above 0")
 
     start, end = start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
     days, notes = load_days(p.underlying, start, end, "market")
     logger.info(f"SPY_POWER_CASHFLOW (rules) {start}..{end}: {len(days)} days, IV {notes}")
-    bt = backtest(days, params, strike_step=strike_step, slippage=slippage, risk_free_rate=rate)
+    bt = backtest(days, params, strike_step=strike_step, slippage=slippage, risk_free_rate=rate,
+                  short_iv_mult=iv_mult)
     return to_dashboard(bt, days, p, notes, summarize(bt),
-                        {"strike_step": strike_step, "slippage": slippage, "risk_free_rate": rate})
+                        {"strike_step": strike_step, "slippage": slippage, "risk_free_rate": rate,
+                         "short_iv_mult": iv_mult})
 
 
 def _log_text(t) -> str:
@@ -173,7 +178,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
     out["__metadata__"] = {
         "strategy": STRATEGY_ID,
         "spy_cashflow_summary": summary,
-        "data_notes": dict(notes, **settings, pricing="Black-Scholes at VIX, one IV for all strikes (no skew), "
+        "data_notes": dict(notes, **settings, pricing="Black-Scholes at VIX x short_iv_mult, one IV for all strikes (no skew), "
                                                       "month-end expiries, no bid/ask spread"),
     }
     return out
