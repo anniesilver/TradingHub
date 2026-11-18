@@ -137,6 +137,10 @@ export const kitStrategyConfig = (config) => {
     });
     return out;
   }
+  // POOR_COVERED_CALL: one object built by components/SpyCashflowSettings.js
+  if (config.strategyId === 'POOR_COVERED_CALL') {
+    return { ...(config.poorCoveredCall || {}), underlying: 'SPY' };
+  }
   // SPY_POWER_CASHFLOW_RULES: one object built by components/SpyCashflowSettings.js
   if (config.strategyId === 'SPY_POWER_CASHFLOW_RULES') {
     return { ...(config.spyCashflow || {}), underlying: 'SPY' };
@@ -228,7 +232,7 @@ export const runSimulation = async (config) => {
     };
 
     // WHEEL and OPTIONS_MARTIN: the shared tradekit rules' own parameter names + backtest settings
-    if (config.strategyId === 'WHEEL' || config.strategyId === 'OPTIONS_MARTIN' || config.strategyId === 'SPY_POWER_CASHFLOW_RULES') {
+    if (['WHEEL', 'OPTIONS_MARTIN', 'SPY_POWER_CASHFLOW_RULES', 'POOR_COVERED_CALL'].includes(config.strategyId)) {
       payload.config = kitStrategyConfig(config);
     }
 

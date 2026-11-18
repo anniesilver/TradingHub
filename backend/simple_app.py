@@ -11,6 +11,7 @@ from services.strategy_service import import_strategy, run_spy_power_cashflow, r
 from services.wheel_service import run_wheel, wheel_params
 from services.options_martin_service import options_martin_params, run_options_martin_kit
 from services.spy_power_cashflow_service import run_spy_power_cashflow_rules, spy_power_cashflow_params
+from services.poor_covered_call_service import run_poor_covered_call, poor_covered_call_params
 from services import paper_test_service
 from routes.market_data import market_data_bp
 
@@ -87,6 +88,16 @@ def get_spy_power_cashflow_params():
         return jsonify(spy_power_cashflow_params())
     except Exception as e:
         logger.error(f"Error reading SPY_POWER_CASHFLOW parameters: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/strategies/POOR_COVERED_CALL/params", methods=["GET"])
+def get_poor_covered_call_params():
+    """The POOR_COVERED_CALL rules' parameters (defaults, ranges, help) straight from algo_trading/shared."""
+    try:
+        return jsonify(poor_covered_call_params())
+    except Exception as e:
+        logger.error(f"Error reading POOR_COVERED_CALL parameters: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -267,6 +278,19 @@ def run_simulation():
                 return jsonify({"error": str(e)}), 400
             except Exception as e:
                 logger.error(f"SPY_POWER_CASHFLOW_RULES execution error: {str(e)}")
+                logger.error(traceback.format_exc())
+                return jsonify({"error": f"Strategy execution failed: {str(e)}"}), 500
+
+        # POOR_COVERED_CALL (shared rules): a deep ITM SPY call a year out + monthly short calls
+        if data["strategy_type"] == "POOR_COVERED_CALL":
+            try:
+                results = run_poor_covered_call(data["config"], start_date, end_date, initial_balance)
+                return jsonify(results)
+            except ValueError as e:
+                logger.error(f"POOR_COVERED_CALL settings error: {str(e)}")
+                return jsonify({"error": str(e)}), 400
+            except Exception as e:
+                logger.error(f"POOR_COVERED_CALL execution error: {str(e)}")
                 logger.error(traceback.format_exc())
                 return jsonify({"error": f"Strategy execution failed: {str(e)}"}), 500
 
