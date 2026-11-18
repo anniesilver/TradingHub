@@ -56,7 +56,11 @@ import { chartColors } from '../components/chartColors';
 import { parameterUnits, toDisplayValue, toStoredValue, toDisplayInputProps } from './parameterUnits';
 import { computeSharpeRatio } from './performanceMetrics';
 
+// These run on SPY only: their option prices come from VIX, so the Symbol box is locked to SPY
+const SPY_ONLY_STRATEGIES = ['SPY_POWER_CASHFLOW_RULES', 'POOR_COVERED_CALL'];
+
 // Helper function to calculate the 3rd Friday of a month (standard options expiration)
+
 const getThirdFriday = (year, month) => {
   const firstDay = new Date(year, month, 1);
   const firstFriday = new Date(year, month, 1 + ((5 - firstDay.getDay() + 7) % 7));
@@ -1766,7 +1770,7 @@ function Dashboard() {
       <MainContent ref={workspaceContent} as="main" id="analysis-workspace" tabIndex={-1}>
         <header className="analysis-toolbar">
           <div><span className="eyebrow">Historical research</span><Typography component="h1" variant="h6">{selectedStrategyInfo?.name || 'Strategy analysis'}</Typography></div>
-          <div className="toolbar-context" aria-label="Configured scenario"><span>{config.symbol}</span><span>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(startingCash)} USD</span><span>{config.startDate} — {config.endDate}</span></div>
+          <div className="toolbar-context" aria-label="Configured scenario"><span>{SPY_ONLY_STRATEGIES.includes(selectedStrategy) ? 'SPY' : config.symbol}</span><span>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(startingCash)} USD</span><span>{config.startDate} — {config.endDate}</span></div>
         </header>
 
         {/* Show loading state */}
@@ -1822,13 +1826,15 @@ function Dashboard() {
               fullWidth
               size="small"
               options={SYMBOL_SUGGESTIONS}
-              value={config.symbol}
-              inputValue={config.symbol}
+              disabled={SPY_ONLY_STRATEGIES.includes(selectedStrategy)}
+              value={SPY_ONLY_STRATEGIES.includes(selectedStrategy) ? 'SPY' : config.symbol}
+              inputValue={SPY_ONLY_STRATEGIES.includes(selectedStrategy) ? 'SPY' : config.symbol}
               onInputChange={(event, value) => setConfig(prev => ({ ...prev, symbol: (value || '').toUpperCase().trim() }))}
               renderInput={params => (
                 <TextField
                   {...params}
                   label="Symbol"
+                  helperText={SPY_ONLY_STRATEGIES.includes(selectedStrategy) ? 'SPY only (priced with VIX)' : undefined}
                   name="symbol"
                   inputProps={{ ...params.inputProps, 'aria-describedby': 'symbol-help', maxLength: 10 }}
                 />
