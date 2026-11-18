@@ -39,6 +39,8 @@ def test_runs_the_shared_rules_and_returns_dashboard_days(monkeypatch):
     total = sum(out[d]["Premiums_Received"] for d in days)
     assert total == pytest.approx(s["premiums"], abs=1.0)              # short calls only, not long-call roll sales
     assert 1.6 < out[days[0]]["Margin_Ratio"] < 1.9                # SPY exposure per $1 of equity
+    assert all("long_only_value" in out[d] for d in days)          # 2nd benchmark: the same long calls, no shorts
+    assert out[days[-1]]["long_only_value"] == pytest.approx(s["long_only_final_value"], abs=0.01)
 
 
 def test_params_and_paper_test_mapping():

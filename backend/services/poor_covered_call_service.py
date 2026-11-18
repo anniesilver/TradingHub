@@ -87,6 +87,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
         bench[d.date] = shares * d.close
 
     by_date = {d.date: d for d in days}
+    long_only = dict(getattr(bt, "long_only", None) or [])   # the same long calls and rolls, no calls sold
     out: Dict[str, dict] = {}
     prev = None
     peak, max_dd = 0.0, 0.0
@@ -109,6 +110,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
             "VIX": round(r.iv, 4) if r.iv is not None else 0.0,
             "Margin_Ratio": round(exposure / r.equity, 4) if r.equity > 0 else 0.0,   # stock exposure per $ equity
             "spy_value": round(bench.get(r.date, 0.0), 2),
+            **({"long_only_value": round(long_only[r.date], 2)} if r.date in long_only else {}),
             "Interest_Paid": 0.0,
             "Withdrawal": 0.0,
             # the rules' own total: short calls sold only (the engine's counts the old long calls sold in rolls too)
