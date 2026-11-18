@@ -45,7 +45,7 @@ import OptionsMartinSettings, { initialOptionsMartinConfig } from '../components
 import PaperTestButton from '../components/PaperTestButton';
 import PaperTestHistory from '../components/PaperTestHistory';
 import OptionsMartinResults from '../components/OptionsMartinResults';
-import SpyCashflowSettings, { SpyCashflowResults, initialSpyCashflowConfig } from '../components/SpyCashflowSettings';
+import SpyCashflowSettings, { SpyCashflowResults, initialSpyCashflowConfig, PoorCoveredCallResults, PCC_BACKTEST_FIELDS } from '../components/SpyCashflowSettings';
 import ParameterField from '../components/ParameterField';
 import SimulationTransition, { WaveBackdrop } from '../components/WaveSurface';
 import PerformanceChart from '../components/PerformanceChart';
@@ -332,6 +332,11 @@ const AVAILABLE_STRATEGIES = [
     description: 'Covered calls on leveraged SPY. Same rules as the paper bot'
   },
   {
+    id: 'POOR_COVERED_CALL',
+    name: 'Poor Covered Call',
+    description: 'A deep in-the-money SPY call a year out instead of shares, with a monthly call sold against it. Same rules as the paper bot'
+  },
+  {
     id: 'SPY_POWER_CASHFLOW',
     name: 'SPY Power Cashflow (old)',
     description: 'The original SPY Power Cashflow simulator, kept for comparison'
@@ -385,7 +390,11 @@ function Dashboard() {
     omSummary: null,     // OPTIONS_MARTIN rounds, wins, P&L
     omRounds: null,      // OPTIONS_MARTIN one row per round
     spySummary: null,    // SPY_POWER_CASHFLOW_RULES calls, dip buys, withdrawals
+    pccSummary: null,    // POOR_COVERED_CALL calls, harvests, rolls
   });
+  // POOR_COVERED_CALL on the shared rules: settings from the rules' own parameter list
+  const [pccSchema, setPccSchema] = useState(null);
+  const [pccConfig, setPccConfig] = useState(null);
   // SPY_POWER_CASHFLOW on the shared rules: settings from the rules' own parameter list
   const [spySchema, setSpySchema] = useState(null);
   const [spyConfig, setSpyConfig] = useState(null);
@@ -490,11 +499,13 @@ function Dashboard() {
   const omCash = omConfig ? (Number(omConfig.cash) || Number(omConfig.round_budget) || 0) : 0;
   const startingCash = selectedStrategy === 'WHEEL' ? config.budget
     : selectedStrategy === 'OPTIONS_MARTIN' ? omCash
-    : selectedStrategy === 'SPY_POWER_CASHFLOW_RULES' ? Number(spyConfig?.budget) || 0 : config.initialBalance;
+    : selectedStrategy === 'SPY_POWER_CASHFLOW_RULES' ? Number(spyConfig?.budget) || 0
+    : selectedStrategy === 'POOR_COVERED_CALL' ? Number(pccConfig?.budget) || 0 : config.initialBalance;
   const runConfigFor = (cfg) => {
     if (selectedStrategy === 'WHEEL') return { ...cfg, initialBalance: cfg.budget };
     if (selectedStrategy === 'OPTIONS_MARTIN') return { ...cfg, initialBalance: omCash, optionsMartin: omConfig };
     if (selectedStrategy === 'SPY_POWER_CASHFLOW_RULES') return { ...cfg, symbol: 'SPY', initialBalance: Number(spyConfig?.budget) || 0, spyCashflow: spyConfig };
+    if (selectedStrategy === 'POOR_COVERED_CALL') return { ...cfg, symbol: 'SPY', initialBalance: Number(pccConfig?.budget) || 0, poorCoveredCall: pccConfig };
     return cfg;
   };
 
@@ -608,6 +619,7 @@ function Dashboard() {
       let omSummary = null;
       let omRounds = null;
       let spySummary = null;
+      let pccSummary = null;
       console.log('🔍 Checking for IV statistics metadata...');
       console.log('🔍 parsedData keys:', Object.keys(parsedData));
       console.log('🔍 parsedData sample (first 3 keys):', Object.keys(parsedData).slice(0, 3));
@@ -621,6 +633,7 @@ function Dashboard() {
         omSummary = parsedData.__metadata__.options_martin_summary || null;
         omRounds = parsedData.__metadata__.options_martin_rounds || null;
         spySummary = parsedData.__metadata__.spy_cashflow_summary || null;
+        pccSummary = parsedData.__metadata__.pcc_summary || null;
         console.log('✅ Extracted IV statistics:', ivStatistics);
         // Remove metadata from parsedData so it doesn't interfere with date processing
         delete parsedData.__metadata__;
@@ -1443,7 +1456,8 @@ function Dashboard() {
         wheelNotes: wheelNotes,
         omSummary: omSummary,
         omRounds: omRounds,
-        spySummary: spySummary
+        spySummary: spySummary,
+        pccSummary: pccSummary
       });
       
       // Indicate success
@@ -1591,16 +1605,36 @@ function Dashboard() {
     return () => { cancelled = true; };
   }, [selectedStrategy, spySchema]);
 
+  // POOR_COVERED_CALL: load the rules' settings once, then run
+  useEffect(() => {
+    if (selectedStrategy !== 'POOR_COVERED_CALL' || pccSchema) return;
+    let cancelled = false;
+    getStrategyParams('POOR_COVERED_CALL')
+      .then(schema => {
+        if (cancelled) return;
+        setPccSchema(schema);
+        setPccConfig(initialSpyCashflowConfig(schema));
+      })
+      .catch(err => {
+        if (cancelled) return;
+        setError(err?.response?.data?.error || err?.message || 'Could not load the Poor Covered Call settings');
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedStrategy, pccSchema]);
+
   const omReady = omConfig !== null;
+  const pccReady = pccConfig !== null;
   const spyReady = spyConfig !== null;
   const wheelReady = wheelSchema !== null;
   useEffect(() => {
     if (selectedStrategy === 'OPTIONS_MARTIN' && !omReady) return;  // waits for its settings
     if (selectedStrategy === 'WHEEL' && !wheelReady) return;
     if (selectedStrategy === 'SPY_POWER_CASHFLOW_RULES' && !spyReady) return;
+    if (selectedStrategy === 'POOR_COVERED_CALL' && !pccReady) return;
     handleRunSimulation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStrategy, omReady, wheelReady, spyReady]);
+  }, [selectedStrategy, omReady, wheelReady, spyReady, pccReady]);
 
   // Helper function to extract first month with trading activity
   // eslint-disable-next-line no-unused-vars
@@ -1779,7 +1813,7 @@ function Dashboard() {
       <Paper key={selectedStrategy} component="form" data-strategy={selectedStrategy} className="scenario-surface workspace-panel" sx={{ mb: 2, p: 2 }}>
         <div className="scenario-heading"><Typography component="h2" variant="subtitle2">Run settings</Typography><span>Historical simulation · No trades placed</span></div>
         <ParameterGrid container>
-          <Grid item xs={12} className="primary-run-action"><div className="form-actions"><Button variant="contained" color="primary" onClick={event => handleRunSimulation(event, true)} disabled={loading}>Run simulation</Button>{(selectedStrategy === 'WHEEL' || selectedStrategy === 'OPTIONS_MARTIN') && <PaperTestButton strategyId={selectedStrategy} config={runConfigFor(config)} disabled={loading || (selectedStrategy === 'OPTIONS_MARTIN' && !omConfig)} />}{(selectedStrategy === 'WHEEL' || selectedStrategy === 'OPTIONS_MARTIN') && <PaperTestHistory strategyId={selectedStrategy} />}</div></Grid>
+          <Grid item xs={12} className="primary-run-action"><div className="form-actions"><Button variant="contained" color="primary" onClick={event => handleRunSimulation(event, true)} disabled={loading}>Run simulation</Button>{['WHEEL', 'OPTIONS_MARTIN', 'POOR_COVERED_CALL'].includes(selectedStrategy) && <PaperTestButton strategyId={selectedStrategy} config={runConfigFor(config)} disabled={loading || (selectedStrategy === 'OPTIONS_MARTIN' && !omConfig) || (selectedStrategy === 'POOR_COVERED_CALL' && !pccConfig)} />}{['WHEEL', 'OPTIONS_MARTIN', 'POOR_COVERED_CALL'].includes(selectedStrategy) && <PaperTestHistory strategyId={selectedStrategy} />}</div></Grid>
           <Grid item xs={12} sm={3} md={1.5}>
             {/* Pick a listed ticker or type any other one (it is loaded from IB the first time) */}
             <ParameterField name="symbol" label="Symbol">
@@ -1803,7 +1837,7 @@ function Dashboard() {
             </ParameterField>
           </Grid>
           {/* Power Cashflow always writes calls; keep other strategies unchanged. */}
-          {selectedStrategy !== 'SPY_POWER_CASHFLOW' && selectedStrategy !== 'SPY_POWER_CASHFLOW_RULES' && selectedStrategy !== 'WHEEL' && selectedStrategy !== 'OPTIONS_MARTIN' && <Grid item xs={12} sm={3} md={1.5}>
+          {selectedStrategy !== 'SPY_POWER_CASHFLOW' && selectedStrategy !== 'SPY_POWER_CASHFLOW_RULES' && selectedStrategy !== 'POOR_COVERED_CALL' && selectedStrategy !== 'WHEEL' && selectedStrategy !== 'OPTIONS_MARTIN' && <Grid item xs={12} sm={3} md={1.5}>
             <CompactFormControl fullWidth size="small">
               <InputLabel id="optionType-label">Option Type</InputLabel>
               <CompactSelect
@@ -1830,7 +1864,7 @@ function Dashboard() {
               onChange={handleConfigChange}
               InputProps={{ inputProps: { min: 1000, step: 1000 } }}
             />
-          </Grid> : (selectedStrategy === 'OPTIONS_MARTIN' || selectedStrategy === 'SPY_POWER_CASHFLOW_RULES') ? null : <Grid item xs={12} sm={3} md={1.5}>
+          </Grid> : (selectedStrategy === 'OPTIONS_MARTIN' || selectedStrategy === 'SPY_POWER_CASHFLOW_RULES' || selectedStrategy === 'POOR_COVERED_CALL') ? null : <Grid item xs={12} sm={3} md={1.5}>
             <CompactTextField
               fullWidth
               size="small"
@@ -1871,7 +1905,7 @@ function Dashboard() {
             <details className="advanced-settings">
               <summary>Advanced strategy parameters</summary>
               <ParameterGrid container>
-          {selectedStrategy !== 'WHEEL' && selectedStrategy !== 'OPTIONS_MARTIN' && selectedStrategy !== 'SPY_POWER_CASHFLOW_RULES' && (<>
+          {selectedStrategy !== 'WHEEL' && selectedStrategy !== 'OPTIONS_MARTIN' && selectedStrategy !== 'SPY_POWER_CASHFLOW_RULES' && selectedStrategy !== 'POOR_COVERED_CALL' && (<>
           <Grid item xs={12} sm={3} md={1.5}>
             <CompactTextField
               fullWidth
@@ -2282,6 +2316,12 @@ function Dashboard() {
           {/* SPY_POWER_CASHFLOW on the shared rules (same as the paper bot) + backtest settings */}
           {selectedStrategy === 'SPY_POWER_CASHFLOW_RULES' && (
             <SpyCashflowSettings schema={spySchema} value={spyConfig} onChange={setSpyConfig} />
+          )}
+
+          {/* POOR_COVERED_CALL on the shared rules (same as the paper bot) + backtest settings */}
+          {selectedStrategy === 'POOR_COVERED_CALL' && (
+            <SpyCashflowSettings schema={pccSchema} value={pccConfig} onChange={setPccConfig}
+              title="Poor Covered Call rules (same as the paper bot)" backtestFields={PCC_BACKTEST_FIELDS} prefix="pcc" />
           )}
 
           {/* The old OPTIONS_MARTIN simulator's parameters */}
@@ -2906,6 +2946,9 @@ function Dashboard() {
       })()}
       {selectedStrategy === 'SPY_POWER_CASHFLOW_RULES' && data.spySummary && (
         <SpyCashflowResults summary={data.spySummary} />
+      )}
+      {selectedStrategy === 'POOR_COVERED_CALL' && data.pccSummary && (
+        <PoorCoveredCallResults summary={data.pccSummary} />
       )}
       {selectedStrategy === 'OPTIONS_MARTIN' && data.omSummary && (
         <OptionsMartinResults summary={data.omSummary} rounds={data.omRounds} notes={data.wheelNotes} />

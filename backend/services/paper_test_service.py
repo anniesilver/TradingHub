@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 ALGO_BASE_PATH = os.environ.get("ALGO_BASE_PATH", "C:/ALGO/algo_trading")
 # TradingHub strategy id -> the strategy's name on the server
-SERVER_NAMES = {"WHEEL": "wheel", "OPTIONS_MARTIN": "options_martin"}
+SERVER_NAMES = {"WHEEL": "wheel", "OPTIONS_MARTIN": "options_martin", "POOR_COVERED_CALL": "poor_covered_call"}
 
 
 class PaperTestError(Exception):
@@ -91,6 +91,9 @@ def rule_params(strategy_id: str, config: dict) -> dict:
         config = dict(config)
         if "budget" not in config and config.get("initialBalance"):
             config["budget"] = config["initialBalance"]
+    elif strategy_id == "POOR_COVERED_CALL":
+        from services.poor_covered_call_service import _rule_params, _tradekit
+        Rules = _tradekit()[-1]
     else:
         from services.options_martin_service import _rule_params, _tradekit
         Rules = _tradekit()[-1]
@@ -103,7 +106,8 @@ def rule_params(strategy_id: str, config: dict) -> dict:
 def backtest_settings(strategy_id: str, config: dict) -> dict:
     """The page's backtest-only settings, kept with the test for comparing later."""
     keep = ("strike_step", "slippage", "risk_free_rate", "fill_mode", "cash", "price_iv_mult", "iv_source",
-            "fixed_iv")
+            "fixed_iv", "long_slippage", "short_slippage", "dividend_yield", "long_iv_base", "long_iv_damp",
+            "long_days")
     return {k: config[k] for k in keep if k in config}
 
 
