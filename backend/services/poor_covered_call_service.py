@@ -134,7 +134,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
     out["__metadata__"] = {
         "strategy": STRATEGY_ID,
         "pcc_summary": summary,
-        "data_notes": dict(notes, **settings, pricing="Black-Scholes with SPY's dividend yield: monthly calls at VIX, "
+        "data_notes": dict(notes, **settings, pricing="Black-Scholes with SPY's dividend yield: monthly calls at VIX x short_iv_mult, "
                                                       "the year-out call at a damped long-dated IV; no skew; "
                                                       "half-spreads paid as slippage"),
     }
