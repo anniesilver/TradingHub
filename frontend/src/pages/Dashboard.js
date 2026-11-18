@@ -56,7 +56,11 @@ import { chartColors } from '../components/chartColors';
 import { parameterUnits, toDisplayValue, toStoredValue, toDisplayInputProps } from './parameterUnits';
 import { computeSharpeRatio } from './performanceMetrics';
 
+// These run on SPY only: their option prices come from VIX, so the Symbol box is locked to SPY
+const SPY_ONLY_STRATEGIES = ['SPY_POWER_CASHFLOW_RULES'];
+
 // Helper function to calculate the 3rd Friday of a month (standard options expiration)
+
 const getThirdFriday = (year, month) => {
   const firstDay = new Date(year, month, 1);
   const firstFriday = new Date(year, month, 1 + ((5 - firstDay.getDay() + 7) % 7));
@@ -149,7 +153,10 @@ const StyledCompactTextField = styled(TextField)(({ theme }) => ({
   },
 }));
 
-const SYMBOL_SUGGESTIONS = ['SPY', 'QQQ', 'TSLA', 'NVDA', 'AMZN', 'U', 'FIG'];
+// SPY + the 27 tickers of the ticker research (their daily prices and 30-day IV are in the DB) + a few more.
+// Any other ticker can be typed: it is loaded from IB the first time.
+const SYMBOL_SUGGESTIONS = ['SPY', 'QQQ', 'IWM', 'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'AVGO', 'NFLX', 'TSLA',
+  'AMD', 'PLTR', 'COIN', 'MSTR', 'HOOD', 'SMCI', 'MU', 'UBER', 'SHOP', 'JPM', 'XOM', 'KO', 'SOFI', 'INTC', 'BAC', 'U', 'FIG'];
 
 const CompactTextField = ({ name, label, value, inputProps, InputProps, ...props }) => {
   const displayLabel = parameterUnits[name]?.label ?? label;
@@ -294,7 +301,8 @@ export const CustomTooltip = ({ active, payload, label }) => {
         // Determine the label based on the dataKey
         const seriesName = entry.dataKey === "Portfolio_Value" ? "Strategy" : 
                          entry.dataKey === "spy_value" ? "Buy & Hold" :
-                         entry.dataKey === "Margin_Ratio" ? "Margin Ratio" :
+                         entry.dataKey === "long_only_value" ? "Long call only" :
+                         entry.dataKey === "Margin_Ratio" ? (entry.name || "Margin Ratio") :
                          entry.dataKey === "Cash_Balance" ? "Cash Balance" :
                          entry.dataKey === "Premiums_Received" ? "Premium Received" :
                          entry.dataKey === "Interest_Paid" ? "Interest Paid" :
@@ -505,7 +513,7 @@ function Dashboard() {
     if (selectedStrategy === 'WHEEL') return { ...cfg, initialBalance: cfg.budget };
     if (selectedStrategy === 'OPTIONS_MARTIN') return { ...cfg, initialBalance: omCash, optionsMartin: omConfig };
     if (selectedStrategy === 'SPY_POWER_CASHFLOW_RULES') return { ...cfg, symbol: 'SPY', initialBalance: Number(spyConfig?.budget) || 0, spyCashflow: spyConfig };
-    if (selectedStrategy === 'POOR_COVERED_CALL') return { ...cfg, symbol: 'SPY', initialBalance: Number(pccConfig?.budget) || 0, poorCoveredCall: pccConfig };
+    if (selectedStrategy === 'POOR_COVERED_CALL') return { ...cfg, initialBalance: Number(pccConfig?.budget) || 0, poorCoveredCall: pccConfig };
     return cfg;
   };
 
@@ -657,6 +665,7 @@ function Dashboard() {
             // Required fields with fallbacks
             Portfolio_Value: values.Portfolio_Value || values.portfolio_value || 0,
             spy_value: values.spy_value || values.SPY_value || values.spy_Value || 0,
+            ...(values.long_only_value !== undefined ? { long_only_value: values.long_only_value } : {}),
             Margin_Ratio: values.Margin_Ratio || values.margin_ratio || 0,
             Cash_Balance: values.Cash_Balance || values.cash_balance || 0,
             Trading_Log: values.Trading_Log || values.trading_log || '',
@@ -776,6 +785,7 @@ function Dashboard() {
             date,
             Portfolio_Value: Number(values.Portfolio_Value || 0),
             spy_value: Number(values.spy_value || 0),
+            ...(values.long_only_value !== undefined ? { long_only_value: Number(values.long_only_value) } : {}),
             Margin_Ratio: Number(values.Margin_Ratio || 0),
             Cash_Balance: Number(values.Cash_Balance || 0),
             Premiums_Received: Number(values.Premiums_Received || 0),
@@ -1766,7 +1776,7 @@ function Dashboard() {
       <MainContent ref={workspaceContent} as="main" id="analysis-workspace" tabIndex={-1}>
         <header className="analysis-toolbar">
           <div><span className="eyebrow">Historical research</span><Typography component="h1" variant="h6">{selectedStrategyInfo?.name || 'Strategy analysis'}</Typography></div>
-          <div className="toolbar-context" aria-label="Configured scenario"><span>{config.symbol}</span><span>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(startingCash)} USD</span><span>{config.startDate} — {config.endDate}</span></div>
+          <div className="toolbar-context" aria-label="Configured scenario"><span>{SPY_ONLY_STRATEGIES.includes(selectedStrategy) ? 'SPY' : config.symbol}</span><span>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(startingCash)} USD</span><span>{config.startDate} — {config.endDate}</span></div>
         </header>
 
         {/* Show loading state */}
@@ -1822,15 +1832,18 @@ function Dashboard() {
               fullWidth
               size="small"
               options={SYMBOL_SUGGESTIONS}
-              value={config.symbol}
-              inputValue={config.symbol}
+              disabled={SPY_ONLY_STRATEGIES.includes(selectedStrategy)}
+              value={SPY_ONLY_STRATEGIES.includes(selectedStrategy) ? 'SPY' : config.symbol}
+              inputValue={SPY_ONLY_STRATEGIES.includes(selectedStrategy) ? 'SPY' : config.symbol}
               onInputChange={(event, value) => setConfig(prev => ({ ...prev, symbol: (value || '').toUpperCase().trim() }))}
               renderInput={params => (
                 <TextField
                   {...params}
                   label="Symbol"
+                  helperText={SPY_ONLY_STRATEGIES.includes(selectedStrategy) ? 'SPY only (priced with VIX)' : undefined}
                   name="symbol"
-                  inputProps={{ ...params.inputProps, 'aria-describedby': 'symbol-help', maxLength: 10 }}
+                  inputProps={{ ...params.inputProps, 'aria-describedby': SPY_ONLY_STRATEGIES.includes(selectedStrategy) ? 'symbol-help symbol-spy-only' : 'symbol-help', maxLength: 10 }}
+                  FormHelperTextProps={{ id: 'symbol-spy-only' }}
                 />
               )}
             />
@@ -2617,7 +2630,7 @@ function Dashboard() {
                 scrollButtons="auto"
               >
                 <Tab label="Performance" {...a11yProps(0)} />
-                <Tab label="Margin Ratio" {...a11yProps(1)} />
+                <Tab label={selectedStrategy === 'POOR_COVERED_CALL' ? 'Exposure' : 'Margin Ratio'} {...a11yProps(1)} />
                 <Tab label="Cash Balance" {...a11yProps(2)} />
                 <Tab label="Premium & Interest" {...a11yProps(3)} />
                 <Tab label="Trading Logs" {...a11yProps(4)} />
@@ -2627,7 +2640,7 @@ function Dashboard() {
             {/* Tab content for Performance Chart */}
             <TabPanel value={activeTab} index={0}>
               <div className="performance-overview"><PerformanceSummary data={data} resultContext={resultContext} /><div className="portfolio-chart">
-              <PerformanceChart data={data.chartData} strategyId={selectedStrategy} tooltip={<CustomTooltip />} benchmarkSymbol={selectedStrategy === 'WHEEL' ? data.wheelSummary?.underlying : selectedStrategy === 'OPTIONS_MARTIN' ? data.omSummary?.underlying : 'SPY'} /><details className="transaction-key"><summary>Transaction markers</summary>
+              <PerformanceChart data={data.chartData} strategyId={selectedStrategy} tooltip={<CustomTooltip />} benchmarkSymbol={selectedStrategy === 'WHEEL' ? data.wheelSummary?.underlying : selectedStrategy === 'OPTIONS_MARTIN' ? data.omSummary?.underlying : selectedStrategy === 'POOR_COVERED_CALL' ? data.pccSummary?.underlying : 'SPY'} /><details className="transaction-key"><summary>Transaction markers</summary>
               {/* Custom legend for transaction markers */}
               {selectedStrategy === 'SPY500_LEADER' ? (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2, p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
@@ -2661,9 +2674,9 @@ function Dashboard() {
             {/* Tab content for Margin Ratio Chart */}
             <TabPanel value={activeTab} index={1}>
               <Typography variant="h6" gutterBottom>
-                Margin Ratio
+                {selectedStrategy === 'POOR_COVERED_CALL' ? 'Exposure (stock controlled by the long calls / account value, no margin)' : 'Margin Ratio'}
               </Typography>
-              <ExpandableChart title="Margin ratio chart">
+              <ExpandableChart title={selectedStrategy === 'POOR_COVERED_CALL' ? 'Exposure chart' : 'Margin ratio chart'}>
               <ResponsiveContainer width="100%" height={600}>
                 <LineChart
                   data={data.marginData}
@@ -2679,8 +2692,8 @@ function Dashboard() {
                     tickMargin={12}
                   />
                   <YAxis 
-                    domain={[0, 1]}
-                    tickFormatter={(value) => `${(value * 100).toFixed(0)}%`}
+                    domain={selectedStrategy === 'POOR_COVERED_CALL' ? [0, 'auto'] : [0, 1]}
+                    tickFormatter={(value) => selectedStrategy === 'POOR_COVERED_CALL' ? `${Number(value).toFixed(2)}x` : `${(value * 100).toFixed(0)}%`}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend 
@@ -2692,7 +2705,7 @@ function Dashboard() {
                     type="linear"
                     isAnimationActive={false}
                     dataKey="Margin_Ratio" 
-                    name="Margin Ratio" 
+                    name={selectedStrategy === 'POOR_COVERED_CALL' ? 'Exposure' : 'Margin Ratio'} 
                     stroke={chartColors.margin}
                     dot={false}
                     strokeWidth={2}
