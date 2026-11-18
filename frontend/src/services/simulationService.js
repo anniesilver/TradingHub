@@ -59,6 +59,12 @@ axios.interceptors.response.use(
  * The rules' parameters of a strategy that runs the shared tradekit rules (defaults, ranges, help)
  * @param {string} strategyId - e.g. 'OPTIONS_MARTIN'
  */
+/** Tickers with daily prices and IV already in the DB: [{symbol, prices_from, iv_from, ...}]. */
+export const getBacktestSymbols = async () => {
+  const response = await axios.get(`${API_BASE_URL}/market-data/backtest-symbols`);
+  return response.data?.symbols || [];
+};
+
 export const getStrategyParams = async (strategyId) => {
   const response = await axios.get(`${API_BASE_URL}/strategies/${strategyId}/params`);
   return response.data;
@@ -138,12 +144,14 @@ export const kitStrategyConfig = (config) => {
     return out;
   }
   // POOR_COVERED_CALL: one object built by components/SpyCashflowSettings.js
+  // The backtest runs on the page's Symbol; the paper bot itself only trades SPY (the server
+  // ignores "underlying" for these two, and the page offers the paper test only on SPY).
   if (config.strategyId === 'POOR_COVERED_CALL') {
-    return { ...(config.poorCoveredCall || {}), underlying: 'SPY' };
+    return { ...(config.poorCoveredCall || {}), underlying: config.symbol || 'SPY' };
   }
   // SPY_POWER_CASHFLOW_RULES: one object built by components/SpyCashflowSettings.js
   if (config.strategyId === 'SPY_POWER_CASHFLOW_RULES') {
-    return { ...(config.spyCashflow || {}), underlying: 'SPY' };
+    return { ...(config.spyCashflow || {}), underlying: config.symbol || 'SPY' };
   }
   // OPTIONS_MARTIN: one object built by components/OptionsMartinSettings.js
   return { ...(config.optionsMartin || {}), underlying: config.symbol || 'TSLA' };

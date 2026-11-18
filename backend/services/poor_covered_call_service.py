@@ -13,12 +13,32 @@ import logging
 from datetime import datetime
 from typing import Dict, Optional
 
-from services.spy_power_cashflow_service import _rule_params
+from services.spy_power_cashflow_service import _rule_params, auto_strike_rounding, blank, underlying_of
 from services.wheel_service import SHARED_PATH, load_days
 
 logger = logging.getLogger(__name__)
 
 STRATEGY_ID = "POOR_COVERED_CALL"
+
+# Another ticker than SPY: the monthly calls at its own 30-day IV (from IB, near the money) x this.
+# Out-of-the-money calls on a single stock trade a little below its at-the-money IV.
+STOCK_SHORT_IV_MULT = 0.95
+
+
+def ticker_settings(days) -> dict:
+    """The backtest settings tied to SPY, worked out for another ticker from its own data:
+    the year-out IV centres on the ticker's median IV over the run, the dividend yield is its
+    dividends over the run divided by its average price."""
+    ivs = sorted(d.iv for d in days if d.iv)
+    closes = [d.close for d in days if d.close]
+    years = max((days[-1].date - days[0].date).days / 365.25, 1e-9) if days else 1.0
+    out = {"short_iv_mult": STOCK_SHORT_IV_MULT}
+    if ivs:
+        out["long_iv_base"] = round(ivs[len(ivs) // 2], 4)
+    if closes:
+        paid = sum(d.dividend or 0.0 for d in days)
+        out["dividend_yield"] = round(paid / years / (sum(closes) / len(closes)), 4)
+    return out
 
 
 def _tradekit():
@@ -51,13 +71,24 @@ def run_poor_covered_call(config: dict, start_dt: datetime, end_dt: datetime,
     if "budget" not in config and initial_balance:
         config["budget"] = initial_balance
     params = _rule_params(config, Rules)
+    params["underlying"] = underlying_of(config)
     p = Rules(params).p     # validates every value against its range
-    settings = {k: float(config[k]) if config.get(k) not in (None, "") else v for k, v in defaults.items()}
+    settings = {k: float(config[k]) if not blank(config, k) else v for k, v in defaults.items()}
     settings["long_days"] = int(settings["long_days"])
 
     start, end = start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
     days, notes = load_days(p.underlying, start, end, "market")
-    logger.info(f"POOR_COVERED_CALL {start}..{end}: {len(days)} days, IV {notes}")
+    logger.info(f"POOR_COVERED_CALL {p.underlying} {start}..{end}: {len(days)} days, IV {notes}")
+
+    # Another ticker: what the page left empty is worked out from the ticker's own data
+    if p.underlying != "SPY" and days:
+        auto = {k: v for k, v in ticker_settings(days).items() if blank(config, k)}
+        if blank(config, "strike_rounding"):
+            params["strike_rounding"] = auto["strike_rounding"] = auto_strike_rounding(days[0].close)
+            p = Rules(params).p
+        settings.update({k: v for k, v in auto.items() if k in settings})
+        if auto:
+            notes = dict(notes, auto_settings=auto)
     bt = backtest(days, params, **settings)
     return to_dashboard(bt, days, p, notes, summarize(bt), settings)
 
@@ -125,16 +156,19 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
     years = max((final.date - bt.results[0].date).days / 365.25, 1e-9)
     summary = dict(summary)
     summary.update({
+        "underlying": p.underlying,
         "budget": p.budget,
         "final_value": round(final.equity, 2),
         "benchmark_final_value": round(bench.get(final.date, 0.0), 2),
         "cagr": round(((final.equity / p.budget) ** (1 / years) - 1) * 100, 1) if final.equity > 0 else None,
         "max_drawdown_pct": round(max_dd * 100, 1),
     })
+    iv_name = "VIX" if p.underlying == "SPY" else f"{p.underlying}'s 30-day IV"
     out["__metadata__"] = {
         "strategy": STRATEGY_ID,
         "pcc_summary": summary,
-        "data_notes": dict(notes, **settings, pricing="Black-Scholes with SPY's dividend yield: monthly calls at VIX x short_iv_mult, "
+        "data_notes": dict(notes, **settings, pricing=f"Black-Scholes with the dividend yield: monthly calls at "
+                                                      f"{iv_name} x short_iv_mult, "
                                                       "the year-out call at a damped long-dated IV; no skew; "
                                                       "half-spreads paid as slippage"),
     }

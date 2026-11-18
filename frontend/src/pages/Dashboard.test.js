@@ -10,7 +10,7 @@ import { chartColors } from '../components/chartColors';
 import { runSimulation, getStrategyParams, getLiveSettings } from '../services/simulationService';
 import { computeSharpeRatio } from './performanceMetrics';
 
-jest.mock('../services/simulationService', () => ({ runSimulation: jest.fn(), getStrategyParams: jest.fn(), getLiveSettings: jest.fn() }));
+jest.mock('../services/simulationService', () => ({ runSimulation: jest.fn(), getStrategyParams: jest.fn(), getLiveSettings: jest.fn(), getBacktestSymbols: jest.fn() }));
 
 const originalResizeObserver = global.ResizeObserver;
 test('configured starting capital preserves cents without requesting another simulation', async () => {

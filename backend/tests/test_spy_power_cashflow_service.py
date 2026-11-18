@@ -76,3 +76,20 @@ def test_itm_call_buybacks_are_reported_per_day(monkeypatch):
     assert sum(v["Call_Closure_Cost"] for v in out.values()) == pytest.approx(s["buybacks"], abs=0.5)
     days_with_cost = [d for d, v in out.items() if v["Call_Closure_Cost"] > 0]
     assert days_with_cost and all("Close call:" in out[d]["Trading_Log"] for d in days_with_cost)
+
+
+def test_runs_on_the_pages_ticker(monkeypatch):
+    import pandas as pd
+    monkeypatch.setattr(wheel_service, "_market_data_class", lambda: fake_market_data(lambda i: 40.0 + i * 0.02))
+    monkeypatch.setattr(wheel_service, "_load_stock_iv",
+                        lambda symbol, start, end: pd.Series(0.45, index=pd.bdate_range(start, end)))
+    monkeypatch.setattr(wheel_service, "_load_dividends", lambda symbol, start, end: pd.Series(dtype=float))
+    out = svc.run_spy_power_cashflow_rules({"underlying": "AMZN", "budget": 60_000, "strike_rounding": "",
+                                            "strike_step": ""}, datetime(2025, 1, 2), datetime(2025, 3, 31))
+    meta = out.pop("__metadata__")
+    assert meta["spy_cashflow_summary"]["underlying"] == "AMZN"
+    logs = " ".join(d["Trading_Log"] for d in out.values())
+    assert "AMZN" in logs and "SPY" not in logs
+    notes = meta["data_notes"]
+    assert notes["auto_settings"] == {"strike_rounding": 0.5, "strike_step": 0.5}
+    assert notes["strike_step"] == 0.5 and "implied volatility" in notes["pricing"]

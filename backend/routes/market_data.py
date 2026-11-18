@@ -137,3 +137,39 @@ def get_available_symbols():
             }
         ]
     })
+
+def backtest_symbols_from_db(conn) -> list:
+    """Tickers the option backtests can run on from the DB alone: daily prices plus either their
+    own daily 30-day IV (<SYMBOL>_IV) or, for SPY, VIX. SPY first, then by ticker."""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT symbol, MIN(date)::date, MAX(date)::date FROM market_data "
+        "WHERE bar_interval = '1 day' GROUP BY symbol"
+    )
+    rows = {symbol: (first, last) for symbol, first, last in cur.fetchall()}
+    out = []
+    for symbol, (first, last) in rows.items():
+        if symbol.endswith(("_IV", "_DIV")) or symbol == "VIX":
+            continue
+        iv = rows.get("VIX" if symbol == "SPY" else f"{symbol}_IV")
+        if not iv:
+            continue
+        out.append({"symbol": symbol, "prices_from": first.isoformat(), "prices_to": last.isoformat(),
+                    "iv_from": iv[0].isoformat(), "iv_to": iv[1].isoformat()})
+    out.sort(key=lambda r: (r["symbol"] != "SPY", r["symbol"]))
+    return out
+
+
+@market_data_bp.route('/api/market-data/backtest-symbols', methods=['GET'])
+def get_backtest_symbols():
+    """The tickers with daily prices and IV in the DB, for the backtests' Symbol list. Any other
+    ticker can still be typed: its prices and IV are fetched from IB the first time."""
+    conn = None
+    try:
+        conn = ibkr_service.get_db_connection()
+        return jsonify({'symbols': backtest_symbols_from_db(conn)})
+    except Exception as e:
+        return jsonify({'symbols': [], 'error': str(e)}), 500
+    finally:
+        if conn is not None:
+            conn.close()

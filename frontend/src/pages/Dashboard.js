@@ -40,7 +40,7 @@ import {
   ResponsiveContainer,
   ComposedChart,
 } from 'recharts';
-import { runSimulation, getStrategyParams, getLiveSettings } from '../services/simulationService';
+import { runSimulation, getStrategyParams, getLiveSettings, getBacktestSymbols } from '../services/simulationService';
 import OptionsMartinSettings, { initialOptionsMartinConfig } from '../components/OptionsMartinSettings';
 import PaperTestButton from '../components/PaperTestButton';
 import PaperTestHistory from '../components/PaperTestHistory';
@@ -150,6 +150,15 @@ const StyledCompactTextField = styled(TextField)(({ theme }) => ({
 }));
 
 const SYMBOL_SUGGESTIONS = ['SPY', 'QQQ', 'TSLA', 'NVDA', 'AMZN', 'U', 'FIG'];
+
+// Settings tied to the ticker: left empty ("auto") on another ticker than SPY, so the backtest
+// works them out from the ticker's own price, IV and dividends; back to the defaults on SPY.
+const TICKER_SETTINGS = {
+  POOR_COVERED_CALL: ['strike_rounding', 'short_iv_mult', 'long_iv_base', 'dividend_yield'],
+  SPY_POWER_CASHFLOW_RULES: ['strike_rounding', 'strike_step'],
+};
+// The paper bots of these two trade SPY only
+const SPY_ONLY_PAPER = ['POOR_COVERED_CALL'];
 
 const CompactTextField = ({ name, label, value, inputProps, InputProps, ...props }) => {
   const displayLabel = parameterUnits[name]?.label ?? label;
@@ -398,6 +407,8 @@ function Dashboard() {
   // SPY_POWER_CASHFLOW on the shared rules: settings from the rules' own parameter list
   const [spySchema, setSpySchema] = useState(null);
   const [spyConfig, setSpyConfig] = useState(null);
+  // The Symbol list: tickers with prices and IV in the DB (any other can still be typed)
+  const [symbolOptions, setSymbolOptions] = useState(SYMBOL_SUGGESTIONS);
   // OPTIONS_MARTIN runs the shared rules: its settings come from the rules' own parameter list
   const [omSchema, setOmSchema] = useState(null);
   const [omConfig, setOmConfig] = useState(null);
@@ -504,8 +515,8 @@ function Dashboard() {
   const runConfigFor = (cfg) => {
     if (selectedStrategy === 'WHEEL') return { ...cfg, initialBalance: cfg.budget };
     if (selectedStrategy === 'OPTIONS_MARTIN') return { ...cfg, initialBalance: omCash, optionsMartin: omConfig };
-    if (selectedStrategy === 'SPY_POWER_CASHFLOW_RULES') return { ...cfg, symbol: 'SPY', initialBalance: Number(spyConfig?.budget) || 0, spyCashflow: spyConfig };
-    if (selectedStrategy === 'POOR_COVERED_CALL') return { ...cfg, symbol: 'SPY', initialBalance: Number(pccConfig?.budget) || 0, poorCoveredCall: pccConfig };
+    if (selectedStrategy === 'SPY_POWER_CASHFLOW_RULES') return { ...cfg, initialBalance: Number(spyConfig?.budget) || 0, spyCashflow: spyConfig };
+    if (selectedStrategy === 'POOR_COVERED_CALL') return { ...cfg, initialBalance: Number(pccConfig?.budget) || 0, poorCoveredCall: pccConfig };
     return cfg;
   };
 
@@ -1623,6 +1634,36 @@ function Dashboard() {
     return () => { cancelled = true; };
   }, [selectedStrategy, pccSchema]);
 
+  // The Symbol list, once
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => getBacktestSymbols())
+      .then(rows => {
+        if (cancelled || !Array.isArray(rows) || !rows.length) return;
+        const fromDb = rows.map(r => r.symbol);
+        setSymbolOptions([...fromDb, ...SYMBOL_SUGGESTIONS.filter(s => !fromDb.includes(s))]);
+      })
+      .catch(() => {});   // the short built-in list stays
+    return () => { cancelled = true; };
+  }, []);
+
+  // Another ticker than SPY: empty the settings tied to the ticker ("auto"); back on SPY: defaults
+  const settingsOnSpy = useRef({});
+  useEffect(() => {
+    const fields = TICKER_SETTINGS[selectedStrategy];
+    const schema = selectedStrategy === 'POOR_COVERED_CALL' ? pccSchema : spySchema;
+    if (!fields || !schema) return;
+    const onSpy = (config.symbol || 'SPY') === 'SPY';
+    const before = settingsOnSpy.current[selectedStrategy] ?? true;
+    settingsOnSpy.current[selectedStrategy] = onSpy;
+    if (onSpy === before) return;
+    const defaults = initialSpyCashflowConfig(schema);
+    const patch = Object.fromEntries(fields.map(f => [f, onSpy ? defaults[f] : '']));
+    const setter = selectedStrategy === 'POOR_COVERED_CALL' ? setPccConfig : setSpyConfig;
+    setter(prev => (prev ? { ...prev, ...patch } : prev));
+  }, [selectedStrategy, config.symbol, pccSchema, spySchema]);
+
   const omReady = omConfig !== null;
   const pccReady = pccConfig !== null;
   const spyReady = spyConfig !== null;
@@ -1813,7 +1854,7 @@ function Dashboard() {
       <Paper key={selectedStrategy} component="form" data-strategy={selectedStrategy} className="scenario-surface workspace-panel" sx={{ mb: 2, p: 2 }}>
         <div className="scenario-heading"><Typography component="h2" variant="subtitle2">Run settings</Typography><span>Historical simulation · No trades placed</span></div>
         <ParameterGrid container>
-          <Grid item xs={12} className="primary-run-action"><div className="form-actions"><Button variant="contained" color="primary" onClick={event => handleRunSimulation(event, true)} disabled={loading}>Run simulation</Button>{['WHEEL', 'OPTIONS_MARTIN', 'POOR_COVERED_CALL'].includes(selectedStrategy) && <PaperTestButton strategyId={selectedStrategy} config={runConfigFor(config)} disabled={loading || (selectedStrategy === 'OPTIONS_MARTIN' && !omConfig) || (selectedStrategy === 'POOR_COVERED_CALL' && !pccConfig)} />}{['WHEEL', 'OPTIONS_MARTIN', 'POOR_COVERED_CALL'].includes(selectedStrategy) && <PaperTestHistory strategyId={selectedStrategy} />}</div></Grid>
+          <Grid item xs={12} className="primary-run-action"><div className="form-actions"><Button variant="contained" color="primary" onClick={event => handleRunSimulation(event, true)} disabled={loading}>Run simulation</Button>{['WHEEL', 'OPTIONS_MARTIN', 'POOR_COVERED_CALL'].includes(selectedStrategy) && <PaperTestButton strategyId={selectedStrategy} config={runConfigFor(config)} disabled={loading || (selectedStrategy === 'OPTIONS_MARTIN' && !omConfig) || (selectedStrategy === 'POOR_COVERED_CALL' && !pccConfig) || (SPY_ONLY_PAPER.includes(selectedStrategy) && (config.symbol || 'SPY') !== 'SPY')} />}{SPY_ONLY_PAPER.includes(selectedStrategy) && (config.symbol || 'SPY') !== 'SPY' && <Typography variant="caption" color="text.secondary" data-testid="paper-spy-only">Paper test: SPY only</Typography>}{['WHEEL', 'OPTIONS_MARTIN', 'POOR_COVERED_CALL'].includes(selectedStrategy) && <PaperTestHistory strategyId={selectedStrategy} />}</div></Grid>
           <Grid item xs={12} sm={3} md={1.5}>
             {/* Pick a listed ticker or type any other one (it is loaded from IB the first time) */}
             <ParameterField name="symbol" label="Symbol">
@@ -1821,7 +1862,7 @@ function Dashboard() {
               freeSolo
               fullWidth
               size="small"
-              options={SYMBOL_SUGGESTIONS}
+              options={symbolOptions}
               value={config.symbol}
               inputValue={config.symbol}
               onInputChange={(event, value) => setConfig(prev => ({ ...prev, symbol: (value || '').toUpperCase().trim() }))}
@@ -2627,7 +2668,7 @@ function Dashboard() {
             {/* Tab content for Performance Chart */}
             <TabPanel value={activeTab} index={0}>
               <div className="performance-overview"><PerformanceSummary data={data} resultContext={resultContext} /><div className="portfolio-chart">
-              <PerformanceChart data={data.chartData} strategyId={selectedStrategy} tooltip={<CustomTooltip />} benchmarkSymbol={selectedStrategy === 'WHEEL' ? data.wheelSummary?.underlying : selectedStrategy === 'OPTIONS_MARTIN' ? data.omSummary?.underlying : 'SPY'} /><details className="transaction-key"><summary>Transaction markers</summary>
+              <PerformanceChart data={data.chartData} strategyId={selectedStrategy} tooltip={<CustomTooltip />} benchmarkSymbol={selectedStrategy === 'WHEEL' ? data.wheelSummary?.underlying : selectedStrategy === 'OPTIONS_MARTIN' ? data.omSummary?.underlying : selectedStrategy === 'POOR_COVERED_CALL' ? data.pccSummary?.underlying : selectedStrategy === 'SPY_POWER_CASHFLOW_RULES' ? data.spySummary?.underlying : 'SPY'} /><details className="transaction-key"><summary>Transaction markers</summary>
               {/* Custom legend for transaction markers */}
               {selectedStrategy === 'SPY500_LEADER' ? (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2, p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>

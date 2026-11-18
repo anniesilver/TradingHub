@@ -12,6 +12,7 @@ as the strategy "SPY_POWER_CASHFLOW", shown as "SPY Power Cashflow (old)", for c
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from typing import Dict, Optional
 
@@ -61,6 +62,34 @@ def _rule_params(config: dict, Rules) -> dict:
     return out
 
 
+SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
+
+
+def underlying_of(config: dict) -> str:
+    """The ticker the backtest runs on: the page's Symbol (default SPY). The rules were written
+    for SPY; any other ticker uses its own 30-day IV from IB where SPY uses VIX. The paper test
+    never takes it from here (_rule_params leaves "underlying" out), so the paper bot stays on SPY."""
+    symbol = str((config or {}).get("underlying") or "SPY").strip().upper()
+    if not SYMBOL_RE.match(symbol):
+        raise ValueError(f"Not a ticker: {symbol!r}")
+    return symbol
+
+
+def blank(config: dict, key: str) -> bool:
+    """A setting the page left empty: "auto" for the ticker."""
+    return key not in config or config[key] in (None, "")
+
+
+def auto_strike_rounding(price: float) -> float:
+    """Strike multiple for a ticker at this price: SPY's $5 is too coarse for a $40 stock."""
+    return 5.0 if price >= 200 else 1.0 if price >= 50 else 0.5
+
+
+def auto_strike_step(price: float) -> float:
+    """Dollars between made-up strikes near the price."""
+    return 1.0 if price >= 50 else 0.5
+
+
 def run_spy_power_cashflow_rules(config: dict, start_dt: datetime, end_dt: datetime,
                                  initial_balance: Optional[float] = None) -> dict:
     """Run the shared rules and return {date: {...}} in the dashboard's format, plus __metadata__."""
@@ -69,16 +98,32 @@ def run_spy_power_cashflow_rules(config: dict, start_dt: datetime, end_dt: datet
     if "budget" not in config and initial_balance:
         config["budget"] = initial_balance
     params = _rule_params(config, Rules)
+    params["underlying"] = underlying_of(config)
     p = Rules(params).p     # validates every value against its range
-    strike_step = float(config.get("strike_step", defaults["strike_step"]))
-    slippage = float(config.get("slippage", defaults["slippage"]))
-    rate = float(config.get("risk_free_rate", defaults["risk_free_rate"]))
-    if strike_step <= 0:
-        raise ValueError("strike_step must be above 0")
+    slippage = float(config.get("slippage", defaults["slippage"]) or 0.0)
+    rate = float(config["risk_free_rate"]) if not blank(config, "risk_free_rate") else defaults["risk_free_rate"]
 
     start, end = start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
     days, notes = load_days(p.underlying, start, end, "market")
-    logger.info(f"SPY_POWER_CASHFLOW (rules) {start}..{end}: {len(days)} days, IV {notes}")
+    logger.info(f"SPY_POWER_CASHFLOW (rules) {p.underlying} {start}..{end}: {len(days)} days, IV {notes}")
+
+    # Left empty on the page: chosen for the ticker (SPY keeps the old defaults)
+    auto = {}
+    price = days[0].close if days else 0.0
+    if blank(config, "strike_rounding") and p.underlying != "SPY":
+        params["strike_rounding"] = auto["strike_rounding"] = auto_strike_rounding(price)
+        p = Rules(params).p
+    if blank(config, "strike_step"):
+        strike_step = defaults["strike_step"] if p.underlying == "SPY" else auto_strike_step(price)
+        if p.underlying != "SPY":
+            auto["strike_step"] = strike_step
+    else:
+        strike_step = float(config["strike_step"])
+    if strike_step <= 0:
+        raise ValueError("strike_step must be above 0")
+    if auto:
+        notes = dict(notes, auto_settings=auto)
+
     bt = backtest(days, params, strike_step=strike_step, slippage=slippage, risk_free_rate=rate)
     return to_dashboard(bt, days, p, notes, summarize(bt),
                         {"strike_step": strike_step, "slippage": slippage, "risk_free_rate": rate})
@@ -165,6 +210,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
     final = bt.results[-1]
     summary = dict(summary)
     summary.update({
+        "underlying": p.underlying,
         "budget": p.budget,
         "final_value": round(final.equity, 2),
         "benchmark_final_value": round(bench.get(final.date, 0.0), 2),
@@ -173,7 +219,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
     out["__metadata__"] = {
         "strategy": STRATEGY_ID,
         "spy_cashflow_summary": summary,
-        "data_notes": dict(notes, **settings, pricing="Black-Scholes at VIX, one IV for all strikes (no skew), "
+        "data_notes": dict(notes, **settings, pricing=f"Black-Scholes at {notes.get('iv_name') or 'VIX'}, one IV for all strikes (no skew), "
                                                       "month-end expiries, no bid/ask spread"),
     }
     return out

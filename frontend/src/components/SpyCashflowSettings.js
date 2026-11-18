@@ -9,7 +9,7 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 // /api/strategies/SPY_POWER_CASHFLOW_RULES/params), the same names the paper bot uses.
 
 const BACKTEST_FIELDS = [
-  ['strike_step', 'Strike step ($)', 'Dollars between made-up strikes near the price (SPY lists every $1).', { min: 0.5, step: 0.5 }],
+  ['strike_step', 'Strike step ($)', 'Dollars between made-up strikes near the price (SPY lists every $1). Empty = chosen from the price.', { min: 0.5, step: 0.5 }],
   ['slippage', 'Slippage ($/share)', 'Added to each purchase, taken off each sale.', { min: 0, step: 0.01 }],
   ['risk_free_rate', 'Risk-free rate', 'For Black-Scholes, e.g. 0.05 = 5%.', { min: 0, step: 0.005 }],
 ];
@@ -35,12 +35,12 @@ export function initialSpyCashflowConfig(schema) {
 
 // POOR_COVERED_CALL's backtest-only settings (tradekit.backtests.POOR_COVERED_CALL_DEFAULTS)
 export const PCC_BACKTEST_FIELDS = [
-  ['short_iv_mult', 'Short call IV (x VIX)', "The monthly calls are priced at VIX x this. Out-of-the-money SPY calls trade near SPY's own IV, about 0.8 x VIX.", { min: 0.1, step: 0.05 }],
+  ['short_iv_mult', 'Short call IV (x VIX)', "The monthly calls are priced at VIX x this (another ticker: its own 30-day IV x this). Out-of-the-money SPY calls trade near SPY's own IV, about 0.8 x VIX. Empty = worked out for the ticker.", { min: 0.1, step: 0.05 }],
   ['long_slippage', 'Long call slippage ($/share)', "Half the year-out call's bid/ask spread, paid on each purchase and sale.", { min: 0, step: 0.05 }],
   ['short_slippage', 'Short call slippage ($/share)', "Half the monthly call's spread.", { min: 0, step: 0.01 }],
   ['risk_free_rate', 'Risk-free rate', 'For Black-Scholes, e.g. 0.04 = 4%.', { min: 0, step: 0.005 }],
-  ['dividend_yield', 'Dividend yield', "SPY's, for Black-Scholes.", { min: 0, step: 0.001 }],
-  ['long_iv_base', 'Long IV base', 'Year-out IV = base + damp x (VIX - base).', { min: 0, step: 0.01 }],
+  ['dividend_yield', 'Dividend yield', "The ticker's, for Black-Scholes. Empty = its dividends over the run / its average price.", { min: 0, step: 0.001 }],
+  ['long_iv_base', 'Long IV base', "Year-out IV = base + damp x (VIX - base). Empty = the ticker's median IV over the run.", { min: 0, step: 0.01 }],
   ['long_iv_damp', 'Long IV damp', 'How much of a VIX move the year-out IV follows (0.35 = 35%).', { min: 0, step: 0.05 }],
 ];
 
@@ -83,6 +83,7 @@ export default function SpyCashflowSettings({ schema, value, onChange, title = '
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
               <TextField fullWidth size="small" label={label(p.name)} name={`${prefix}_${p.name}`}
                 type={numeric ? 'number' : 'text'} value={value[p.name] ?? ''}
+                placeholder={numeric ? 'auto' : undefined} InputLabelProps={value[p.name] === '' ? { shrink: true } : undefined}
                 onChange={e => set(p.name, numeric ? number(p, e.target.value) : e.target.value)}
                 inputProps={numeric ? { min: p.min ?? undefined, max: p.max ?? undefined, step: 'any' } : {}} />
               <Help text={p.help} />
@@ -97,7 +98,8 @@ export default function SpyCashflowSettings({ schema, value, onChange, title = '
         <Grid item xs={12} sm={3} md={1.5} key={name}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <TextField fullWidth size="small" type="number" label={text} name={`${prefix}_${name}`} value={value[name] ?? ''}
-              onChange={e => set(name, e.target.value === '' ? '' : Number(e.target.value))} inputProps={limits} />
+              onChange={e => set(name, e.target.value === '' ? '' : Number(e.target.value))} inputProps={limits}
+              placeholder="auto" InputLabelProps={value[name] === '' ? { shrink: true } : undefined} />
             <Help text={help} />
           </Box>
         </Grid>
@@ -116,7 +118,7 @@ export function SpyCashflowResults({ summary }) {
   const tiles = [
     ['Final value', money(s.final_value)],
     ['Withdrawn', money(s.withdrawn)],
-    ['SPY buy & hold', money(s.benchmark_final_value)],
+    [`${s.underlying || 'SPY'} buy & hold`, money(s.benchmark_final_value)],
     ['Calls sold', s.calls_sold],
     ['Bought back / expired', `${s.calls_bought_back} / ${s.calls_expired}`],
     ['Assigned', s.calls_assigned],
@@ -160,7 +162,7 @@ export function PoorCoveredCallResults({ summary }) {
     ['Final value', money(s.final_value)],
     ['Per year', pct(s.cagr)],
     ['Worst drawdown', pct(s.max_drawdown_pct)],
-    ['SPY buy & hold', money(s.benchmark_final_value)],
+    [`${s.underlying || 'SPY'} buy & hold`, money(s.benchmark_final_value)],
     ['Calls sold', s.calls_sold],
     ['Harvests', s.harvests],
     ['Month-end buybacks', s.month_end_buybacks],
