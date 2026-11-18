@@ -39,8 +39,8 @@ def load_tbill(end: str) -> Tuple[Optional[Dict], str]:
         df = ibkr_service.get_data_from_db(TBILL_NAME, "1990-01-01", end, "1 day")
         if df.empty or (pd.to_datetime(end) - df.index.max()).days > 10:
             logger.info(f"Downloading 3-month T-bill rates from {FRED_DTB3_URL}")
-            req = urllib.request.Request(FRED_DTB3_URL, headers={"User-Agent": "TradingHub-backtest/1.0"})   # FRED drops a bare "Mozilla/5.0"
-            with urllib.request.urlopen(req, timeout=60) as r:
+            # urllib's own User-Agent: FRED drops "Mozilla/5.0" and custom ones from Python (tested 2026-11-18)
+            with urllib.request.urlopen(FRED_DTB3_URL, timeout=60) as r:
                 text = r.read().decode("utf-8-sig")
             rows = []
             for row in csv.reader(io.StringIO(text)):
