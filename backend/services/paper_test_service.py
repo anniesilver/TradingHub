@@ -110,7 +110,7 @@ def backtest_settings(strategy_id: str, config: dict) -> dict:
     """The page's backtest-only settings, kept with the test for comparing later."""
     keep = ("strike_step", "slippage", "risk_free_rate", "fill_mode", "cash", "price_iv_mult", "iv_source",
             "fixed_iv", "long_slippage", "short_slippage", "dividend_yield", "long_iv_base", "long_iv_damp",
-            "long_days", "short_iv_mult")
+            "long_days", "short_iv_mult", "cash_rate", "cash_rate_fee")
     return {k: config[k] for k in keep if k in config}
 
 
