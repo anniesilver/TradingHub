@@ -47,3 +47,15 @@ def test_params_and_paper_test_mapping():
     assert paper_test_service.server_name("POOR_COVERED_CALL") == "poor_covered_call"
     params = paper_test_service.rule_params("POOR_COVERED_CALL", {"budget": 60000, "size": "1.25"})
     assert params["size"] == 1.25 and params["budget"] == 60000.0 and params["long_itm_pct"] == 0.2
+
+
+def test_premiums_received_counts_short_calls_only_not_long_call_rolls(monkeypatch):
+    # SPY climbs fast, so the long call's strike gets too close and it is rolled: selling the
+    # old long call is not premium.
+    monkeypatch.setattr(wheel_service, "_market_data_class", lambda: fake_market_data(lambda i: 500.0 + i * 2.0))
+    out = svc.run_poor_covered_call({}, datetime(2025, 1, 2), datetime(2025, 12, 31), initial_balance=60_000)
+    meta = out.pop("__metadata__")
+    s = meta["pcc_summary"]
+    assert s["rolls"] >= 1
+    shown = sum(day["Premiums_Received"] for day in out.values())
+    assert shown == pytest.approx(s["premiums"], abs=0.05)

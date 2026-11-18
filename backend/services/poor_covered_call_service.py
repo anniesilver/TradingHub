@@ -105,7 +105,9 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
             "spy_value": round(bench.get(r.date, 0.0), 2),
             "Interest_Paid": 0.0,
             "Withdrawal": 0.0,
-            "Premiums_Received": round(daily("premiums"), 2),
+            # The rules' own total: short calls sold, after commissions. The engine's r.premiums
+            # counts every option sale, including the old long call sold in a roll.
+            "Premiums_Received": round(st.get("premiums", 0.0) - (prev.state.get("premiums", 0.0) if prev else 0.0), 2),
             "Dividends_Received": round(daily("dividends"), 2),
             "Commissions_Paid": round(daily("commissions"), 2),
             "Call_Closure_Cost": round(sum(t.qty * t.price * 100 + t.commission for t in r.trades
