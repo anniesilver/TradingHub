@@ -88,6 +88,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
     for r in bt.results:
         day = by_date[r.date]
         daily = lambda name: getattr(r, name) - (getattr(prev, name) if prev else 0.0)
+        state = lambda name, src: (src.state.get(name) or 0.0) if src else 0.0
         st = r.state
         exposure = (st.get("long_qty", 0) + st.get("old_long_qty", 0)) * 100 * r.close
         peak = max(peak, r.equity)
@@ -105,13 +106,13 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
             "spy_value": round(bench.get(r.date, 0.0), 2),
             "Interest_Paid": 0.0,
             "Withdrawal": 0.0,
-            "Premiums_Received": round(daily("premiums"), 2),
+            # the rules' own total: short calls sold only (the engine's counts the old long calls sold in rolls too)
+            "Premiums_Received": round(state("premiums", r) - state("premiums", prev), 2),
             "Dividends_Received": round(daily("dividends"), 2),
             "Commissions_Paid": round(daily("commissions"), 2),
+            # in-the-money short calls bought back (month end, before ex-dividend); not harvests of nearly worthless ones
             "Call_Closure_Cost": round(sum(t.qty * t.price * 100 + t.commission for t in r.trades
-                                           if t.side == "BUY" and " " in t.contract and t.reason not in
-                                           ("EXPIRED", "ASSIGNED") and not t.reason.startswith("ROLL: buy new")
-                                           and t.reason != "OPEN LONG"), 2),   # short calls bought back
+                                           if t.side == "BUY" and t.reason.startswith(("MONTH END", "EX-DIVIDEND"))), 2),
             "Open_Positions": (1 if st.get("long_qty") else 0) + (1 if st.get("short_qty") else 0),
             "Closed_Positions": 0,
             "Shares": r.shares,
@@ -133,7 +134,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
     out["__metadata__"] = {
         "strategy": STRATEGY_ID,
         "pcc_summary": summary,
-        "data_notes": dict(notes, **settings, pricing="Black-Scholes with SPY's dividend yield: monthly calls at VIX, "
+        "data_notes": dict(notes, **settings, pricing="Black-Scholes with SPY's dividend yield: monthly calls at VIX x short_iv_mult, "
                                                       "the year-out call at a damped long-dated IV; no skew; "
                                                       "half-spreads paid as slippage"),
     }

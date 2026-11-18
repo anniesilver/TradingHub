@@ -35,6 +35,7 @@ export function initialSpyCashflowConfig(schema) {
 
 // POOR_COVERED_CALL's backtest-only settings (tradekit.backtests.POOR_COVERED_CALL_DEFAULTS)
 export const PCC_BACKTEST_FIELDS = [
+  ['short_iv_mult', 'Short call IV (x VIX)', "The monthly calls are priced at VIX x this. Out-of-the-money SPY calls trade near SPY's own IV, about 0.8 x VIX.", { min: 0.1, step: 0.05 }],
   ['long_slippage', 'Long call slippage ($/share)', "Half the year-out call's bid/ask spread, paid on each purchase and sale.", { min: 0, step: 0.05 }],
   ['short_slippage', 'Short call slippage ($/share)', "Half the monthly call's spread.", { min: 0, step: 0.01 }],
   ['risk_free_rate', 'Risk-free rate', 'For Black-Scholes, e.g. 0.04 = 4%.', { min: 0, step: 0.005 }],
