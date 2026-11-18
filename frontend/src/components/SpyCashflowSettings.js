@@ -9,6 +9,7 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 // /api/strategies/SPY_POWER_CASHFLOW_RULES/params), the same names the paper bot uses.
 
 const BACKTEST_FIELDS = [
+  ['short_iv_mult', 'Short call IV (x VIX)', "The calls are priced at VIX x this. Out-of-the-money SPY calls trade near SPY's own IV, about 0.8 x VIX. 1 = the old pricing at VIX.", { min: 0.1, step: 0.05 }],
   ['strike_step', 'Strike step ($)', 'Dollars between made-up strikes near the price (SPY lists every $1).', { min: 0.5, step: 0.5 }],
   ['slippage', 'Slippage ($/share)', 'Added to each purchase, taken off each sale.', { min: 0, step: 0.01 }],
   ['risk_free_rate', 'Risk-free rate', 'For Black-Scholes, e.g. 0.05 = 5%.', { min: 0, step: 0.005 }],
