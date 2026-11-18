@@ -40,7 +40,11 @@ export const PCC_BACKTEST_FIELDS = [
   ['short_iv_mult', 'Short call IV (x VIX or own IV)', "The monthly calls are priced at the 30-day IV x this: VIX for SPY, the stock's own IV otherwise. Blank = auto: 0.8 for SPY (its calls trade near SPY's own IV, about 0.8 x VIX), 1.0 for a stock.", { min: 0.1, step: 0.05 }],
   ['long_slippage', 'Long call slippage ($/share)', "Half the year-out call's bid/ask spread, paid on each purchase and sale. Blank = auto: $0.40 for SPY, 0.2% of the price for a stock.", { min: 0, step: 0.05 }],
   ['short_slippage', 'Short call slippage ($/share)', "Half the monthly call's spread. Blank = auto: $0.05 for SPY, 0.05% of the price (at least $0.05) for a stock.", { min: 0, step: 0.01 }],
-  ['risk_free_rate', 'Risk-free rate', 'For Black-Scholes, e.g. 0.04 = 4%.', { min: 0, step: 0.005 }],
+  ['risk_free_rate', 'Risk-free rate', "For Black-Scholes, e.g. 0.04 = 4%. Blank = the 3-month T-bill rate of each day (near 0% in 2009-2015 and 2020-2021): the interest cost built into a call's price.", { min: 0, step: 0.005 }],
+  ['cash_rate', 'Cash interest rate', 'What the idle cash earns a year, as if parked in a T-bill ETF like SGOV. Blank = the 3-month T-bill rate of each day minus the fee below; 0 = no interest.', { min: 0, step: 0.005 }],
+  ['cash_rate_fee', 'Cash interest fee', "Taken off the T-bill rate: 0.0009 = SGOV's 0.09% fee. Use about 0.005 for IB's own cash rate.", { min: 0, step: 0.0005 }],
+  ['cash_reserve_pct', 'Cash reserve', "This share of equity stays plain cash and earns nothing; the rest earns the cash interest rate (in the paper bot: sits in SGOV). 0.05 = 5%.", { min: 0, max: 1, step: 0.01 }],
+  ['park_cash', 'Paper bot: park spare cash in SGOV', "The paper test buys SGOV with the cash above the reserve once a day at 15:50 and sells it when a buyback or roll needs the money. Off: the cash stays at IB.", { type: 'bool' }],
   ['dividend_yield', 'Dividend yield', "For Black-Scholes. Blank = auto: 1.3% for SPY, the stock's own dividends a year / its average price.", { min: 0, step: 0.001 }],
   ['long_iv_base', 'Long IV base', "Year-out IV = base + damp x (30-day IV - base). Blank = auto: 0.17 for SPY, the stock's median IV over the run.", { min: 0, step: 0.01 }],
   ['long_iv_damp', 'Long IV damp', 'How much of a 30-day IV move the year-out IV follows (0.35 = 35%).', { min: 0, step: 0.05 }],
@@ -95,7 +99,17 @@ export default function SpyCashflowSettings({ schema, value, onChange, title = '
       <Grid item xs={12}>
         <Typography variant="subtitle2" sx={{ mt: 1, mb: 1, fontWeight: 'bold' }}>Backtest settings</Typography>
       </Grid>
-      {backtestFields.map(([name, text, help, limits]) => (
+      {backtestFields.map(([name, text, help, limits]) => limits?.type === 'bool' ? (
+        <Grid item xs={12} sm={6} md={3} key={name}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <FormControlLabel
+              control={<Checkbox name={`${prefix}_${name}`} checked={!!value[name]} onChange={e => set(name, e.target.checked)} />}
+              label={text}
+            />
+            <Help text={help} />
+          </Box>
+        </Grid>
+      ) : (
         <Grid item xs={12} sm={3} md={1.5} key={name}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <TextField fullWidth size="small" type="number" label={text} name={`${prefix}_${name}`} value={value[name] ?? ''}
@@ -165,6 +179,7 @@ export function PoorCoveredCallResults({ summary }) {
     ['Worst drawdown', pct(s.max_drawdown_pct)],
     [`${s.underlying || 'SPY'} buy & hold`, money(s.benchmark_final_value)],
     ['Long call only (same rolls)', money(s.long_only_final_value)],
+    ['Cash interest earned', money(s.cash_interest)],
     ['Calls sold', s.calls_sold],
     ['Harvests', s.harvests],
     ['Month-end buybacks', s.month_end_buybacks],

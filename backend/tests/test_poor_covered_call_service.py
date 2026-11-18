@@ -73,3 +73,51 @@ def test_another_ticker_runs_on_its_own_iv_and_benchmark(monkeypatch):
     assert notes["iv_name"].startswith("AMZN 30-day") and notes["short_iv_mult"] == 1.0
     assert notes["long_iv_base"] == 0.35 and notes["dividend_yield"] == 0.0 and 0.40 < notes["long_slippage"] < 0.46   # 0.2% of ~220
     assert out[days[0]]["spy_value"] == pytest.approx(60_000)   # buy & hold AMZN with the same money
+
+
+def test_tbill_rates_downloaded_once_into_the_db_and_used(monkeypatch):
+    import io as _io
+    import types
+    import pandas as pd
+    store = {}
+
+    class FakeService:
+        def get_data_from_db(self, name, start, end, interval):
+            rows = store.get(name, [])
+            return pd.DataFrame({"close": [r["close"] for r in rows]},
+                                index=pd.to_datetime([r["date"] for r in rows])) if rows else pd.DataFrame()
+
+        def save_data_to_db(self, name, rows, interval, keep_existing=False):
+            store[name] = rows
+            return len(rows)
+
+    monkeypatch.setitem(sys.modules, "ibkr_data_service", types.SimpleNamespace(ibkr_service=FakeService()))
+    csv_text = "observation_date,DTB3\n2025-06-25,4.30\n2025-06-26,.\n2025-06-27,4.25\n"
+    calls = []
+    monkeypatch.setattr(svc.urllib.request, "urlopen",
+                        lambda req, timeout=60: calls.append(1) or _io.BytesIO(csv_text.encode()))
+    rates, note = svc.load_tbill("2025-06-30")
+    assert note.endswith("(FRED DTB3)") and len(calls) == 1
+    assert rates == {pd.Timestamp("2025-06-25").date(): 0.043, pd.Timestamp("2025-06-27").date(): 0.0425}
+    svc.load_tbill("2025-06-30")
+    assert len(calls) == 1                                       # fresh in the DB: no second download
+
+
+def test_cash_earns_interest_and_the_rates_note_says_where_from(monkeypatch):
+    monkeypatch.setattr(wheel_service, "_market_data_class", lambda: fake_market_data(lambda i: 500.0 + i * 0.5))
+    monkeypatch.setattr(svc, "load_tbill", lambda end: (None, "3-month T-bill yearly averages (test)"))
+    out = svc.run_poor_covered_call({}, datetime(2025, 1, 2), datetime(2025, 6, 30), initial_balance=60_000)
+    meta = out.pop("__metadata__")
+    assert meta["pcc_summary"]["cash_interest"] > 500           # ~$30k+ cash at ~4% for half a year
+    assert meta["data_notes"]["rates"].startswith("3-month T-bill yearly")
+    none = svc.run_poor_covered_call({"cash_rate": 0}, datetime(2025, 1, 2), datetime(2025, 6, 30),
+                                     initial_balance=60_000)["__metadata__"]["pcc_summary"]
+    assert none["cash_interest"] == 0
+
+
+def test_paper_test_sends_the_sgov_sweep_setting():
+    off = paper_test_service.rule_params("POOR_COVERED_CALL", {"budget": 60000})
+    assert off["park_symbol"] == ""
+    on = paper_test_service.rule_params("POOR_COVERED_CALL", {"budget": 60000, "park_cash": True,
+                                                              "cash_reserve_pct": 0.05})
+    assert on["park_symbol"] == "SGOV" and on["park_reserve_pct"] == 0.05

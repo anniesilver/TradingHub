@@ -10,9 +10,14 @@ ticker-dependent settings left blank are filled in by tradekit's poor_covered_ca
 
 from __future__ import annotations
 
+import csv
+import io
 import logging
+import urllib.request
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
+
+import pandas as pd
 
 from services.spy_power_cashflow_service import _rule_params
 from services.wheel_service import SHARED_PATH, load_days
@@ -20,6 +25,42 @@ from services.wheel_service import SHARED_PATH, load_days
 logger = logging.getLogger(__name__)
 
 STRATEGY_ID = "POOR_COVERED_CALL"
+TBILL_NAME = "TBILL_3M"   # FRED's DTB3 (3-month T-bill, % a year) in market_data, one bar a day
+FRED_DTB3_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTB3"
+
+
+def load_tbill(end: str) -> Tuple[Optional[Dict], str]:
+    """Daily 3-month T-bill rates {date: fraction} for the cash interest and Black-Scholes. Kept in
+    the DB as TBILL_3M; downloaded from FRED when missing or more than 10 days old. On any failure:
+    (None, note), and the backtest falls back to tradekit's yearly averages."""
+    try:
+        from ibkr_data_service import ibkr_service
+
+        df = ibkr_service.get_data_from_db(TBILL_NAME, "1990-01-01", end, "1 day")
+        if df.empty or (pd.to_datetime(end) - df.index.max()).days > 10:
+            logger.info(f"Downloading 3-month T-bill rates from {FRED_DTB3_URL}")
+            # urllib's own User-Agent: FRED drops "Mozilla/5.0" and custom ones from Python (tested 2026-11-18)
+            with urllib.request.urlopen(FRED_DTB3_URL, timeout=60) as r:
+                text = r.read().decode("utf-8-sig")
+            rows = []
+            for row in csv.reader(io.StringIO(text)):
+                if len(row) < 2 or not row[0][:4].isdigit():
+                    continue
+                try:
+                    v = float(row[1])
+                except ValueError:   # "." = no rate that day (holidays)
+                    continue
+                rows.append({"date": row[0].replace("-", ""), "open": v, "high": v, "low": v, "close": v, "volume": 0})
+            if rows:
+                ibkr_service.save_data_to_db(TBILL_NAME, rows, "1 day", keep_existing=True)
+                df = ibkr_service.get_data_from_db(TBILL_NAME, "1990-01-01", end, "1 day")
+        if df.empty:
+            return None, "3-month T-bill yearly averages (no daily rates)"
+        col = "close" if "close" in df.columns else "Close"
+        return {ts.date(): float(v) / 100 for ts, v in df[col].items()}, "3-month T-bill, daily (FRED DTB3)"
+    except Exception as e:   # no DB, no internet: the yearly averages still give a fair picture
+        logger.warning(f"T-bill rates unavailable ({e}); using yearly averages")
+        return None, "3-month T-bill yearly averages (daily rates unavailable)"
 
 
 def _tradekit():
@@ -56,14 +97,20 @@ def run_poor_covered_call(config: dict, start_dt: datetime, end_dt: datetime,
     params["underlying"] = str(config.get("underlying") or "SPY").upper().strip()
     p = Rules(params).p     # validates every value against its range
     settings = {k: float(config[k]) if config.get(k) not in (None, "") else v for k, v in defaults.items()}
+    # (park_cash, the paper bot's SGOV sweep, isn't a backtest setting: the backtest's cash earns cash_rate either way)
     settings["long_days"] = int(settings["long_days"])
 
     start, end = start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
     days, notes = load_days(p.underlying, start, end, "market")
     # blank ticker-dependent settings: SPY's fixed values, or from the stock's own prices and IV
     settings.update({k: v for k, v in auto(days, p.underlying).items() if settings.get(k) is None})
+    rates, rate_note = (None, None)
+    if settings.get("cash_rate") is None or settings.get("risk_free_rate") is None:
+        rates, rate_note = load_tbill(end)
     logger.info(f"POOR_COVERED_CALL {p.underlying} {start}..{end}: {len(days)} days, IV {notes}, {settings}")
-    bt = backtest(days, params, **settings)
+    bt = backtest(days, params, rates=rates, **settings)
+    if rate_note:
+        notes = dict(notes, rates=rate_note)
     return to_dashboard(bt, days, p, notes, summarize(bt), settings)
 
 
