@@ -5,6 +5,7 @@ export const chartColors = {
   benchmark: 'var(--chart-benchmark, #ffc16e)',
   margin: 'var(--chart-margin, #c2a2ff)',
   cash: 'var(--chart-cash, #65d6ba)',
+  longOnly: 'var(--chart-cash, #65d6ba)',
   premium: 'var(--chart-strategy, #72b7ff)',
   interest: 'var(--chart-benchmark, #ffc16e)',
 };

@@ -301,7 +301,8 @@ export const CustomTooltip = ({ active, payload, label }) => {
         // Determine the label based on the dataKey
         const seriesName = entry.dataKey === "Portfolio_Value" ? "Strategy" : 
                          entry.dataKey === "spy_value" ? "Buy & Hold" :
-                         entry.dataKey === "Margin_Ratio" ? "Margin Ratio" :
+                         entry.dataKey === "long_only_value" ? "Long call only (same rolls)" :
+                         entry.dataKey === "Margin_Ratio" ? (entry.name || "Margin Ratio") :
                          entry.dataKey === "Cash_Balance" ? "Cash Balance" :
                          entry.dataKey === "Premiums_Received" ? "Premium Received" :
                          entry.dataKey === "Interest_Paid" ? "Interest Paid" :
@@ -783,6 +784,7 @@ function Dashboard() {
             date,
             Portfolio_Value: Number(values.Portfolio_Value || 0),
             spy_value: Number(values.spy_value || 0),
+            ...(typeof values.long_only_value === 'number' ? { long_only_value: values.long_only_value } : {}),
             Margin_Ratio: Number(values.Margin_Ratio || 0),
             Cash_Balance: Number(values.Cash_Balance || 0),
             Premiums_Received: Number(values.Premiums_Received || 0),
@@ -1700,6 +1702,8 @@ function Dashboard() {
   };
 
   const selectedStrategyInfo = AVAILABLE_STRATEGIES.find(s => s.id === selectedStrategy);
+  // POOR_COVERED_CALL borrows nothing: its "Margin_Ratio" is stock exposure per $ of equity
+  const exposureNotMargin = selectedStrategy === 'POOR_COVERED_CALL';
 
   return (
     <Root className="workspace" data-glass={glassMode} data-solid={solidSurfaces} data-motion={reducedMotion ? 'reduced' : 'full'}>
@@ -2627,7 +2631,7 @@ function Dashboard() {
                 scrollButtons="auto"
               >
                 <Tab label="Performance" {...a11yProps(0)} />
-                <Tab label="Margin Ratio" {...a11yProps(1)} />
+                <Tab label={exposureNotMargin ? 'Exposure' : 'Margin Ratio'} {...a11yProps(1)} />
                 <Tab label="Cash Balance" {...a11yProps(2)} />
                 <Tab label="Premium & Interest" {...a11yProps(3)} />
                 <Tab label="Trading Logs" {...a11yProps(4)} />
@@ -2671,9 +2675,12 @@ function Dashboard() {
             {/* Tab content for Margin Ratio Chart */}
             <TabPanel value={activeTab} index={1}>
               <Typography variant="h6" gutterBottom>
-                Margin Ratio
+                {exposureNotMargin ? 'Stock exposure (no margin)' : 'Margin Ratio'}
               </Typography>
-              <ExpandableChart title="Margin ratio chart">
+              {exposureNotMargin && <Typography variant="body2" color="text.secondary" gutterBottom>
+                The shares the long calls stand for (contracts x 100 x the price) per $1 of equity. No money is borrowed: 150% means the calls move like 1.5x the equity in shares, at full delta.
+              </Typography>}
+              <ExpandableChart title={exposureNotMargin ? 'Stock exposure chart' : 'Margin ratio chart'}>
               <ResponsiveContainer width="100%" height={600}>
                 <LineChart
                   data={data.marginData}
@@ -2689,7 +2696,7 @@ function Dashboard() {
                     tickMargin={12}
                   />
                   <YAxis 
-                    domain={[0, 1]}
+                    domain={exposureNotMargin ? [0, 'auto'] : [0, 1]}
                     tickFormatter={(value) => `${(value * 100).toFixed(0)}%`}
                   />
                   <Tooltip content={<CustomTooltip />} />
@@ -2702,7 +2709,7 @@ function Dashboard() {
                     type="linear"
                     isAnimationActive={false}
                     dataKey="Margin_Ratio" 
-                    name="Margin Ratio" 
+                    name={exposureNotMargin ? 'Stock exposure' : 'Margin Ratio'} 
                     stroke={chartColors.margin}
                     dot={false}
                     strokeWidth={2}

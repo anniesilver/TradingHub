@@ -71,3 +71,25 @@ def test_another_ticker_runs_on_its_own_iv_and_benchmark(monkeypatch):
     assert notes["iv_name"].startswith("AMZN 30-day") and notes["short_iv_mult"] == 1.0
     assert notes["long_iv_base"] == 0.35 and notes["dividend_yield"] == 0.0 and 0.40 < notes["long_slippage"] < 0.46   # 0.2% of ~220
     assert out[days[0]]["spy_value"] == pytest.approx(60_000)   # buy & hold AMZN with the same money
+
+
+def test_long_call_only_benchmark_is_the_strategy_without_its_short_calls(monkeypatch):
+    # SPY climbs, so the long call is rolled: the benchmark rolls on the same days
+    monkeypatch.setattr(wheel_service, "_market_data_class", lambda: fake_market_data(lambda i: 500.0 + i * 1.5))
+    out = svc.run_poor_covered_call({}, datetime(2025, 1, 2), datetime(2025, 12, 31), initial_balance=60_000)
+    meta = out.pop("__metadata__")
+    s = meta["pcc_summary"]
+    days = sorted(out)
+    assert s["rolls"] >= 1 and s["calls_sold"] >= 5
+    assert all("long_only_value" in out[d] for d in days)
+    # before any short call is sold both hold the same thing; the first day sells one, so the
+    # gap that day is just that call's sale less what it is worth at the close
+    first = out[days[0]]
+    assert abs(first["long_only_value"] - first["Portfolio_Value"]) < 0.05 * first["Portfolio_Value"]
+    # at the end the gap is what the short calls did: net premiums less the open short call's value
+    last = out[days[-1]]
+    gap = last["Portfolio_Value"] - last["long_only_value"]
+    assert gap <= s["premiums"] - s["buybacks"] + 1e-6
+    lo = s["long_only"]
+    assert lo["final_value"] == pytest.approx(last["long_only_value"], abs=0.01)
+    assert lo["max_drawdown_pct"] >= 0 and lo["cagr"] is not None

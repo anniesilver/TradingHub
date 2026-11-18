@@ -11,7 +11,7 @@ ticker-dependent settings left blank are filled in by tradekit's poor_covered_ca
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Dict, Optional
 
 from services.spy_power_cashflow_service import _rule_params
@@ -77,6 +77,46 @@ def _log_text(t) -> str:
     return f"{verb}: {t.qty} {t.contract} @ {t.price:.2f} ({t.reason})"
 
 
+def _parse_label(label: Optional[str]):
+    """'SPY 765C 2026-11-30' -> the Contract the backtest priced (None for no label)."""
+    if not label:
+        return None
+    from tradekit import Contract
+    symbol, strike_right, expiry = label.split()
+    return Contract(symbol, strike_right[-1], float(strike_right[:-1]), date.fromisoformat(expiry))
+
+
+def long_call_only_values(bt, days) -> Dict[date, float]:
+    """The same strategy without the short calls: the very same long calls, bought, rolled and
+    sold on the same days at the same prices, and nothing sold against them. Each day it is the
+    strategy's equity minus everything the short calls did so far: premiums received (after
+    commissions) less buybacks (with commissions), less what the open short call is worth now,
+    plus the shares an assignment left (their P&L came from a short call)."""
+    by_date = {d.date: d for d in days}
+    out = {}
+    for r in bt.results:
+        st = r.state
+        short_value = 0.0
+        c = _parse_label(st.get("short_label"))
+        if c is not None and st.get("short_qty"):
+            short_value = st["short_qty"] * 100 * bt.price_option(c, by_date[r.date])
+        short_pnl = (st.get("premiums") or 0.0) - (st.get("buybacks") or 0.0) - short_value             + (st.get("stock_pnl") or 0.0)
+        out[r.date] = r.equity - short_pnl
+    return out
+
+
+def _stats(values: list, budget: float, years: float) -> dict:
+    peak, dd = 0.0, 0.0
+    for v in values:
+        peak = max(peak, v)
+        if peak > 0:
+            dd = max(dd, 1 - v / peak)
+    final = values[-1] if values else 0.0
+    return {"final_value": round(final, 2),
+            "cagr": round(((final / budget) ** (1 / years) - 1) * 100, 1) if final > 0 else None,
+            "max_drawdown_pct": round(dd * 100, 1)}
+
+
 def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dict[str, dict]:
     # Buy & hold the same ticker with the same money, dividends reinvested at the ex-date close
     shares = p.budget / days[0].close if days[0].close > 0 else 0.0
@@ -85,6 +125,8 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
         if d.dividend and d.close > 0 and d.date != days[0].date:
             shares *= 1 + d.dividend / d.close
         bench[d.date] = shares * d.close
+
+    long_only = long_call_only_values(bt, days)
 
     by_date = {d.date: d for d in days}
     out: Dict[str, dict] = {}
@@ -107,8 +149,10 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
             "High": day.high,
             "Low": day.low,
             "VIX": round(r.iv, 4) if r.iv is not None else 0.0,
-            "Margin_Ratio": round(exposure / r.equity, 4) if r.equity > 0 else 0.0,   # stock exposure per $ equity
+            # not margin (there is none): the shares the long calls stand for, x the price, per $1 of equity
+            "Margin_Ratio": round(exposure / r.equity, 4) if r.equity > 0 else 0.0,
             "spy_value": round(bench.get(r.date, 0.0), 2),
+            "long_only_value": round(long_only.get(r.date, 0.0), 2),   # the long calls alone, same rolls
             "Interest_Paid": 0.0,
             "Withdrawal": 0.0,
             # the rules' own total: short calls sold only (the engine's counts the old long calls sold in rolls too)
@@ -136,6 +180,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
         "benchmark_final_value": round(bench.get(final.date, 0.0), 2),
         "cagr": round(((final.equity / p.budget) ** (1 / years) - 1) * 100, 1) if final.equity > 0 else None,
         "max_drawdown_pct": round(max_dd * 100, 1),
+        "long_only": _stats([long_only[r.date] for r in bt.results], p.budget, years),
     })
     out["__metadata__"] = {
         "strategy": STRATEGY_ID,

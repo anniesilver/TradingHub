@@ -164,6 +164,8 @@ export function PoorCoveredCallResults({ summary }) {
     ['Per year', pct(s.cagr)],
     ['Worst drawdown', pct(s.max_drawdown_pct)],
     [`${s.underlying || 'SPY'} buy & hold`, money(s.benchmark_final_value)],
+    ['Long call only (same rolls)', s.long_only ? `${money(s.long_only.final_value)} · ${pct(s.long_only.cagr)}` : null],
+    ['Long call only: worst drawdown', s.long_only ? pct(s.long_only.max_drawdown_pct) : null],
     ['Calls sold', s.calls_sold],
     ['Harvests', s.harvests],
     ['Month-end buybacks', s.month_end_buybacks],
