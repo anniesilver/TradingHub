@@ -300,7 +300,8 @@ class MarketData:
                     last_done = last_complete_session()
                     missing = missing_recent_sessions(df.index.max(), end_dt, last_done)
                     if missing:
-                        gap_days = (min(end_dt.normalize(), last_done) - df.index.max().normalize()).days
+                        # IB counts the duration back from now, so it must reach the DB's last bar
+                        gap_days = (last_done - df.index.max().normalize()).days
                         period = "20 Y" if gap_days > 300 else f"{gap_days + 7} D"
                         logger.info(f"{symbol}: {missing} trading day(s) after {df.index.max():%Y-%m-%d} "
                                     f"missing; fetching {period} from IBKR")

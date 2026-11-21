@@ -73,3 +73,14 @@ def test_no_fetch_when_the_db_is_current(monkeypatch):
     df = market_data.MarketData("SPY")._load_symbol_data("SPY", "2026-10-20", "2026-11-14")
     assert fake.fetches == []
     assert df.index.max() == pd.Timestamp("2026-11-13")
+
+
+def test_a_past_range_fetch_reaches_back_from_today(monkeypatch):
+    # DB ends 2026-06-10, backtest ends 2026-06-30, today 11-20: IB counts the duration back
+    # from now, so it must cover 06-10 .. 11-20 (163 days), not just the 20-day gap asked for
+    fake = FakeIB()
+    fake.db_end = pd.Timestamp("2026-06-10")
+    monkeypatch.setattr(market_data, "ibkr_service", fake)
+    monkeypatch.setattr(market_data, "last_complete_session", lambda: pd.Timestamp("2026-11-20"))
+    market_data.MarketData("SPY")._load_symbol_data("SPY", "2026-06-01", "2026-06-30")
+    assert fake.fetches == [("SPY", "170 D", date(2026, 11, 20))]
