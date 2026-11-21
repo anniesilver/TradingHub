@@ -16,6 +16,34 @@ sys.path.insert(0, current_dir)
 
 from ibkr_data_service import ibkr_service
 
+
+# A daily bar is final once the session has closed; until then IB's bar for today is partial.
+SESSION_FINAL_NY = (16, 15)
+
+
+def last_complete_session(now: Optional[pd.Timestamp] = None) -> pd.Timestamp:
+    """The last weekday (New York) whose daily bar is final: today after 16:15 NY, else the
+    weekday before. Holidays are not known here; a holiday only costs a small extra fetch."""
+    now = pd.Timestamp.now(tz="America/New_York") if now is None else now
+    if now.tzinfo is None:
+        now = now.tz_localize("America/New_York")
+    else:
+        now = now.tz_convert("America/New_York")
+    day = now.normalize().tz_localize(None)
+    if day.weekday() < 5 and (now.hour, now.minute) >= SESSION_FINAL_NY:
+        return day
+    return (day - pd.offsets.BDay(1)).normalize()
+
+
+def missing_recent_sessions(last_bar: pd.Timestamp, end: pd.Timestamp,
+                            last_done: pd.Timestamp) -> int:
+    """How many finished weekdays after last_bar, up to end, have no bar yet."""
+    target = min(pd.Timestamp(end).normalize(), last_done)
+    first = pd.Timestamp(last_bar).normalize() + pd.Timedelta(days=1)
+    if target < first:
+        return 0
+    return len(pd.bdate_range(first, target))
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -265,11 +293,24 @@ class MarketData:
                     logger.info(f"Added {added} earlier {symbol} bars; DB now starts "
                                 f"{df.index.min():%Y-%m-%d}")
 
-                if end_gap > 10 and bar_interval == '1 day':
-                    logger.info(f"Attempting to fetch recent data for {symbol}")
-                    if ibkr_service.fetch_and_store_data(symbol, "20 Y", bar_interval):
-                        df = ibkr_service.get_data_from_db(symbol, start_date, end_date, bar_interval)
-                        logger.info(f"After additional fetch: {len(df)} records available")
+                if bar_interval == '1 day':
+                    # Any finished trading day between the DB's last bar and the end asked for
+                    # is fetched (it used to wait for a gap of more than 10 calendar days, so a
+                    # run a week after the last import silently stopped at the old data).
+                    last_done = last_complete_session()
+                    missing = missing_recent_sessions(df.index.max(), end_dt, last_done)
+                    if missing:
+                        # IB counts the duration back from now, so it must reach the DB's last bar
+                        gap_days = (last_done - df.index.max().normalize()).days
+                        period = "20 Y" if gap_days > 300 else f"{gap_days + 7} D"
+                        logger.info(f"{symbol}: {missing} trading day(s) after {df.index.max():%Y-%m-%d} "
+                                    f"missing; fetching {period} from IBKR")
+                        if ibkr_service.fetch_and_store_data(symbol, period, bar_interval, until=last_done.date()):
+                            df = ibkr_service.get_data_from_db(symbol, start_date, end_date, bar_interval)
+                            logger.info(f"After additional fetch: {symbol} data to {df.index.max():%Y-%m-%d}")
+                        else:
+                            logger.warning(f"{symbol}: could not fetch the recent bars "
+                                           f"({ibkr_service.last_error}); the run ends at {df.index.max():%Y-%m-%d}")
 
             return df
 
