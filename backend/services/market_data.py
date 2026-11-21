@@ -16,6 +16,22 @@ sys.path.insert(0, current_dir)
 
 from ibkr_data_service import ibkr_service
 
+# (symbol, interval) -> the last complete trading day an IB top-up was already tried for, so a
+# holiday (no bar to get) costs one IB request per backend run, not one per backtest
+_TOPPED_UP: Dict[tuple, pd.Timestamp] = {}
+
+
+def last_complete_trading_day(now: Optional[datetime] = None) -> pd.Timestamp:
+    """The last weekday whose daily bar is final: today after 16:15 New York, else the weekday before."""
+    from zoneinfo import ZoneInfo
+    ny = (now or datetime.now(ZoneInfo("America/New_York"))).astimezone(ZoneInfo("America/New_York"))
+    day = pd.Timestamp(ny.date())
+    if (ny.hour, ny.minute) < (16, 15):
+        day -= pd.Timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= pd.Timedelta(days=1)
+    return day
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -265,11 +281,22 @@ class MarketData:
                     logger.info(f"Added {added} earlier {symbol} bars; DB now starts "
                                 f"{df.index.min():%Y-%m-%d}")
 
-                if end_gap > 10 and bar_interval == '1 day':
-                    logger.info(f"Attempting to fetch recent data for {symbol}")
-                    if ibkr_service.fetch_and_store_data(symbol, "20 Y", bar_interval):
+                # Top up the newest days from IB whenever the DB stops before the last complete
+                # trading day asked for (Annie 2026-11-20: a 7-day gap used to go unfilled, as only
+                # gaps over 10 days were fetched). Asks IB only for the missing days.
+                want_last = min(end_dt.normalize(), last_complete_trading_day())
+                have_last = df.index.max().normalize()
+                key = (symbol, bar_interval)
+                if bar_interval == '1 day' and have_last < want_last and _TOPPED_UP.get(key) != want_last:
+                    _TOPPED_UP[key] = want_last
+                    days = (pd.Timestamp.now().normalize() - have_last).days + 5
+                    period = f"{days} D" if days <= 360 else "20 Y"
+                    logger.info(f"{symbol} DB ends {have_last:%Y-%m-%d}, wanted {want_last:%Y-%m-%d}: fetching {period} from IB")
+                    if ibkr_service.fetch_and_store_data(symbol, period, bar_interval):
                         df = ibkr_service.get_data_from_db(symbol, start_date, end_date, bar_interval)
-                        logger.info(f"After additional fetch: {len(df)} records available")
+                        logger.info(f"After the top-up {symbol} ends {df.index.max():%Y-%m-%d}")
+                    else:
+                        logger.warning(f"Could not top up {symbol} from IB: {ibkr_service.last_error}")
 
             return df
 
