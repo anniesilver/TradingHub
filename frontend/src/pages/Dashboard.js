@@ -45,7 +45,7 @@ import OptionsMartinSettings, { initialOptionsMartinConfig } from '../components
 import PaperTestButton from '../components/PaperTestButton';
 import PaperTestHistory from '../components/PaperTestHistory';
 import OptionsMartinResults from '../components/OptionsMartinResults';
-import SpyCashflowSettings, { SpyCashflowResults, initialSpyCashflowConfig, PoorCoveredCallResults, PCC_BACKTEST_FIELDS } from '../components/SpyCashflowSettings';
+import SpyCashflowSettings, { SpyCashflowResults, initialSpyCashflowConfig, PoorCoveredCallResults, PCC_BACKTEST_FIELDS, SPY_GROUPS } from '../components/SpyCashflowSettings';
 import ParameterField from '../components/ParameterField';
 import SimulationTransition, { WaveBackdrop } from '../components/WaveSurface';
 import PerformanceChart from '../components/PerformanceChart';
@@ -2328,7 +2328,7 @@ function Dashboard() {
 
           {/* SPY_POWER_CASHFLOW on the shared rules (same as the paper bot) + backtest settings */}
           {selectedStrategy === 'SPY_POWER_CASHFLOW_RULES' && (
-            <SpyCashflowSettings schema={spySchema} value={spyConfig} onChange={setSpyConfig} />
+            <SpyCashflowSettings schema={spySchema} value={spyConfig} onChange={setSpyConfig} groups={SPY_GROUPS} />
           )}
 
           {/* POOR_COVERED_CALL on the shared rules (same as the paper bot) + backtest settings */}

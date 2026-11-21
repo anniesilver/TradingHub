@@ -28,6 +28,119 @@ function Help({ text }) {
   );
 }
 
+// The dip-buy ladders (Annie 2026-11-21), shown as two small tables in percent instead of
+// eight loose fractions. Each cell edits one rule parameter; the rules keep their own units.
+const LADDER_KEYS = ['vix_high_threshold', 'extreme_vix', 'dip_trigger', 'high_vix_dip_trigger', 'extreme_vix_dip_trigger',
+  'dip_buy_pct', 'dip_depth_mid', 'dip_buy_pct_mid', 'dip_depth_deep', 'dip_buy_pct_deep'];
+const CAP_KEY = 'dip_buy_within_vix_limit';
+const tidy = x => Number(x.toFixed(6));
+// Percent shown <-> rule value: a fraction (x100), or a trigger (1 - drop%)
+const AS_PCT = { toShow: v => tidy(v * 100), toRule: n => tidy(n / 100) };
+const AS_DROP = { toShow: v => tidy((1 - v) * 100), toRule: n => tidy(1 - n / 100) };
+
+export function hasDipLadder(schema) {
+  const names = new Set((schema?.rules || []).map(p => p.name));
+  return LADDER_KEYS.every(k => names.has(k));
+}
+
+function PctBox({ name, conv, value, onSet, prefix, help, ariaLabel }) {
+  const v = value[name];
+  const shown = (v === '' || v === null || v === undefined || Number.isNaN(Number(v))) ? '' : conv.toShow(Number(v));
+  return (
+    <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>
+      <TextField size="small" type="number" name={`${prefix}_${name}`} value={shown}
+        inputProps={{ step: 'any', min: 0, max: 100, 'aria-label': ariaLabel, style: { width: 56, textAlign: 'right' } }}
+        onChange={e => onSet(name, e.target.value === '' ? '' : conv.toRule(Number(e.target.value)))} />
+      <Typography variant="body2" sx={{ ml: 0.5 }}>%</Typography>
+      <Help text={help} />
+    </Box>
+  );
+}
+
+function VixBox({ name, value, onSet, prefix, help, ariaLabel }) {
+  const v = value[name];
+  const shown = (v === '' || v === null || v === undefined) ? '' : tidy(Number(v) * 100);
+  return (
+    <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>
+      <TextField size="small" type="number" name={`${prefix}_${name}`} value={shown}
+        inputProps={{ step: 'any', min: 0, 'aria-label': ariaLabel, style: { width: 48, textAlign: 'right' } }}
+        onChange={e => onSet(name, e.target.value === '' ? '' : tidy(Number(e.target.value) / 100))} />
+      <Help text={help} />
+    </Box>
+  );
+}
+
+function DipLadder({ schema, value, set, prefix }) {
+  const help = Object.fromEntries(schema.rules.map(p => [p.name, p.help]));
+  const cap = schema.rules.find(p => p.name === CAP_KEY);
+  const cell = { py: 0.5, pr: 2, verticalAlign: 'middle' };
+  const head = { ...cell, fontWeight: 'bold', color: 'text.secondary', fontSize: 13, textAlign: 'left' };
+  const props = { value, onSet: set, prefix };
+  return (
+    <Grid item xs={12}>
+      <Paper variant="outlined" sx={{ p: 1.5, mb: 1 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>Dip ladder</Typography>
+        <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          <Box component="table" sx={{ borderCollapse: 'collapse' }} aria-label="When to buy">
+            <caption style={{ captionSide: 'top', textAlign: 'left', fontSize: 13, paddingBottom: 4 }}>
+              <b>When to buy</b>: a drop from the high since the last buy, by VIX
+            </caption>
+            <thead><tr><Box component="th" sx={head}>VIX</Box><Box component="th" sx={head}>Buy at a drop of</Box></tr></thead>
+            <tbody>
+              <tr>
+                <Box component="td" sx={cell}>below {value.vix_high_threshold === '' ? '…' : tidy(Number(value.vix_high_threshold) * 100)}</Box>
+                <Box component="td" sx={cell}><PctBox name="dip_trigger" conv={AS_DROP} help={help.dip_trigger} ariaLabel="Dip trigger, normal VIX (% drop)" {...props} /></Box>
+              </tr>
+              <tr>
+                <Box component="td" sx={cell}>
+                  <VixBox name="vix_high_threshold" help={help.vix_high_threshold} ariaLabel="High VIX from" {...props} /> to {value.extreme_vix === '' ? '…' : tidy(Number(value.extreme_vix) * 100)}
+                </Box>
+                <Box component="td" sx={cell}><PctBox name="high_vix_dip_trigger" conv={AS_DROP} help={help.high_vix_dip_trigger} ariaLabel="Dip trigger, high VIX (% drop)" {...props} /></Box>
+              </tr>
+              <tr>
+                <Box component="td" sx={cell}>
+                  <VixBox name="extreme_vix" ariaLabel="Extreme VIX from"
+                    help={`${help.extreme_vix || ''} Also where the leverage limit drops to Extreme vix target.`} {...props} /> and up
+                </Box>
+                <Box component="td" sx={cell}><PctBox name="extreme_vix_dip_trigger" conv={AS_DROP} help={help.extreme_vix_dip_trigger} ariaLabel="Dip trigger, extreme VIX (% drop)" {...props} /></Box>
+              </tr>
+            </tbody>
+          </Box>
+          <Box component="table" sx={{ borderCollapse: 'collapse' }} aria-label="How much to buy">
+            <caption style={{ captionSide: 'top', textAlign: 'left', fontSize: 13, paddingBottom: 4 }}>
+              <b>How much to buy</b>: by how far the price is below the peak (highest price seen)
+            </caption>
+            <thead><tr><Box component="th" sx={head}>Below the peak</Box><Box component="th" sx={head}>Spend of buying power</Box></tr></thead>
+            <tbody>
+              <tr>
+                <Box component="td" sx={cell}>any dip</Box>
+                <Box component="td" sx={cell}><PctBox name="dip_buy_pct" conv={AS_PCT} help={help.dip_buy_pct} ariaLabel="Dip buy size, shallow (%)" {...props} /></Box>
+              </tr>
+              <tr>
+                <Box component="td" sx={cell}>from <PctBox name="dip_depth_mid" conv={AS_PCT} help={help.dip_depth_mid} ariaLabel="Mid depth below the peak (%)" {...props} /></Box>
+                <Box component="td" sx={cell}><PctBox name="dip_buy_pct_mid" conv={AS_PCT} help={help.dip_buy_pct_mid} ariaLabel="Dip buy size, mid (%)" {...props} /></Box>
+              </tr>
+              <tr>
+                <Box component="td" sx={cell}>from <PctBox name="dip_depth_deep" conv={AS_PCT} help={help.dip_depth_deep} ariaLabel="Deep depth below the peak (%)" {...props} /></Box>
+                <Box component="td" sx={cell}><PctBox name="dip_buy_pct_deep" conv={AS_PCT} help={help.dip_buy_pct_deep} ariaLabel="Dip buy size, deep (%)" {...props} /></Box>
+              </tr>
+            </tbody>
+          </Box>
+        </Box>
+        {cap && (
+          <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+            <FormControlLabel
+              control={<Checkbox name={`${prefix}_${CAP_KEY}`} checked={!!value[CAP_KEY]} onChange={e => set(CAP_KEY, e.target.checked)} />}
+              label="Cap each buy at today's leverage limit (2x; Vix deleverage target at high VIX, Extreme vix target at extreme VIX)"
+            />
+            <Help text={cap.help} />
+          </Box>
+        )}
+      </Paper>
+    </Grid>
+  );
+}
+
 export function initialSpyCashflowConfig(schema) {
   const cfg = {};
   schema.rules.forEach(p => { cfg[p.name] = p.default; });
@@ -51,8 +164,46 @@ export const PCC_BACKTEST_FIELDS = [
   ['long_iv_damp', 'Long IV damp', 'How much of a 30-day IV move the year-out IV follows (0.35 = 35%).', { min: 0, step: 0.05 }],
 ];
 
+// SPY Power Cashflow's rules in labelled boxes, in plain units. [name, label, unit]:
+// unit 'pct' shows x100 (0.25 -> 25 %), 'drop' shows the drop (0.92 -> 8 % below), 'vix' shows
+// VIX points (0.25 -> 25), anything else is the value as stored. Settings not listed here
+// still show, under "Other settings", so a new rule parameter never goes missing.
+export const SPY_GROUPS = [
+  { title: 'Money', fields: [
+    ['budget', 'Budget', '$'], ['initial_position_pct', 'First buy (% of budget)', 'pct'],
+    ['monthly_withdrawal_pct', 'Monthly withdrawal (%)', ''], ['margin_interest_rate', 'Margin interest (% a year)', 'pct'],
+    ['stock_commission', 'Stock commission ($/share)', ''], ['min_commission', 'Min commission ($/order)', ''],
+  ] },
+  { title: 'Leverage', fields: [
+    ['max_leverage', 'Max leverage (x)', ''],
+    ['vix_deleverage_threshold', 'Deleverage from VIX', 'vix'], ['vix_deleverage_target', 'Leverage at high VIX (x)', ''],
+    ['extreme_vix_target', 'Leverage at extreme VIX (x)', ''],   // "Extreme VIX from" is in the Dip ladder
+    ['min_keep_pct', 'Always keep (% of shares)', 'pct'], ['equity_counts_calls', 'Equity counts the short calls', ''],
+  ] },
+  { ladder: true },   // the Dip ladder box (when to buy, how much), when the rules have it
+  { title: 'Covered calls', fields: [
+    ['min_strike_distance', 'Strike at least (% above)', 'pct'], ['volatility_scaling', 'or VIX x this', ''],
+    ['strike_rounding', 'Strike rounding ($)', ''], ['min_premium', 'Min premium ($/share)', ''],
+    ['covered_call_ratio', 'Calls per 100 shares', ''], ['month_end_buyback_buffer', 'Month-end buyback buffer (%)', 'pct'],
+    ['rebuy_after_assignment', 'Rebuy shares after assignment', ''],
+  ] },
+];
+
+const round6 = x => Math.round(x * 1e6) / 1e6;
+const toShown = (unit, v) => {
+  if (v === '' || v === null || v === undefined || typeof v !== 'number') return v ?? '';
+  if (unit === 'pct' || unit === 'vix') return round6(v * 100);
+  if (unit === 'drop') return round6((1 - v) * 100);
+  return v;
+};
+const fromShown = (unit, n) => {
+  if (unit === 'pct' || unit === 'vix') return round6(n / 100);
+  if (unit === 'drop') return round6(1 - n / 100);
+  return n;
+};
+
 export default function SpyCashflowSettings({ schema, value, onChange, title = 'SPY Power Cashflow rules (same as the paper bot)',
-  backtestFields = BACKTEST_FIELDS, prefix = 'spy' }) {
+  backtestFields = BACKTEST_FIELDS, prefix = 'spy', groups = null }) {
   if (!schema || !value) {
     return <Grid item xs={12}><Typography variant="body2" color="text.secondary">Loading the rules' settings…</Typography></Grid>;
   }
@@ -62,6 +213,10 @@ export default function SpyCashflowSettings({ schema, value, onChange, title = '
     const n = Number(raw);
     return Number.isNaN(n) ? raw : (p.type === 'int' ? Math.trunc(n) : n);
   };
+  const ladder = hasDipLadder(schema);
+  const inLadder = new Set(ladder ? [...LADDER_KEYS, CAP_KEY] : []);
+  // shown in a box or the ladder: everything else goes under "Other settings"
+  const grouped = new Set([...inLadder, ...(groups || []).flatMap(g => (g.fields || []).map(([n]) => n))]);
   return (
     <>
       <Grid item xs={12}>
@@ -70,7 +225,56 @@ export default function SpyCashflowSettings({ schema, value, onChange, title = '
           <Button size="small" variant="text" onClick={() => onChange(initialSpyCashflowConfig(schema))}>Rule defaults</Button>
         </Box>
       </Grid>
-      {schema.rules.map(p => {
+      {!groups && ladder && <DipLadder schema={schema} value={value} set={set} prefix={prefix} />}
+      {groups && groups.map(g => {
+        if (g.ladder) return ladder ? <DipLadder key="dip-ladder" schema={schema} value={value} set={set} prefix={prefix} /> : null;
+        const byName = Object.fromEntries(schema.rules.map(p => [p.name, p]));
+        const fields = g.fields.filter(([name]) => byName[name]);
+        if (!fields.length) return null;
+        return (
+          <Grid item xs={12} key={g.title}>
+            <Paper variant="outlined" sx={{ p: 1.5 }}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>{g.title}</Typography>
+              <Grid container spacing={1.5}>
+                {fields.map(([name, text, unit]) => {
+                  const p = byName[name];
+                  if (p.type === 'bool') {
+                    return (
+                      <Grid item xs={12} sm={6} md={3} key={name}>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <FormControlLabel label={text}
+                            control={<Checkbox name={`${prefix}_${name}`} checked={!!value[name]} onChange={e => set(name, e.target.checked)} />} />
+                          <Help text={p.help} />
+                        </Box>
+                      </Grid>
+                    );
+                  }
+                  return (
+                    <Grid item xs={12} sm={4} md={2} key={name}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <TextField fullWidth size="small" type="number" label={text} name={`${prefix}_${name}`}
+                          value={toShown(unit, value[name])} InputLabelProps={{ shrink: true }}
+                          onChange={e => {
+                            const raw = e.target.value;
+                            if (raw === '' || Number.isNaN(Number(raw))) { set(name, raw); return; }
+                            set(name, number(p, fromShown(unit, Number(raw))));
+                          }}
+                          inputProps={{ step: 'any' }} />
+                        <Help text={p.help} />
+                      </Box>
+                    </Grid>
+                  );
+                })}
+              </Grid>
+              {g.note && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>{g.note}</Typography>}
+            </Paper>
+          </Grid>
+        );
+      })}
+      {groups && schema.rules.some(p => !grouped.has(p.name)) && (
+        <Grid item xs={12}><Typography variant="body2" sx={{ fontWeight: 'bold' }}>Other settings</Typography></Grid>
+      )}
+      {schema.rules.filter(p => !grouped.has(p.name)).map(p => {
         if (p.type === 'bool') {
           return (
             <Grid item xs={12} sm={6} md={3} key={p.name}>
