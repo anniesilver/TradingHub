@@ -51,8 +51,56 @@ export const PCC_BACKTEST_FIELDS = [
   ['long_iv_damp', 'Long IV damp', 'How much of a 30-day IV move the year-out IV follows (0.35 = 35%).', { min: 0, step: 0.05 }],
 ];
 
+// SPY Power Cashflow's rules in labelled boxes, in plain units. [name, label, unit]:
+// unit 'pct' shows x100 (0.25 -> 25 %), 'drop' shows the drop (0.92 -> 8 % below), 'vix' shows
+// VIX points (0.25 -> 25), anything else is the value as stored. Settings not listed here
+// still show, under "Other settings", so a new rule parameter never goes missing.
+export const SPY_GROUPS = [
+  { title: 'Money', fields: [
+    ['budget', 'Budget', '$'], ['initial_position_pct', 'First buy (% of budget)', 'pct'],
+    ['monthly_withdrawal_pct', 'Monthly withdrawal (%)', ''], ['margin_interest_rate', 'Margin interest (% a year)', 'pct'],
+    ['stock_commission', 'Stock commission ($/share)', ''], ['min_commission', 'Min commission ($/order)', ''],
+  ] },
+  { title: 'Leverage', fields: [
+    ['max_leverage', 'Max leverage (x)', ''],
+    ['vix_deleverage_threshold', 'High VIX from (VIX)', 'vix'], ['vix_deleverage_target', 'Leverage at high VIX (x)', ''],
+    ['extreme_vix', 'Extreme VIX from (VIX)', 'vix'], ['extreme_vix_target', 'Leverage at extreme VIX (x)', ''],
+    ['min_keep_pct', 'Always keep (% of shares)', 'pct'], ['equity_counts_calls', 'Equity counts the short calls', ''],
+  ] },
+  { title: 'Dip ladder: when to buy (drop from the high since the last buy)', fields: [
+    ['dip_trigger', 'Normal VIX: drop (%)', 'drop'],
+    ['vix_high_threshold', 'High VIX from (VIX)', 'vix'], ['high_vix_dip_trigger', 'High VIX: drop (%)', 'drop'],
+    ['extreme_vix_dip_trigger', 'Extreme VIX: drop (%)', 'drop'],
+  ], note: 'Extreme VIX starts at "Extreme VIX from" in Leverage. Each buy resets the high, so a falling market gets a buy at every step.' },
+  { title: 'Dip ladder: how much (by how far below the peak)', fields: [
+    ['dip_buy_pct', 'Near the peak: spend (% of buying power)', 'pct'],
+    ['dip_depth_mid', 'From (% below the peak)', 'pct'], ['dip_buy_pct_mid', '… spend (%)', 'pct'],
+    ['dip_depth_deep', 'From (% below the peak)', 'pct'], ['dip_buy_pct_deep', '… spend (%)', 'pct'],
+    ['dip_buy_within_vix_limit', 'Stay within the high-VIX leverage', ''],
+  ], note: 'The peak is the highest price seen (a buy does not reset it).' },
+  { title: 'Covered calls', fields: [
+    ['min_strike_distance', 'Strike at least (% above)', 'pct'], ['volatility_scaling', 'or VIX x this', ''],
+    ['strike_rounding', 'Strike rounding ($)', ''], ['min_premium', 'Min premium ($/share)', ''],
+    ['covered_call_ratio', 'Calls per 100 shares', ''], ['month_end_buyback_buffer', 'Month-end buyback buffer (%)', 'pct'],
+    ['rebuy_after_assignment', 'Rebuy shares after assignment', ''],
+  ] },
+];
+
+const round6 = x => Math.round(x * 1e6) / 1e6;
+const toShown = (unit, v) => {
+  if (v === '' || v === null || v === undefined || typeof v !== 'number') return v ?? '';
+  if (unit === 'pct' || unit === 'vix') return round6(v * 100);
+  if (unit === 'drop') return round6((1 - v) * 100);
+  return v;
+};
+const fromShown = (unit, n) => {
+  if (unit === 'pct' || unit === 'vix') return round6(n / 100);
+  if (unit === 'drop') return round6(1 - n / 100);
+  return n;
+};
+
 export default function SpyCashflowSettings({ schema, value, onChange, title = 'SPY Power Cashflow rules (same as the paper bot)',
-  backtestFields = BACKTEST_FIELDS, prefix = 'spy' }) {
+  backtestFields = BACKTEST_FIELDS, prefix = 'spy', groups = null }) {
   if (!schema || !value) {
     return <Grid item xs={12}><Typography variant="body2" color="text.secondary">Loading the rules' settings…</Typography></Grid>;
   }
@@ -70,7 +118,54 @@ export default function SpyCashflowSettings({ schema, value, onChange, title = '
           <Button size="small" variant="text" onClick={() => onChange(initialSpyCashflowConfig(schema))}>Rule defaults</Button>
         </Box>
       </Grid>
-      {schema.rules.map(p => {
+      {groups && groups.map(g => {
+        const byName = Object.fromEntries(schema.rules.map(p => [p.name, p]));
+        const fields = g.fields.filter(([name]) => byName[name]);
+        if (!fields.length) return null;
+        return (
+          <Grid item xs={12} key={g.title}>
+            <Paper variant="outlined" sx={{ p: 1.5 }}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>{g.title}</Typography>
+              <Grid container spacing={1.5}>
+                {fields.map(([name, text, unit]) => {
+                  const p = byName[name];
+                  if (p.type === 'bool') {
+                    return (
+                      <Grid item xs={12} sm={6} md={3} key={name}>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <FormControlLabel label={text}
+                            control={<Checkbox name={`${prefix}_${name}`} checked={!!value[name]} onChange={e => set(name, e.target.checked)} />} />
+                          <Help text={p.help} />
+                        </Box>
+                      </Grid>
+                    );
+                  }
+                  return (
+                    <Grid item xs={12} sm={4} md={2} key={name}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <TextField fullWidth size="small" type="number" label={text} name={`${prefix}_${name}`}
+                          value={toShown(unit, value[name])} InputLabelProps={{ shrink: true }}
+                          onChange={e => {
+                            const raw = e.target.value;
+                            if (raw === '' || Number.isNaN(Number(raw))) { set(name, raw); return; }
+                            set(name, number(p, fromShown(unit, Number(raw))));
+                          }}
+                          inputProps={{ step: 'any' }} />
+                        <Help text={p.help} />
+                      </Box>
+                    </Grid>
+                  );
+                })}
+              </Grid>
+              {g.note && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>{g.note}</Typography>}
+            </Paper>
+          </Grid>
+        );
+      })}
+      {groups && schema.rules.some(p => !groups.some(g => g.fields.some(([n]) => n === p.name))) && (
+        <Grid item xs={12}><Typography variant="body2" sx={{ fontWeight: 'bold' }}>Other settings</Typography></Grid>
+      )}
+      {schema.rules.filter(p => !groups || !groups.some(g => g.fields.some(([n]) => n === p.name))).map(p => {
         if (p.type === 'bool') {
           return (
             <Grid item xs={12} sm={6} md={3} key={p.name}>
