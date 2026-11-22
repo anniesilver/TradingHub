@@ -346,6 +346,7 @@ export function SpyCashflowResults({ summary }) {
     ['Final value', money(s.final_value)],
     ['Withdrawn', money(s.withdrawn)],
     ['SPY buy & hold', money(s.benchmark_final_value)],
+    ...(s.benchmark_withdrawn ? [['SPY buy & hold withdrawn', money(s.benchmark_withdrawn)]] : []),
     ['Calls sold', s.calls_sold],
     ['Bought back / expired', `${s.calls_bought_back} / ${s.calls_expired}`],
     ['Assigned', s.calls_assigned],

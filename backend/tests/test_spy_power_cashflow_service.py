@@ -43,6 +43,21 @@ def test_runs_the_shared_rules_and_returns_dashboard_days(monkeypatch):
     assert meta["strategy"] == "SPY_POWER_CASHFLOW_RULES" and meta["data_notes"]["iv_name"] == "VIX"
 
 
+def test_buy_and_hold_takes_the_same_monthly_withdrawal(monkeypatch):
+    monkeypatch.setattr(wheel_service, "_market_data_class", lambda: fake_market_data(lambda i: 500.0))
+    out = svc.run_spy_power_cashflow_rules({"monthly_withdrawal_pct": 1.0}, datetime(2025, 1, 2), datetime(2025, 3, 31),
+                                           initial_balance=500_000)
+    s = out.pop("__metadata__")["spy_cashflow_summary"]
+    # flat price, 1% at each of the three month ends: 500k x 0.99^3, the rest withdrawn
+    assert s["benchmark_final_value"] == pytest.approx(500_000 * 0.99 ** 3, abs=1)
+    assert s["benchmark_withdrawn"] == pytest.approx(500_000 - 500_000 * 0.99 ** 3, abs=1)
+    assert out["2025-01-30"]["spy_value"] == pytest.approx(500_000, abs=1)
+    assert out["2025-01-31"]["spy_value"] == pytest.approx(495_000, abs=1)
+    none = svc.run_spy_power_cashflow_rules({"monthly_withdrawal_pct": 0.0}, datetime(2025, 1, 2), datetime(2025, 3, 31),
+                                            initial_balance=500_000)["__metadata__"]["spy_cashflow_summary"]
+    assert none["benchmark_final_value"] == pytest.approx(500_000, abs=1) and none["benchmark_withdrawn"] == 0
+
+
 def test_margin_interest_is_charged_but_not_in_the_trading_log(monkeypatch):
     # a falling price makes the rules buy dips on margin, so interest is charged every day
     monkeypatch.setattr(wheel_service, "_market_data_class", lambda: fake_market_data(lambda i: 500.0 - 0.8 * i))

@@ -127,12 +127,20 @@ def _is_margin_interest(t) -> bool:
 
 
 def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dict[str, dict]:
-    # Buy & hold SPY with the same money, dividends reinvested at the ex-date close
+    # Buy & hold SPY with the same money, dividends reinvested at the ex-date close. It takes
+    # the same monthly withdrawal as the strategy (monthly_withdrawal_pct of its value, sold on
+    # the month's last trading day), so the two lines compare like for like.
+    from tradekit.market_calendar import month_last_trading_day
     shares = p.budget / days[0].close if days[0].close > 0 else 0.0
     bench = {}
+    bench_withdrawn = 0.0
+    wpct = (p.monthly_withdrawal_pct or 0.0) / 100.0
     for d in days:
         if d.dividend and d.close > 0 and d.date != days[0].date:   # bought at the first close: after its ex-date
             shares *= 1 + d.dividend / d.close
+        if wpct and d.close > 0 and d.date == month_last_trading_day(d.date):
+            bench_withdrawn += shares * d.close * wpct
+            shares *= 1 - wpct
         bench[d.date] = shares * d.close
 
     by_date = {d.date: d for d in days}
@@ -173,6 +181,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
         "budget": p.budget,
         "final_value": round(final.equity, 2),
         "benchmark_final_value": round(bench.get(final.date, 0.0), 2),
+        "benchmark_withdrawn": round(bench_withdrawn, 2),
         "max_leverage_seen": round(max((x.stock_value / x.equity for x in bt.results if x.equity > 0), default=0.0), 2),
     })
     out["__metadata__"] = {
