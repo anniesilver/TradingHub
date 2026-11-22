@@ -347,6 +347,8 @@ export function SpyCashflowResults({ summary }) {
     ['Withdrawn', money(s.withdrawn)],
     ['SPY buy & hold', money(s.benchmark_final_value)],
     ...(s.benchmark_withdrawn ? [['SPY buy & hold withdrawn', money(s.benchmark_withdrawn)]] : []),
+    ...(s.margin_benchmark_leverage ? [[`SPY on margin ${s.margin_benchmark_leverage}x`, money(s.margin_benchmark_final_value)]] : []),
+    ...(s.margin_benchmark_withdrawn ? [['SPY on margin withdrawn', money(s.margin_benchmark_withdrawn)]] : []),
     ['Calls sold', s.calls_sold],
     ['Bought back / expired', `${s.calls_bought_back} / ${s.calls_expired}`],
     ['Assigned', s.calls_assigned],

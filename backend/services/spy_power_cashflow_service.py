@@ -126,6 +126,43 @@ def _is_margin_interest(t) -> bool:
     return t.side == "CASH" and t.reason == "MARGIN INTEREST"
 
 
+def _margin_benchmark(bt, days, p, month_last_trading_day):
+    """SPY held on margin at the strategy's own average leverage (mean of the daily
+    stock value / equity), with no dip rules and no calls: is the strategy better than simply
+    borrowing the same amount? Starts with budget x L in SPY, the rest borrowed. Margin
+    interest at the rules' margin_interest_rate on negative cash, charged daily / 365 like the
+    rules; dividends go to cash; on each month's last trading day it takes the same
+    monthly_withdrawal_pct of its value, then trades back to L (the rules' stock commission).
+    Returns ({date: value}, total withdrawn, L)."""
+    levs = [r.stock_value / r.equity for r in bt.results if r.equity > 0]
+    lev = sum(levs) / len(levs) if levs else 1.0
+    if not days or days[0].close <= 0:
+        return {}, 0.0, lev
+    shares = p.budget * lev / days[0].close
+    cash = p.budget - shares * days[0].close
+    values, withdrawn, prev = {}, 0.0, None
+    wpct = (p.monthly_withdrawal_pct or 0.0) / 100.0
+    for d in days:
+        if prev is not None and cash < 0:
+            cash += cash * p.margin_interest_rate * (d.date - prev).days / 365
+        prev = d.date
+        if d.dividend and d.date != days[0].date:
+            cash += shares * d.dividend
+        if d.close > 0 and d.date == month_last_trading_day(d.date):
+            equity = cash + shares * d.close
+            if wpct and equity > 0:
+                cash -= equity * wpct
+                withdrawn += equity * wpct
+                equity *= 1 - wpct
+            target = max(equity, 0.0) * lev / d.close
+            qty = abs(target - shares)
+            if qty >= 1:
+                cash -= (target - shares) * d.close + max(qty * p.stock_commission, p.min_commission)
+                shares = target
+        values[d.date] = cash + shares * d.close
+    return values, withdrawn, lev
+
+
 def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dict[str, dict]:
     # Buy & hold SPY with the same money, dividends reinvested at the ex-date close. It takes
     # the same monthly withdrawal as the strategy (monthly_withdrawal_pct of its value, sold on
@@ -142,6 +179,8 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
             bench_withdrawn += shares * d.close * wpct
             shares *= 1 - wpct
         bench[d.date] = shares * d.close
+
+    margin, margin_withdrawn, lev = _margin_benchmark(bt, days, p, month_last_trading_day)
 
     by_date = {d.date: d for d in days}
     out: Dict[str, dict] = {}
@@ -161,6 +200,7 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
             "VIX": round(r.iv, 4) if r.iv is not None else 0.0,
             "Margin_Ratio": round(r.stock_value / r.equity, 4) if r.equity > 0 else 0.0,
             "spy_value": round(bench.get(r.date, 0.0), 2),
+            "margin_value": round(margin.get(r.date, 0.0), 2),
             "Interest_Paid": round(state("interest", r) - state("interest", prev), 2),
             "Withdrawal": round(state("withdrawn", r) - state("withdrawn", prev), 2),
             "Premiums_Received": round(daily("premiums"), 2),
@@ -182,6 +222,9 @@ def to_dashboard(bt, days, p, notes: dict, summary: dict, settings: dict) -> Dic
         "final_value": round(final.equity, 2),
         "benchmark_final_value": round(bench.get(final.date, 0.0), 2),
         "benchmark_withdrawn": round(bench_withdrawn, 2),
+        "margin_benchmark_leverage": round(lev, 2),
+        "margin_benchmark_final_value": round(margin.get(final.date, 0.0), 2),
+        "margin_benchmark_withdrawn": round(margin_withdrawn, 2),
         "max_leverage_seen": round(max((x.stock_value / x.equity for x in bt.results if x.equity > 0), default=0.0), 2),
     })
     out["__metadata__"] = {

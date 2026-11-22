@@ -302,6 +302,7 @@ export const CustomTooltip = ({ active, payload, label }) => {
         const seriesName = entry.dataKey === "Portfolio_Value" ? "Strategy" : 
                          entry.dataKey === "spy_value" ? "Buy & Hold" :
                          entry.dataKey === "long_only_value" ? "Long call only" :
+                         entry.dataKey === "margin_value" ? "SPY on margin" :
                          entry.dataKey === "Margin_Ratio" ? (entry.name || "Margin Ratio") :
                          entry.dataKey === "Cash_Balance" ? "Cash Balance" :
                          entry.dataKey === "Premiums_Received" ? "Premium Received" :
@@ -666,6 +667,7 @@ function Dashboard() {
             Portfolio_Value: values.Portfolio_Value || values.portfolio_value || 0,
             spy_value: values.spy_value || values.SPY_value || values.spy_Value || 0,
             ...(values.long_only_value !== undefined ? { long_only_value: values.long_only_value } : {}),
+            ...(values.margin_value !== undefined ? { margin_value: values.margin_value } : {}),
             Margin_Ratio: values.Margin_Ratio || values.margin_ratio || 0,
             Cash_Balance: values.Cash_Balance || values.cash_balance || 0,
             Trading_Log: values.Trading_Log || values.trading_log || '',
@@ -786,6 +788,7 @@ function Dashboard() {
             Portfolio_Value: Number(values.Portfolio_Value || 0),
             spy_value: Number(values.spy_value || 0),
             ...(values.long_only_value !== undefined ? { long_only_value: Number(values.long_only_value) } : {}),
+            ...(values.margin_value !== undefined ? { margin_value: Number(values.margin_value) } : {}),
             Margin_Ratio: Number(values.Margin_Ratio || 0),
             Cash_Balance: Number(values.Cash_Balance || 0),
             Premiums_Received: Number(values.Premiums_Received || 0),
