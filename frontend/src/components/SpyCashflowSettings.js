@@ -189,6 +189,13 @@ export const SPY_GROUPS = [
   ] },
 ];
 
+// Same columns as the page's parameter grid: as many as fit, seven from 1800px wide
+const GROUP_GRID = {
+  display: 'grid', gap: 1.5,
+  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))',
+  '@media (min-width: 1800px)': { gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' },
+};
+
 const round6 = x => Math.round(x * 1e6) / 1e6;
 const toShown = (unit, v) => {
   if (v === '' || v === null || v === undefined || typeof v !== 'number') return v ?? '';
@@ -235,22 +242,22 @@ export default function SpyCashflowSettings({ schema, value, onChange, title = '
           <Grid item xs={12} key={g.title}>
             <Paper variant="outlined" sx={{ p: 1.5 }}>
               <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>{g.title}</Typography>
-              <Grid container spacing={1.5}>
+              <Box sx={GROUP_GRID}>
                 {fields.map(([name, text, unit]) => {
                   const p = byName[name];
                   if (p.type === 'bool') {
                     return (
-                      <Grid item xs={12} sm={6} md={3} key={name}>
+                      <Box key={name} sx={{ minWidth: 0 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
                           <FormControlLabel label={text}
                             control={<Checkbox name={`${prefix}_${name}`} checked={!!value[name]} onChange={e => set(name, e.target.checked)} />} />
                           <Help text={p.help} />
                         </Box>
-                      </Grid>
+                      </Box>
                     );
                   }
                   return (
-                    <Grid item xs={12} sm={4} md={2} key={name}>
+                    <Box key={name} sx={{ minWidth: 0 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <TextField fullWidth size="small" type="number" label={text} name={`${prefix}_${name}`}
                           value={toShown(unit, value[name])} InputLabelProps={{ shrink: true }}
@@ -262,10 +269,10 @@ export default function SpyCashflowSettings({ schema, value, onChange, title = '
                           inputProps={{ step: 'any' }} />
                         <Help text={p.help} />
                       </Box>
-                    </Grid>
+                    </Box>
                   );
                 })}
-              </Grid>
+              </Box>
               {g.note && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>{g.note}</Typography>}
             </Paper>
           </Grid>
@@ -339,6 +346,7 @@ export function SpyCashflowResults({ summary }) {
     ['Final value', money(s.final_value)],
     ['Withdrawn', money(s.withdrawn)],
     ['SPY buy & hold', money(s.benchmark_final_value)],
+    ...(s.benchmark_withdrawn ? [['SPY buy & hold withdrawn', money(s.benchmark_withdrawn)]] : []),
     ['Calls sold', s.calls_sold],
     ['Bought back / expired', `${s.calls_bought_back} / ${s.calls_expired}`],
     ['Assigned', s.calls_assigned],
