@@ -65,6 +65,14 @@ def parse_ib_time(text: str) -> datetime:
     return when
 
 
+def _bar_day(bar):
+    """The New York date of an IB bar dict, or None if its time can't be read."""
+    try:
+        return parse_ib_time(str(bar["date"]).strip()).date()
+    except (KeyError, ValueError):
+        return None
+
+
 HISTORY_TIMEOUT_S = 180  # longest wait for one historical data request
 FARM_DOWN_WAIT_S = 30    # with IB's history server reported down, give up after this long
 
@@ -398,13 +406,16 @@ class IBKRDataService:
         finally:
             conn.close()
     
-    def fetch_and_store_data(self, symbol: str, period: str = "10 Y", bar_size: str = "1 day") -> bool:
+    def fetch_and_store_data(self, symbol: str, period: str = "10 Y", bar_size: str = "1 day",
+                             until=None) -> bool:
         """Fetch data from IBKR and store in database
 
         Args:
             symbol: Trading symbol
             period: Period of data to fetch (e.g., '10 Y', '1 M', '5 D')
             bar_size: Bar size (e.g., '1 day', '30 mins', '1 hour')
+            until: a date; bars after it are not stored (today's daily bar is partial until
+                the close, and a stored partial bar would not be fetched again)
 
         Returns:
             bool: True if successful, False otherwise
@@ -418,6 +429,8 @@ class IBKRDataService:
             # Fetch data
             logger.info(f"Fetching {period} of data for {symbol} with bar_size={bar_size}")
             data = self.client.fetch_historical_data(symbol, period, bar_size)
+            if data and until is not None:
+                data = [b for b in data if _bar_day(b) is None or _bar_day(b) <= until]
 
             if data:
                 # Save to database — SPY_DIV always stored with interval='dividends'
