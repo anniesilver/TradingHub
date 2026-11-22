@@ -12,16 +12,20 @@ export default function PerformanceChart({ data, strategyId, tooltip, sample = f
   const [showValues, setShowValues] = useState(false);
   const last = data[data.length - 1];
   if (!data.length) return <p>No recorded performance data available.</p>;
-  // Poor Covered Call: the same long calls, bought and rolled on the same days, no calls sold
-  const second = !sample && last.long_only_value !== undefined && last.long_only_value !== null;
-  const secondLabel = 'Long call only (same rolls)';
+  // A second benchmark, if the strategy sends one. Poor Covered Call: the same long calls, bought
+  // and rolled on the same days, no calls sold. SPY Power Cashflow: SPY on margin at the
+  // strategy's own average leverage.
+  const has = key => !sample && last[key] !== undefined && last[key] !== null;
+  const secondKey = has('long_only_value') ? 'long_only_value' : has('margin_value') ? 'margin_value' : null;
+  const second = secondKey !== null;
+  const secondLabel = secondKey === 'margin_value' ? `${benchmarkSymbol || 'SPY'} on margin (same avg leverage)` : 'Long call only (same rolls)';
 
   return (
     <ExpandableChart title={sample ? 'Sample performance chart' : 'Portfolio performance chart'} sample={sample}><figure className="performance-figure" aria-labelledby={`${id}-caption`}>
       <figcaption id={`${id}-caption`} className="chart-heading">
         <div><div className="eyebrow">{sample ? 'Illustrative strategy' : 'Strategy value'}</div><div className="chart-value">{currency(last.Portfolio_Value)}</div></div>
         <div><div className="eyebrow">{sample ? 'Illustrative benchmark' : benchmarkLabel}</div><div className="chart-value chart-value-secondary">{currency(last.spy_value)}</div></div>
-        {second && <div><div className="eyebrow">{secondLabel}</div><div className="chart-value chart-value-secondary">{currency(last.long_only_value)}</div></div>}
+        {second && <div><div className="eyebrow">{secondLabel}</div><div className="chart-value chart-value-secondary">{currency(last[secondKey])}</div></div>}
       </figcaption>
       <div className="chart-key"><span><i className="line-key" style={{ borderColor: chartColors.strategy }} />{sample ? 'Illustrative strategy' : 'Strategy'}</span><span><i className="line-key dashed" style={{ borderColor: chartColors.benchmark }} />{sample ? 'Illustrative benchmark' : benchmarkLabel}</span>{second && <span><i className="line-key dashed" style={{ borderColor: chartColors.benchmark2 }} />{secondLabel}</span>}</div>
       <div className="chart-canvas">
@@ -39,7 +43,7 @@ export default function PerformanceChart({ data, strategyId, tooltip, sample = f
                 : <path d={`M${props.cx} ${props.cy - 6} l6 6 -6 6 -6 -6 Z`} fill="#dddddd" stroke="#141414" />;
             } : false} />
             <Line type="linear" dataKey="spy_value" name={sample ? 'Illustrative benchmark' : benchmarkLabel} stroke={chartColors.benchmark} strokeWidth={2} strokeDasharray="6 5" isAnimationActive={false} activeDot={{ r: 4 }} dot={props => props.payload?.isBuySharesTransaction ? <path d={`M${props.cx} ${props.cy - 7} l6 11 h-12 Z`} fill="#dddddd" stroke="#141414" /> : null} />
-            {second && <Line type="linear" dataKey="long_only_value" name={secondLabel} stroke={chartColors.benchmark2} strokeWidth={2} strokeDasharray="2 4" isAnimationActive={false} activeDot={{ r: 4 }} dot={false} />}
+            {second && <Line type="linear" dataKey={secondKey} name={secondLabel} stroke={chartColors.benchmark2} strokeWidth={2} strokeDasharray="2 4" isAnimationActive={false} activeDot={{ r: 4 }} dot={false} />}
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -63,7 +67,7 @@ export default function PerformanceChart({ data, strategyId, tooltip, sample = f
                     <th scope="row">{row.date}</th>
                     <td>{Number(row.Portfolio_Value).toLocaleString(undefined, { style: 'currency', currency: 'USD' })}</td>
                     <td>{Number(row.spy_value).toLocaleString(undefined, { style: 'currency', currency: 'USD' })}</td>
-                    {second && <td>{Number(row.long_only_value).toLocaleString(undefined, { style: 'currency', currency: 'USD' })}</td>}
+                    {second && <td>{Number(row[secondKey]).toLocaleString(undefined, { style: 'currency', currency: 'USD' })}</td>}
                   </tr>
                 ))}
               </tbody>
