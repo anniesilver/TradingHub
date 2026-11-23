@@ -29,11 +29,11 @@ def test_runs_the_shared_rules_and_returns_dashboard_days(monkeypatch):
     meta = out.pop("__metadata__")
     days = sorted(out)
     first = out[days[0]]
-    # 60% of 500k at 500 = 600 shares, then 6 calls at 500 x 1.0225 -> 510
-    assert first["Trading_Log"].startswith("Buy: 600 shares at $500.00 (FIRST BUY); Sell call: 6 SPY 510C 2025-01-31")
+    # 60% of 500k at 500 = 600 shares, then 6 calls at least 3% above -> 515
+    assert first["Trading_Log"].startswith("Buy: 600 shares at $500.00 (FIRST BUY); Sell call: 6 SPY 515C 2025-01-31")
     # an expiry closes the call without looking like a share purchase (the chart marks those)
     expiry = out["2025-01-31"]["Trading_Log"]
-    assert "Close call: 6 SPY 510C 2025-01-31 @ 0.00 (EXPIRED)" in expiry
+    assert "Close call: 6 SPY 515C 2025-01-31 @ 0.00 (EXPIRED)" in expiry
     assert not re.search(r"(?:buy|bought|purchase[d]?)(?:\s+|:\s*)\d", expiry.replace("Buy: ", "", 0), re.I)
     assert first["Shares"] == 600 and first["Margin_Ratio"] == pytest.approx(0.6, abs=0.01)
     s = meta["spy_cashflow_summary"]
@@ -56,6 +56,19 @@ def test_buy_and_hold_takes_the_same_monthly_withdrawal(monkeypatch):
     none = svc.run_spy_power_cashflow_rules({"monthly_withdrawal_pct": 0.0}, datetime(2025, 1, 2), datetime(2025, 3, 31),
                                             initial_balance=500_000)["__metadata__"]["spy_cashflow_summary"]
     assert none["benchmark_final_value"] == pytest.approx(500_000, abs=1) and none["benchmark_withdrawn"] == 0
+
+
+def test_first_buy_follows_the_high_before_the_start(monkeypatch):
+    monkeypatch.setattr(wheel_service, "_market_data_class", lambda: fake_market_data(lambda i: 500.0))
+    seen = []
+    monkeypatch.setattr(svc, "_prior_high", lambda sym, start: seen.append((sym, start)) or 600.0)
+    out = svc.run_spy_power_cashflow_rules({}, datetime(2025, 1, 2), datetime(2025, 1, 31), initial_balance=500_000)
+    assert seen == [("SPY", "2025-01-02")]
+    assert out[min(k for k in out if k != "__metadata__")]["Shares"] == 1000      # 16.7% below 600: 100%
+    seen.clear()
+    out = svc.run_spy_power_cashflow_rules({"start_high": 510}, datetime(2025, 1, 2), datetime(2025, 1, 31),
+                                           initial_balance=500_000)
+    assert seen == [] and out[min(k for k in out if k != "__metadata__")]["Shares"] == 600   # set by hand: 2% below
 
 
 def test_spy_on_margin_at_the_strategys_average_leverage(monkeypatch):

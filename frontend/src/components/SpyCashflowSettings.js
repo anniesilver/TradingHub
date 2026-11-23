@@ -170,9 +170,17 @@ export const PCC_BACKTEST_FIELDS = [
 // still show, under "Other settings", so a new rule parameter never goes missing.
 export const SPY_GROUPS = [
   { title: 'Money', fields: [
-    ['budget', 'Budget', '$'], ['initial_position_pct', 'First buy (% of budget)', 'pct'],
+    ['budget', 'Budget', '$'],
     ['monthly_withdrawal_pct', 'Monthly withdrawal (%)', ''], ['margin_interest_rate', 'Margin interest (% a year)', 'pct'],
     ['stock_commission', 'Stock commission ($/share)', ''], ['min_commission', 'Min commission ($/order)', ''],
+  ] },
+  { title: 'First buy', fields: [
+    ['first_buy_by_depth', 'Size it by depth below the high', ''],
+    ['initial_position_pct', 'Near the high (% of budget)', 'pct'],
+    ['first_buy_depth_mid', 'From this far below (%)', 'pct'], ['first_buy_pct_mid', '... buy (% of budget)', 'pct'],
+    ['first_buy_depth_deep', 'From this far below (%)', 'pct'], ['first_buy_pct_deep', '... buy (% of budget)', 'pct'],
+    ['topup_after_days', 'No dip by then: top up (trading days, 0 = off)', ''],
+    ['start_high', 'High before the start ($, 0 = from the data)', '$'],
   ] },
   { title: 'Leverage', fields: [
     ['max_leverage', 'Max leverage (x)', ''],

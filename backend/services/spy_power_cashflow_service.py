@@ -12,8 +12,10 @@ as the strategy "SPY_POWER_CASHFLOW", shown as "SPY Power Cashflow (old)", for c
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Optional
+
+import pandas as pd
 
 from services.wheel_service import SHARED_PATH, load_days
 
@@ -43,6 +45,21 @@ def spy_power_cashflow_params() -> dict:
     return {"rules": rules, "backtest": dict(defaults)}
 
 
+def _prior_high(symbol: str, start: str) -> float:
+    """The highest daily close in the database before `start` (the rules' start_high, which sizes
+    the first buy by how far the price is below it). DB only, never IB; 0.0 if there is none."""
+    try:
+        import sys
+        from services import wheel_service
+        ibkr_service = sys.modules[wheel_service._market_data_class().__module__].ibkr_service
+        before = (pd.to_datetime(start) - timedelta(days=1)).strftime("%Y-%m-%d")
+        df = ibkr_service.get_data_from_db(symbol, "1900-01-01", before, "1 day")
+        return float(df["close"].max()) if df is not None and not df.empty else 0.0
+    except Exception as e:      # no database: the first buy falls back to initial_position_pct
+        logger.warning(f"start_high for {symbol}: {e}")
+        return 0.0
+
+
 def _rule_params(config: dict, Rules) -> dict:
     out = {}
     for p in Rules.PARAMS:
@@ -69,6 +86,8 @@ def run_spy_power_cashflow_rules(config: dict, start_dt: datetime, end_dt: datet
     if "budget" not in config and initial_balance:
         config["budget"] = initial_balance
     params = _rule_params(config, Rules)
+    if any(r.name == "start_high" for r in Rules.PARAMS) and not params.get("start_high"):
+        params["start_high"] = _prior_high(config.get("underlying") or "SPY", start_dt.strftime("%Y-%m-%d"))
     p = Rules(params).p     # validates every value against its range
     strike_step = float(config.get("strike_step", defaults["strike_step"]))
     slippage = float(config.get("slippage", defaults["slippage"]))
