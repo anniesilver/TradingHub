@@ -29,11 +29,11 @@ def test_runs_the_shared_rules_and_returns_dashboard_days(monkeypatch):
     meta = out.pop("__metadata__")
     days = sorted(out)
     first = out[days[0]]
-    # 60% of 500k at 500 = 600 shares, then 6 calls at least 3% above -> 515
-    assert first["Trading_Log"].startswith("Buy: 600 shares at $500.00 (FIRST BUY); Sell call: 6 SPY 515C 2025-01-31")
+    # 60% of 500k at 500 = 600 shares, then 6 calls at max(1.5%, VIX x 0.3) above -> 520
+    assert first["Trading_Log"].startswith("Buy: 600 shares at $500.00 (FIRST BUY); Sell call: 6 SPY 520C 2025-01-31")
     # an expiry closes the call without looking like a share purchase (the chart marks those)
     expiry = out["2025-01-31"]["Trading_Log"]
-    assert "Close call: 6 SPY 515C 2025-01-31 @ 0.00 (EXPIRED)" in expiry
+    assert "Close call: 6 SPY 520C 2025-01-31 @ 0.00 (EXPIRED)" in expiry
     assert not re.search(r"(?:buy|bought|purchase[d]?)(?:\s+|:\s*)\d", expiry.replace("Buy: ", "", 0), re.I)
     assert first["Shares"] == 600 and first["Margin_Ratio"] == pytest.approx(0.6, abs=0.01)
     s = meta["spy_cashflow_summary"]
